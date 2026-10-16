@@ -1,0 +1,48 @@
+{
+  "name": "artvision-studio",
+  "productName": "ArtViSiON STUDiO",
+  "version": "9.9.0",
+  "description": "ArtViSiON STUDiO v9.1 - Brand Kit + 12 Advertising Mockups: store/office/showroom/mall branding in 1 click (Windows desktop app)",
+  "author": "ArtViSiON",
+  "license": "MIT",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^31.3.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.artvision.studio",
+    "productName": "ArtViSiON STUDiO",
+    "files": [
+      "main.js",
+      "app.html",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "ArtViSiON STUDiO"
+    }
+  }
+}
