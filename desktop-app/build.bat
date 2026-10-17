@@ -1,7 +1,7 @@
 @echo off
 title ArtViSiON STUDiO - EXE Builder
 echo ============================================
-echo   ArtViSiON STUDiO v4.5 - Windows .exe Builder
+echo   ArtViSiON STUDiO v9.9 - Windows .exe Builder
 echo ============================================
 echo.
 
@@ -28,8 +28,8 @@ if errorlevel 1 goto fail
 
 echo.
 echo [3/3] DONE! dist folder me ready:
-echo    - ArtViSiON STUDiO Setup 4.5.0.exe  (installer)
-echo    - ArtViSiON STUDiO 4.5.0.exe        (portable)
+echo    - ArtViSiON STUDiO Setup 9.9.0.exe  (installer)
+echo    - ArtViSiON STUDiO 9.9.0.exe        (portable)
 echo.
 if exist dist explorer dist
 pause

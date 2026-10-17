@@ -2,13 +2,15 @@
   "name": "artvision-studio",
   "productName": "ArtViSiON STUDiO",
   "version": "9.9.0",
-  "description": "ArtViSiON STUDiO v9.1 - Brand Kit + 12 Advertising Mockups: store/office/showroom/mall branding in 1 click (Windows desktop app)",
+  "description": "ArtViSiON Studio with integrated Pro Converter and 174 searchable portfolio mockups (Windows desktop app)",
   "author": "ArtViSiON",
   "license": "MIT",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win"
+    "dist": "electron-builder --win",
+    "prestart": "node scripts/sync-portfolio-mockups.js",
+    "predist": "node scripts/sync-portfolio-mockups.js"
   },
   "devDependencies": {
     "electron": "^31.3.0",
@@ -19,7 +21,12 @@
     "productName": "ArtViSiON STUDiO",
     "files": [
       "main.js",
+      "preload.js",
       "app.html",
+      "converter.html",
+      "mockups.html",
+      "js/mockups-data.js",
+      "assets/mockups/**/*",
       "package.json"
     ],
     "win": {

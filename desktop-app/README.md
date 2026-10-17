@@ -1,38 +1,43 @@
-# ArtViSiON STUDiO v4.5 — Desktop App (Windows .exe)
+# ArtViSiON STUDiO — Desktop App (Electron)
 
-HTML wala pura editor ab **real Windows application** ban jayega — is folder me ready-to-build Electron project hai.
+This folder contains the Electron wrapper for the Studio, integrated Pro Converter, and 174-scene Portfolio Mockup Library. The mockup SVGs are kept only once in the repository at `../assets/mockups/`; build/start scripts copy them into the Electron app before launch/package, avoiding duplicate 42 MB asset trees in the source ZIP.
 
-## Is folder me kya hai
+## Contents
 
-| File | Kaam |
+| File / folder | Purpose |
 |---|---|
-| `app.html` | Pura ArtViSiON STUDiO editor (single file — yahi asli app hai) |
-| `main.js` | Electron window launcher |
-| `package.json` | Build config (NSIS installer + portable .exe) |
-| `build.bat` | **Double-click** → sab install + .exe build, kuch type nahi karna |
-| `run.bat` | Bina build ke turant app chalao (dev mode) |
+| `app.html` | Studio editor, Converter launcher, and Portfolio Mockup Library launcher |
+| `converter.html` | Browser-based Converter Suite |
+| `mockups.html` | Searchable, filterable gallery page |
+| `scripts/sync-portfolio-mockups.js` | Copies the shared gallery manifest and SVG assets into this app before run/build |
+| `main.js` | Electron window launcher and restricted local SVG reader |
+| `preload.js` | Exposes the safe mockup-file read bridge to the Studio window |
+| `package.json` | Electron build config (NSIS installer + portable `.exe`) |
+| `build.bat` | Install dependencies and build the Windows app |
+| `run.bat` | Run the app in development mode |
 
-## .exe banana (3 steps, internet chahiye sirf pehli baar)
+## Build / run
 
-1. **Node.js LTS install karo** → https://nodejs.org (bas Next-Next-Done)
-2. Is folder me **`build.bat` pe double-click** karo
-   - Pehli baar ~2–5 min (Electron download) + build me 5–10 min lagenge
-3. Ho gaya! `dist` folder khul jayega:
-   - `ArtViSiON STUDiO Setup 4.5.0.exe` → installer (desktop shortcut banata hai)
-   - `ArtViSiON STUDiO 4.5.0.exe` → portable (koi install nahi, direct chalta hai)
+Install Node.js LTS, then in this folder run:
 
-> Ya manually: is folder me terminal kholo → `npm install` → `npm run dist`
+```bash
+npm install
+npm start       # syncs gallery assets, then runs the app
+npm run dist    # syncs gallery assets, then builds installer + portable app
+```
 
-## Bina build ke turant chalana
+Or double-click `build.bat` / `run.bat` on Windows. The first build downloads Electron dependencies and requires internet access. `npm start` and `npm run dist` run the corresponding asset-sync step automatically; when launching Electron by another method, run `node scripts/sync-portfolio-mockups.js` first.
 
-`run.bat` double-click karo — app window khul jayegi (install ki zarurat nahi).
+## Mockup library
 
-## Naya HTML version aaye to
+The Studio's **File → Portfolio Mockups · 174 SVG scenes** opens the local gallery. Click **Generate editable SVG in Studio** to import one selected mockup per click as editable vector paths on a new artboard; embedded bitmaps are retained on a separate raster layer. **Download original SVG** keeps the source. Shared files are `../mockups.html`, `../js/mockups-data.js`, and `../assets/mockups/`.
 
-Naye `ArtViSiON-Studio.html` ko is folder me copy karke naam `app.html` rakh do (purane ko replace karo) → dobara `build.bat` chalao. Bas.
+## Converter notes
 
-## Honest baatein (pehli baar builder ke waqt)
+The browser Converter UI is bundled in `converter.html`. The optional Python print engine is in the project root's `converter-engine/`; it is not required to browse or edit, and must be started separately for its native/ICC features.
 
-- Internet sirf **pehli baar** chahiye (Electron ~100MB download hota hai). Uske baad offline build hoga.
-- Antivirus kabhi-kabhi unsigned .exe pe warning deta hai — "More info → Run anyway" karo. Certificate sign karne se ye jata hai (paid, abhi zarurat nahi).
-- Icon abhi default Electron ka hai — apna icon chahiye to `icon.ico` banake folder me daalo aur `package.json` ke `build.win` me `"icon": "icon.ico"` add karo.
+## Existing build caveats
+
+- The packaged desktop app includes the full-size SVG library and is consequently larger than the editor alone.
+- Unsigned Windows executables can trigger SmartScreen or antivirus warnings.
+- macOS/Linux Electron targets can be added by changing the `build` targets in `package.json`.
