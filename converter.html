@@ -163,7 +163,7 @@ footer{border-color:var(--line);color:#85837d}
 }
 
 </style>
-</head>
+<style>.pro-controls{padding:12px;background:#162333;border:1px solid #405774;border-radius:10px}.pro-controls select,.pro-controls input[type=number]{background:#101b29;color:#eef5ff;border:1px solid #526b89;padding:6px;border-radius:5px}.mask-tools{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0;align-items:center}.mask-tools button,.mask-tools select{background:#213c59;color:white;border:1px solid #6382a5;border-radius:6px;padding:8px}.mask-editor{max-width:100%;height:auto;touch-action:none;background-color:#aaa;background-image:conic-gradient(#ddd 25%,transparent 0 50%,#ddd 0 75%,transparent 0);background-size:20px 20px;cursor:crosshair}.mask-panel{padding:15px;border:1px solid #496780;border-radius:10px;margin-top:15px}</style></head>
 <body>
 <div class="wrap">
   <header>
@@ -208,6 +208,7 @@ footer{border-color:var(--line);color:#85837d}
         <label><input type="radio" name="pdfq" value="600"> Press 600 DPI</label>
         <label><input type="radio" name="pdfq" value="150"> Screen 150 DPI</label>
       </div>
+<div class="qbar pro-controls"><label>Page <select id="pro-page"><option value="native">Original size at chosen DPI</option><option value="a4">A4</option><option value="letter">US Letter</option></select></label><label>Margins (mm) <input id="pro-margin" type="number" min="0" max="40" value="10" style="width:60px"></label><label>Images <select id="pro-pdf-image"><option value="png">Lossless PNG (larger)</option><option value="jpeg">JPEG (smaller)</option></select></label></div><p>Page settings apply to raster conversions. Extracted PDF and DXF retain their original geometry. Raster PDF is RGB, not PDF/X or ICC CMYK.</p>
       <button class="browse" type="button">Browse files</button>
       <input type="file" id="file-pdf" hidden multiple accept=".psd,.psb,.ai,.cdr,.eps,.svg,.tif,.tiff,.dxf,.pdf,.jpg,.jpeg,.png,.webp,.gif,.bmp,image/*">
     </div>
@@ -237,6 +238,7 @@ footer{border-color:var(--line);color:#85837d}
         <label><input type="radio" name="vecq" value="logo"> Logo B&amp;W</label>
         <label><input type="radio" name="vecq" value="print"> Print B&amp;W</label>
       </div>
+<div class="qbar pro-controls"><label>Palette <select id="pro-colors"><option value="0">Preset</option><option>8</option><option>16</option><option>32</option><option>64</option></select></label><label>Curve detail <select id="pro-detail"><option value="0">Preset</option><option value="0.4">Fine</option><option value="1">Balanced</option><option value="2">Simple</option></select></label><label>Speckle removal <input id="pro-speckle" type="number" min="0" max="50" value="2" style="width:60px"></label><label><input type="checkbox" id="pro-alpha" checked> Preserve PNG transparency</label><label><input type="checkbox" id="pro-white"> Remove white fills</label></div><p>Real SVG paths, not an embedded PNG. White removal also removes white subject details; inspect the result. Photos are stylised, not reconstructed.</p>
       <button class="browse" type="button">Browse images</button>
       <input type="file" id="file-vec" hidden multiple accept="image/*,.psd,.psb,.tif,.tiff,.svg,.ai,.eps,.cdr">
     </div>
@@ -21705,10 +21707,13 @@ module.exports = ZStream;
     return window.UTIF;
   };
   const DXFParserClass = () => window.DxfParser || (window.module && window.module.exports) || null;
+  function selectHostedTool(tool){if(!['pdf','vec','bg','color'].includes(tool))return;document.querySelector('.tab[data-t="'+tool+'"]')?.click();}
+  window.addEventListener('message',e=>{if(e.origin!==location.origin || e.source!==parent)return;if(e.data?.source==='artvision-studio' && e.data.type==='converter:select-tool')selectHostedTool(e.data.tool)});
+  setTimeout(()=>selectHostedTool(new URLSearchParams(location.search).get('tool')),0);
   let bgRemovalModulePromise = null;
   async function loadBgRemovalModule() {
     if (!bgRemovalModulePromise) {
-      bgRemovalModulePromise = import('https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.6.0/+esm');
+      bgRemovalModulePromise = import('https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.6.0/+esm').catch(e=>{bgRemovalModulePromise=null;throw e});
     }
     return bgRemovalModulePromise;
   }
@@ -21883,8 +21888,7 @@ module.exports = ZStream;
     c.width = Math.max(1, Math.round(w));
     c.height = Math.max(1, Math.round(h));
     const g = c.getContext('2d');
-    g.fillStyle = fill;
-    g.fillRect(0, 0, c.width, c.height);
+    if(fill && fill !== 'transparent'){g.fillStyle = fill;g.fillRect(0, 0, c.width, c.height);}
     return c;
   }
   function capCanvas(src, maxDim, fill = '#fff') {
@@ -21954,10 +21958,10 @@ module.exports = ZStream;
   }
 
   async function textSvgToCanvas(svgText) {
-    return blobToCanvas(new Blob([svgText], { type: 'image/svg+xml' }));
+    return blobToCanvas(new Blob([svgText], { type: 'image/svg+xml' }), 'transparent');
   }
   async function fileToCanvas(file) {
-    return blobToCanvas(file);
+    return blobToCanvas(file, 'transparent');
   }
   async function canvasToBlob(canvas, type = 'image/png', quality) {
     return await new Promise((res, rej) => canvas.toBlob(b => b ? res(b) : rej(new Error('Could not encode canvas.')), type, quality));
@@ -22343,14 +22347,25 @@ module.exports = ZStream;
     if (title) pdf.setTitle(title);
     pdf.setProducer('ArtViSiON Professional Browser Converter');
     for (const src of canvases) {
-      const c = capCanvas(src, 5000);
-      const blob = await canvasToBlob(c, 'image/jpeg', dpiToJpegQuality(dpi));
+      const c = capCanvas(src, 8000, 'transparent');
+      const lossless=$('#pro-pdf-image').value==='png';
+      let encoded=c; if(!lossless){encoded=blankCanvas(c.width,c.height,'#fff');encoded.getContext('2d').drawImage(c,0,0);}
+      const blob = await canvasToBlob(encoded, lossless?'image/png':'image/jpeg', dpiToJpegQuality(dpi));
       const bytes = new Uint8Array(await blob.arrayBuffer());
-      const img = await pdf.embedJpg(bytes);
-      const widthPt = +(c.width * 72 / dpi).toFixed(2);
-      const heightPt = +(c.height * 72 / dpi).toFixed(2);
+      const img = lossless?await pdf.embedPng(bytes):await pdf.embedJpg(bytes);
+      // Physical dimensions use original pixels, even if a large bitmap is downsampled.
+      let widthPt = src.width * 72 / dpi, heightPt = src.height * 72 / dpi;
+      let x=0,y=0,w=widthPt,h=heightPt;
+      const format=$('#pro-page').value;
+      if(format!=='native'){
+        [widthPt,heightPt]=format==='a4'?[595.276,841.89]:[612,792];
+        if(src.width>src.height)[widthPt,heightPt]=[heightPt,widthPt];
+        const m=Math.max(0,Math.min(40,Number($('#pro-margin').value)||0))*72/25.4;
+        const scale=Math.min((widthPt-2*m)/src.width,(heightPt-2*m)/src.height);
+        w=src.width*scale;h=src.height*scale;x=(widthPt-w)/2;y=(heightPt-h)/2;
+      }
       const page = pdf.addPage([widthPt, heightPt]);
-      page.drawImage(img, { x: 0, y: 0, width: widthPt, height: heightPt });
+      page.drawImage(img, { x, y, width:w, height:h });
     }
     return new Blob([await pdf.save()], { type: 'application/pdf' });
   }
@@ -22545,7 +22560,7 @@ module.exports = ZStream;
     for (let i = 0; i < p.length; i += 4) {
       const v = p[i] <= t ? 0 : 255;
       p[i] = p[i + 1] = p[i + 2] = v;
-      p[i + 3] = 255;
+      if(!$('#pro-alpha')?.checked)p[i + 3] = 255;
     }
     return id;
   }
@@ -22559,8 +22574,8 @@ module.exports = ZStream;
   }
   function prepVectorCanvas(src, mode) {
     const max = mode === 'hq' ? 2200 : mode === 'print' ? 2400 : mode === 'logo' ? 1800 : 1600;
-    const c = capCanvas(src, max);
-    if (mode === 'art' || mode === 'hq') return blurCanvas(c, mode === 'hq' ? 0.4 : 0.8);
+    const c = capCanvas(src, max, 'transparent');
+    if (mode === 'art' || mode === 'hq') return c;
     const ctx = c.getContext('2d');
     const id = ctx.getImageData(0, 0, c.width, c.height);
     thresholdImageData(id, 'auto');
@@ -22658,8 +22673,18 @@ module.exports = ZStream;
     if (!window.ImageTracer || !window.ImageTracer.imagedataToSVG) throw new Error('Vector engine not loaded.');
     const c = prepVectorCanvas(src, mode);
     const id = c.getContext('2d').getImageData(0, 0, c.width, c.height);
-    const svg = window.ImageTracer.imagedataToSVG(id, vectorOptions(mode));
-    return sealSvgSeams(svg, mode);
+    const opts=vectorOptions(mode);
+    const colors=Number($('#pro-colors').value), detail=Number($('#pro-detail').value);
+    if(colors && (mode==='art'||mode==='hq'))opts.numberofcolors=colors;
+    if(detail)opts.ltres=opts.qtres=detail;
+    opts.pathomit=Math.max(0,Math.min(50,Number($('#pro-speckle').value)||0));
+    opts.colorsampling=0; // deterministic palette sampling
+    if(!$('#pro-alpha').checked){for(let i=0;i<id.data.length;i+=4){const a=id.data[i+3]/255;for(let j=0;j<3;j++)id.data[i+j]=Math.round(id.data[i+j]*a+255*(1-a));id.data[i+3]=255;}}
+    await new Promise(r=>setTimeout(r,30));
+    const svg = window.ImageTracer.imagedataToSVG(id,opts);
+    const xml=new DOMParser().parseFromString(sealSvgSeams(svg,mode),'image/svg+xml');
+    if($('#pro-white').checked)xml.querySelectorAll('[fill]').forEach(p=>{const fill=p.getAttribute('fill');const rgb=fill.match(/^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/i);if((rgb&&rgb.slice(1).every(v=>Number(v)>=250))||/^(#fff(?:fff)?|white)$/i.test(fill))p.remove()});
+    return new XMLSerializer().serializeToString(xml);
   }
 
   function rgbToHex(r, g, b) {
@@ -22879,11 +22904,12 @@ module.exports = ZStream;
   async function handlePdf(files) {
     for (const file of files) {
       const card = createCard('pdf', file);
+      let localCdrWarning = '';
       try {
         setProgress(card, 8);
         const e = ext(file.name);
         const dpi = parseInt(state.pdfQuality(), 10) || 300;
-        let localCdrWarning = '';
+
 
         if (e === 'pdf') {
           setProgress(card, 100);
@@ -23029,6 +23055,27 @@ module.exports = ZStream;
     }
   }
 
+  function mountMaskEditor(card,original,cutout){
+    const panel=document.createElement('div');panel.className='mask-panel';
+    panel.innerHTML='<h3>Refine cutout — full-resolution export</h3><p>Erase unwanted areas or restore missing subject parts. Drag on the preview. Download edited PNG separately; the original AI download is unchanged.</p><div class="mask-tools"><select aria-label="Brush mode"><option value="erase">Erase</option><option value="restore">Restore</option></select><label>Brush <input aria-label="Brush size" type="range" min="2" max="140" value="24"></label><button type="button" data-action="undo">Undo</button><button type="button" data-action="reset">Reset AI mask</button><button type="button" data-action="download">Download edited PNG</button><select aria-label="Preview background" data-background><option value="checker">Checkerboard</option><option value="white">White</option><option value="black">Black</option></select></div>';
+    const edit=cloneCanvas(cutout),ctx=edit.getContext('2d',{willReadFrequently:true});
+    const source=blankCanvas(edit.width,edit.height,'transparent');source.getContext('2d').drawImage(original,0,0,edit.width,edit.height);
+    const view=blankCanvas(Math.min(1100,edit.width),Math.max(1,Math.round(edit.height*Math.min(1,1100/edit.width))),'transparent');view.className='mask-editor';view.setAttribute('aria-label','Cutout correction canvas');
+    const history=[];let down=false,last=null;
+    function render(){const g=view.getContext('2d');g.clearRect(0,0,view.width,view.height);g.drawImage(edit,0,0,view.width,view.height);panel.querySelector('[data-action=undo]').disabled=!history.length;}
+    function snapshot(){history.push(ctx.getImageData(0,0,edit.width,edit.height));const limit=Math.max(1,Math.min(8,Math.floor(64000000/(edit.width*edit.height*4))));while(history.length>limit)history.shift();}
+    function point(e){const r=view.getBoundingClientRect();return {x:(e.clientX-r.left)*edit.width/r.width,y:(e.clientY-r.top)*edit.height/r.height};}
+    function dab(p){const radius=Number(panel.querySelector('input').value)*edit.width/view.getBoundingClientRect().width/2;ctx.save();ctx.beginPath();ctx.arc(p.x,p.y,radius,0,Math.PI*2);ctx.clip();if(panel.querySelector('select').value==='erase'){ctx.clearRect(p.x-radius,p.y-radius,2*radius,2*radius)}else{ctx.clearRect(p.x-radius,p.y-radius,2*radius,2*radius);ctx.drawImage(source,0,0)}ctx.restore();}
+    view.addEventListener('pointerdown',e=>{if(e.button!==0)return;e.preventDefault();snapshot();down=true;last=point(e);view.setPointerCapture(e.pointerId);dab(last);render()});
+    view.addEventListener('pointermove',e=>{if(!down)return;const p=point(e),dist=Math.hypot(p.x-last.x,p.y-last.y),step=Math.max(1,Number(panel.querySelector('input').value)*edit.width/view.getBoundingClientRect().width/5),n=Math.ceil(dist/step);for(let i=1;i<=n;i++)dab({x:last.x+(p.x-last.x)*i/n,y:last.y+(p.y-last.y)*i/n});last=p;render()});
+    const end=()=>{down=false;last=null};view.addEventListener('pointerup',end);view.addEventListener('pointercancel',end);view.addEventListener('lostpointercapture',end);
+    panel.querySelector('[data-action=undo]').onclick=()=>{if(history.length)ctx.putImageData(history.pop(),0,0);render()};
+    panel.querySelector('[data-action=reset]').onclick=()=>{snapshot();ctx.clearRect(0,0,edit.width,edit.height);ctx.drawImage(cutout,0,0);render()};
+    panel.querySelector('[data-background]').onchange=e=>{view.style.backgroundImage=e.target.value==='checker'?'':'none';view.style.backgroundColor=e.target.value==='checker'?'#aaa':e.target.value};
+    panel.querySelector('[data-action=download]').onclick=async e=>{const b=e.currentTarget;b.disabled=true;try{const blob=await canvasToBlob(edit,'image/png'),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='artvision_refined.png';a.click();setTimeout(()=>URL.revokeObjectURL(url),30000)}finally{b.disabled=false}};
+    panel.appendChild(view);card.appendChild(panel);render();
+  }
+
   async function handleBg(files) {
     for (const file of files) {
       const card = createCard('bg', file, 'PNG');
@@ -23071,6 +23118,7 @@ module.exports = ZStream;
         extra.appendChild(before);
         extra.appendChild(after);
         card.appendChild(extra);
+        mountMaskEditor(card,src,cutout);
       } catch (err) {
         setStatus(card, 'failed', 'err');
         setNote(card, `<span class="err">${escapeHtml(err.message || String(err))}</span>`);
@@ -23151,21 +23199,5 @@ module.exports = ZStream;
   wireDrop('color', files => files.length && handleColor(files));
 })();
 </script>
-
-<script>
-/* Parent Studio bridge: lets the Studio menu open a specific Converter tab. */
-(function () {
-  const allowed = new Set(['pdf', 'vec', 'bg', 'color']);
-  window.addEventListener('message', function (event) {
-    const msg = event.data;
-    if (event.source !== window.parent || !msg ||
-        msg.source !== 'artvision-studio' || msg.type !== 'converter:select-tool') return;
-    const tool = allowed.has(msg.tool) ? msg.tool : 'pdf';
-    const tab = Array.from(document.querySelectorAll('.tab')).find(x => x.dataset.t === tool);
-    if (tab) tab.click();
-  });
-})();
-</script>
-
 </body>
 </html>

@@ -300,6 +300,12 @@ input[type=checkbox]{accent-color:var(--acc);cursor:pointer}
 @media(max-width:680px){#portfolioMockupTopbar{min-height:50px;padding:6px 8px}#portfolioMockupBrand small{display:none}#portfolioMockupBrand strong{font-size:11px}#portfolioMockupClose{padding:7px 9px}}
 
 </style>
+<style>
+.hconverter{margin:8px 0 18px;padding:16px;border:1px solid #465b83;border-radius:14px;background:linear-gradient(125deg,#182b45,#211d38)}
+.hc-title{font-size:16px;font-weight:800;color:#eaf1ff;margin-bottom:12px}.hc-title span{display:block;font-size:11px;font-weight:400;color:#aabbd7;margin-top:4px}
+.hc-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.hc-tool{appearance:none;text-align:left;padding:14px;border:1px solid #425574;border-radius:10px;background:#1d2c43;color:#eff4ff;cursor:pointer;font:inherit;transition:background .15s,border-color .15s}.hc-tool:hover{background:#2a3f61;border-color:#8aafff}.hc-tool:focus-visible{outline:2px solid #a5c2ff;outline-offset:2px}.hc-tool b{display:block;font-size:13px}.hc-tool small{display:block;font-size:11px;line-height:1.5;color:#b7c5dc;margin-top:6px}.homebox{max-height:calc(100dvh - 32px);overflow-y:auto}
+@media(max-width:480px){.hc-grid{grid-template-columns:1fr}}
+</style>
 </head>
 <body>
 <div id="app">
@@ -3055,6 +3061,14 @@ function aboutDialog(){
 const CONVERTER_TOOLS=new Set(['pdf','vec','bg','color']);
 let converterPendingTool='pdf';
 let converterReturnFocus=null;
+function syncHostedConverterTool(){
+  const frame=$('#converterFrame');if(!frame)return;
+  try{
+    const button=frame.contentDocument?.querySelector('.tab[data-t="'+converterPendingTool+'"]');
+    if(button)button.click();
+  }catch(e){/* Cross-origin local previews cannot access the hosted frame. */}
+}
+
 function setConverterTool(tool){
   converterPendingTool=CONVERTER_TOOLS.has(tool)?tool:'pdf';
   document.querySelectorAll('#converterModes [data-converter-tool]').forEach(b=>{
@@ -3063,6 +3077,7 @@ function setConverterTool(tool){
   const frame=$('#converterFrame');
   if(frame&&frame.dataset.loaded==='1'){
     try{frame.contentWindow.postMessage({source:'artvision-studio',type:'converter:select-tool',tool:converterPendingTool},'*')}catch(e){}
+    syncHostedConverterTool();
   }
 }
 function openConverter(tool='pdf'){
@@ -3078,6 +3093,7 @@ function openConverter(tool='pdf'){
     frame.src=new URL('converter.html',window.location.href).href;
   }else if(frame.dataset.loaded==='1'){
     try{frame.contentWindow.postMessage({source:'artvision-studio',type:'converter:select-tool',tool:converterPendingTool},'*')}catch(e){}
+    syncHostedConverterTool();
   }
   window.setTimeout(()=>$('#converterClose')?.focus(),0);
 }
@@ -3096,6 +3112,7 @@ function initConverterSuite(){
     if(frame.dataset.requested!=='1')return;
     frame.dataset.loaded='1';loading.classList.add('hidden');
     try{frame.contentWindow.postMessage({source:'artvision-studio',type:'converter:select-tool',tool:converterPendingTool},'*')}catch(e){}
+    syncHostedConverterTool();
   });
   window.addEventListener('keydown',e=>{
     if(e.key==='Escape'&&$('#converterOverlay').classList.contains('open')){
@@ -5569,6 +5586,12 @@ function homeLauncher(){
   const p=el('div','homebox');
   p.innerHTML='<div class="homehead"><div><div class="hbrand">◆ ARTViSiON <span>STUDiO</span></div><div class="hq">Kya craft karenge aaj? — size chuno, turant shuru</div></div><button class="hclose" title="Band karo">✕</button></div>'
    +'<div class="hgrid">'+H_PRESETS.map((pr,i)=>'<div class="hcard" data-hp="'+i+'"><div class="hic">'+pr[3]+'</div><b>'+escapeHtml(pr[0])+'</b><span>'+pr[1]+'×'+pr[2]+'</span></div>').join('')+'</div>'
+   +'<section class="hconverter"><div class="hc-title">⇄ Converter <span>Convert · Trace · Remove background · Colour tools</span></div><div class="hc-grid">'
+   +'<button type="button" class="hc-tool" data-home-converter="pdf"><b>📄 PDF Converter</b><small>PSD · AI · CDR · EPS · SVG · TIFF · DXF → PDF</small></button>'
+   +'<button type="button" class="hc-tool" data-home-converter="vec"><b>✦ Vectorize Art</b><small>Colour art · Logo trace · Smooth SVG</small></button>'
+   +'<button type="button" class="hc-tool" data-home-converter="bg"><b>✂ Background Remove</b><small>AI cutout · Transparent PNG</small></button>'
+   +'<button type="button" class="hc-tool" data-home-converter="color"><b>◉ Color Lab</b><small>RGB · HEX · ICC CMYK · Pantone approximation</small></button>'
+   +'</div></section>'
    +'<div class="hacts">'
    +'<button class="hbtn" id="hOpen">📂 Open / Import</button>'
    +'<button class="hbtn" id="hNew">➕ Custom Size</button>'
@@ -5588,6 +5611,7 @@ function homeLauncher(){
     else boardCreate(pr[0],pr[1],pr[2],'#ffffff');
     uiLayers();uiProps();fitView();needRender=true;
     toast(pr[0]+' ready — All the best!','ok')}))
+  p.querySelectorAll('[data-home-converter]').forEach(b=>b.addEventListener('click',()=>{close(true);openConverter(b.dataset.homeConverter)}));
   const ho=p.querySelector('#hOpen');if(ho)ho.addEventListener('click',()=>{close(true);$('#fileInput').click()});
   const hn=p.querySelector('#hNew');if(hn)hn.addEventListener('click',()=>{close(true);newDocDialog()});
   const ha=p.querySelector('#hAuto');if(ha)ha.addEventListener('click',()=>{close(false);restoreAutosave()});
