@@ -2409,6 +2409,7 @@ function attrFillStroke(elm,gradientMap){
   const ref=/url\(\s*['"]?#([^)'"]+?)['"]?\s*\)/i.exec(rawFill);
   let fill=ref&&gradientMap&&gradientMap.has(ref[1])?JSON.parse(JSON.stringify(gradientMap.get(ref[1]))):
     (ref?null:svgColor(rawFill));
+  if(typeof fill==='string')fill={type:'solid',color:fill};
   let stroke=svgColor(get('stroke'));
   const sw=get('stroke-width');
   return{fill,stroke:stroke?{width:sw?parseFloat(sw):1,color:stroke}:null}}
