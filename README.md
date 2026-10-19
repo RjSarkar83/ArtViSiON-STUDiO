@@ -2,13 +2,36 @@
 
 # ◆ ArtViSiON STUDiO
 
-**Hybrid Vector + Bitmap + Animation Editor · Pro Converter · 174 Portfolio Mockups**
+**Hybrid Vector + Bitmap + Animation Editor · Real CorelDRAW (.cdr/.cdt) Import · Pro Converter · 174 Portfolio Mockups**
 
 *Browser-based · local-first · GitHub Pages-ready · MIT*
 
 </div>
 
 ArtViSiON Studio combines a vector/bitmap design editor with an integrated Pro Converter and the searchable **Vector Portfolio mockup library**. The portfolio integration includes 174 original SVG scenes across 23 categories. The editor's unrelated tools and the Converter integration remain included.
+
+## 🟠 v10.0 — Real CorelDRAW engine
+
+`.cdr` and `.cdt` files now open as **editable artwork**, not a preview picture. The parser reads CorelDRAW's own file format directly in the browser:
+
+| Container | Covers |
+| --- | --- |
+| RIFF (`RIFF…CDR*`) | CorelDRAW 3 – X3 |
+| ZIP with `content/riffData.cdr` | X4 – X5 |
+| ZIP with `content/root.dat` + `content/data/*.dat` | X6+ (ZIP packages) |
+| OLE compound file (CFB) with `content/root.dat` | X6+ (CFB packages) |
+
+What arrives on the artboard:
+
+- **Rectangles** (with corner radius), **ellipses**, **5/7-point stars**, custom polygons, rounded rects and **Bezier paths** — real nodes you can edit with the node tool, not a traced bitmap.
+- **Live text** with font family, size, colour and baseline preserved (still editable as text).
+- **Fills**: solid RGB/CMYK/spot colours plus multi-stop linear/radial gradients.
+- **Outlines**: colour, width, cap, join and dash pattern.
+- **Embedded bitmaps** placed on their own raster layer, underneath the vectors.
+- **Multi-page documents** become one artboard per page.
+- A summary toast after import: object counts, CDR version, container, page size.
+
+CorelDRAW effects that have no Studio equivalent (blends, contours, envelopes, lenses, mesh fills, artistic-media strokes) are approximated or skipped — the underlying shapes still import. Sibling AI/EPS/PDF importers also received a `T_vec` repair in this build, so they no longer throw on import.
 
 ## 🖼 Portfolio Mockup Library
 
@@ -38,7 +61,7 @@ See [`CONVERTER-INTEGRATION.md`](CONVERTER-INTEGRATION.md) and [`converter-engin
 - **Layers and artboards** — groups, blend modes, opacity, masks, clipping masks, multiple boards, and per-board history.
 - **Filters and color tools** — live filter gallery, curves, color adjustments, guides, snapping, and smart alignment.
 - **Animation** — timeline, onion-skin, and GIF/WebM/sprite-sheet export.
-- **Import/export** — PNG, JPG, WebP, GIF, BMP, SVG, PSD, PDF, AI, EPS/PS, DXF, TIFF, and `.chitra` project files (support varies by format).
+- **Import/export** — **CorelDRAW CDR/CDT**, PNG, JPG, WebP, GIF, BMP, SVG, PSD, PDF, AI, EPS/PS, DXF, TIFF, and `.chitra` project files (support varies by format).
 - **Workspace** — size presets, command palette, focus mode, autosave, and reusable personal library.
 
 ## 🚀 Quick start
@@ -92,7 +115,7 @@ Studio editing and gallery preview rendering happen in the browser. Selecting **
 
 - PSD export writes a flattened composite; use `.chitra` for editable Studio layers.
 - GIF is limited to 256 colors by the format.
-- CDR import uses an embedded preview raster; exporting CDR to PDF/AI in CorelDRAW is recommended for editable content.
+- CDR import converts geometry, text, fills, outlines and bitmaps (pattern/bitmap fills are skipped rather than approximated); exotic effects (blends, contours, lenses, mesh fills, envelopes) can't be reproduced exactly — export SVG/PDF from CorelDRAW if you need a pixel-identical result. Files that carry only a preview raster fall back to that image with a warning.
 - Encrypted PDFs with a non-empty password and some uncommon legacy EPS/PostScript operators may not import.
 - Review print output and color profiles before production.
 
