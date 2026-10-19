@@ -1,4 +1,4 @@
-# ArtViSiON STUDiO v10.0 — CorelDRAW import update
+# ArtViSiON STUDiO v10.2 — CorelDRAW import + all-devices update
 
 **Kya badla:** `.cdr` / `.cdt` ab asli CorelDRAW engine se parse hote hain (preview image nahi).
 CorelDRAW **v3 se X6+** tak — RIFF, ZIP (`content/riffData.cdr`), ZIP `content/root.dat` aur OLE compound file (CFB) — sab automatically detect hote hain.
@@ -36,6 +36,28 @@ Test (real files, preview thumbnails se match):
 - `06 Business Card` (CDRB) — 411 paths + 103 bitmaps + live text
 - `01 Receipt` (CDRB) — 9 paths + 7 text objects, layout match
 - `15 Logo Designs` (ZIP X6) — 95 paths, gradients
+
+## v10.2 — All-devices update
+
+Ek hi `index.html` har screen par chalega:
+
+| Screen | Kya badla |
+| --- | --- |
+| **Desktop** (≥981px) | Layout bilkul pehle jaisa — kuch nahi bigda |
+| **Tablet / small laptop** (701–980px) | Properties/Layers panel ☰ button se **slide-over drawer**; tap outside ya `Esc` se band |
+| **Phone** (≤700px) | **Bottom tool rail** + bottom-sheet panel, 2-row topbar (actions + artboard tabs + scrollable menus) |
+| **Phone landscape** | Ek row ka chrome + bottom rail — canvas ko poori height |
+
+Touch features:
+
+- **Pinch zoom + two-finger pan** canvas par
+- **44px touch targets**, node/handle hit-area 2.2×, iOS focus-zoom band
+- DPR cap (2×, low-end par 1.5×) — purane phone par bhi smooth
+- `dvh` + safe-area padding (notch/gesture bar), PWA "Add to Home Screen" full-screen
+- Menu dropdown viewport ke andar clamp, toast phone-safe width
+- CDR import ke baad phone/tablet par auto fit + panel auto-band
+
+Tested: iPhone 12 (390×844), SE (375×667), Android (360×640), phone landscape (844×390), iPad (768×1024 & 1024×768), desktop (1440×900) — sab par zero errors, CDR import + pinch + tap-select + drag verified.
 
 ## GitHub par update kaise karein
 

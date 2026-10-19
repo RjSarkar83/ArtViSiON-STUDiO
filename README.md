@@ -33,6 +33,27 @@ What arrives on the artboard:
 
 CorelDRAW effects that have no Studio equivalent (blends, contours, envelopes, lenses, mesh fills, artistic-media strokes) are approximated or skipped — the underlying shapes still import. Sibling AI/EPS/PDF importers also received a `T_vec` repair in this build, so they no longer throw on import.
 
+## 📱 Device support (v10.2)
+
+The same single `index.html` now adapts to every screen:
+
+| Device | Layout |
+| --- | --- |
+| **Desktop / laptop** (≥ 981 px) | Unchanged three-pane studio: tool rail · canvas · inspector |
+| **Tablet / small laptop** (701–980 px) | Inspector becomes a **slide-over drawer** (☰‑style button in the top bar, scrim tap or `Esc` closes) |
+| **Phone** (≤ 700 px) | Bottom **tool rail**, bottom-sheet inspector, two-row top bar (actions + artboard tabs + scrollable menus) |
+| **Phone landscape / short windows** | One-row chrome + bottom rail so the canvas keeps its height |
+
+Touch & mobile features:
+
+- **Pinch to zoom**, **two-finger pan** on the canvas (pointer-event based, no library).
+- **44 px touch targets**, iOS focus-zoom suppressed (`font-size:16px` on inputs), no long-press callout.
+- Hit-testing on nodes and transform handles gets a **2.2× tolerance** on coarse pointers.
+- Canvas backing store capped at 2× DPR (1.5× on low-end hardware: ≤4 cores / ≤4 GB) to keep panning smooth.
+- `dvh` units + `safe-area-inset` padding for notches and browser chrome; `viewport-fit=cover`.
+- PWA meta (`theme-color`, `apple-mobile-web-app-*`, `mobile-web-app-capable`) — "Add to Home Screen" runs full-screen.
+- Menus/dropdowns are clamped inside the viewport; toast width limited to the thumb-safe area.
+
 ## 🖼 Portfolio Mockup Library
 
 Open **File → Portfolio Mockups · 174 SVG scenes** or choose **Portfolio Mockups · 174** from the Home launcher.
@@ -63,6 +84,7 @@ See [`CONVERTER-INTEGRATION.md`](CONVERTER-INTEGRATION.md) and [`converter-engin
 - **Animation** — timeline, onion-skin, and GIF/WebM/sprite-sheet export.
 - **Import/export** — **CorelDRAW CDR/CDT**, PNG, JPG, WebP, GIF, BMP, SVG, PSD, PDF, AI, EPS/PS, DXF, TIFF, and `.chitra` project files (support varies by format).
 - **Workspace** — size presets, command palette, focus mode, autosave, and reusable personal library.
+- **Every device** — responsive desktop/tablet/phone layouts, pinch-zoom and two-finger pan, touch-sized controls and PWA install.
 
 ## 🚀 Quick start
 

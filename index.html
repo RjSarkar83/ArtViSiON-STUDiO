@@ -2,7 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#131418">
+<meta name="color-scheme" content="dark">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ArtViSiON">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="description" content="ArtViSiON STUDiO — vector + bitmap editor with native CorelDRAW (CDR/CDT) import, animation and a pro converter suite. Works on desktop, tablet and phone.">
 <title>ArtViSiON Studio — Vector + Bitmap + Animation + Pro Converter</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%235b8cff'/%3E%3Cstop offset='1' stop-color='%23a45bff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='3' y='3' width='26' height='26' rx='7' fill='url(%23g)'/%3E%3Cpath d='M10 22 L16 9 L22 22 Z' fill='white' opacity='.92'/%3E%3C/svg%3E">
 <style>
@@ -305,6 +312,154 @@ input[type=checkbox]{accent-color:var(--acc);cursor:pointer}
 .hc-title{font-size:16px;font-weight:800;color:#eaf1ff;margin-bottom:12px}.hc-title span{display:block;font-size:11px;font-weight:400;color:#aabbd7;margin-top:4px}
 .hc-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.hc-tool{appearance:none;text-align:left;padding:14px;border:1px solid #425574;border-radius:10px;background:#1d2c43;color:#eff4ff;cursor:pointer;font:inherit;transition:background .15s,border-color .15s}.hc-tool:hover{background:#2a3f61;border-color:#8aafff}.hc-tool:focus-visible{outline:2px solid #a5c2ff;outline-offset:2px}.hc-tool b{display:block;font-size:13px}.hc-tool small{display:block;font-size:11px;line-height:1.5;color:#b7c5dc;margin-top:6px}.homebox{max-height:calc(100dvh - 32px);overflow-y:auto}
 @media(max-width:480px){.hc-grid{grid-template-columns:1fr}}
+</style>
+<style id="av-device">
+/* ══════════════════════════════════════════════════════════════════════════
+   ArtViSiON STUDiO — v10.2 multi-device layer
+   Loaded last so it can refine every earlier rule. Desktop layout untouched;
+   tablet → slide-over inspector; phone → bottom tool rail + bottom sheet.
+   ══════════════════════════════════════════════════════════════════════════ */
+:root{color-scheme:dark}
+html,body{height:100%;height:100dvh;overscroll-behavior:none}
+body{-webkit-text-size-adjust:100%;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+#app{height:100dvh}
+#topbar{padding-top:env(safe-area-inset-top);height:calc(44px + env(safe-area-inset-top))}
+#statusbar{padding-bottom:env(safe-area-inset-bottom);height:calc(28px + env(safe-area-inset-bottom))}
+
+/* panel toggle + scrim — only shown once the inspector stops fitting */
+/* menu bar: one scrollable row at every width (buttons never wrap now) */
+#menus{display:flex;align-items:center;gap:2px;flex:1 1 auto;min-width:0;
+  overflow-x:auto;overflow-y:hidden;white-space:nowrap;scrollbar-width:none;-ms-overflow-style:none}
+#menus::-webkit-scrollbar{display:none}
+#menus .mbtn{flex:0 0 auto}
+#quick{flex:0 0 auto}
+
+#panelToggle{display:none;width:32px;height:32px;border-radius:7px;align-items:center;justify-content:center;
+  color:var(--tx2);flex-shrink:0;margin-left:6px}
+#panelToggle:hover{background:var(--p3);color:var(--tx)}
+#panelToggle:active{background:var(--p3)}
+#panelScrim{display:none;position:fixed;inset:0;background:rgba(6,7,10,.55);z-index:1500;
+  -webkit-backdrop-filter:blur(1px);backdrop-filter:blur(1px)}
+body.show-panel #panelScrim{display:block}
+
+@media (prefers-reduced-motion:reduce){
+  *{transition-duration:.01ms !important;animation-duration:.01ms !important;animation-iteration-count:1 !important}
+}
+
+/* ── tablet & small laptop: inspector becomes a slide-over ─────────────── */
+@media (max-width:980px){
+  #panelToggle{display:flex}
+  #side{position:fixed;top:0;right:0;bottom:0;width:min(340px,88vw);z-index:1600;
+    transform:translateX(103%);transition:transform .22s cubic-bezier(.4,0,.2,1);
+    box-shadow:-18px 0 44px rgba(0,0,0,.5);
+    padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);
+    overflow-y:auto;overscroll-behavior:contain;border-left:1px solid var(--line2)}
+  body.show-panel #side{transform:none}
+  .mbtn{white-space:nowrap;padding:8px 10px}
+  #logo{margin-right:8px}
+  #logo>div:last-child{display:none}
+  #quick .qsep{display:none}
+  #quick{gap:1px}
+  #quick .qbtn{width:32px;height:32px}
+}
+
+/* ── phone: bottom tool rail + bottom-sheet inspector ──────────────────── */
+@media (max-width:700px){
+  #main{flex-direction:column}
+  #stage{order:1;min-height:0}
+  #toolrail{order:2;flex-direction:row;width:100%;height:52px;height:calc(52px + env(safe-area-inset-bottom));
+    border-right:0;border-top:1px solid var(--line);padding:0 6px env(safe-area-inset-bottom);
+    gap:2px;overflow-x:auto;overflow-y:hidden;align-items:center;scrollbar-width:none;overscroll-behavior-x:contain}
+  #toolrail::-webkit-scrollbar{display:none}
+  #toolrail .tsep{width:1px;height:24px;margin:0 3px;border-left:1px solid var(--line);flex:0 0 auto}
+  .tool{width:44px;height:44px;flex:0 0 auto}
+  .tool .tip{display:none}
+  #statusbar{height:calc(34px + env(safe-area-inset-bottom));font-size:10.5px;gap:6px;padding:0 8px;
+    padding-bottom:env(safe-area-inset-bottom)}
+  #stHint,#stCoords{display:none}
+  #statusbar button{min-width:32px;min-height:24px}
+  #zFit,#z100{display:none}
+  /* two-row bar: brand + actions on top, full-width scrollable menus below */
+  #topbar{gap:2px;padding-left:6px;padding-right:4px;flex-wrap:wrap;height:auto;
+    padding-top:env(safe-area-inset-top);padding-bottom:0;row-gap:0}
+  #logo{order:1}
+  #quick{order:2}
+  #panelToggle{order:3}
+  #menus{order:5;flex:1 0 100%;height:34px;border-top:1px solid rgba(255,255,255,.05);
+    padding:0 2px;gap:4px}
+  /* artboard tabs get their own scroll strip instead of covering the logo */
+  #boardTabs{order:4;flex:1 0 100%;margin:0;height:32px;padding:0 4px;gap:5px;
+    border-top:1px solid rgba(255,255,255,.04)}
+  .btab{max-width:150px;padding:5px 9px}
+  .mbtn{padding:6px 9px;font-size:12px}
+  #quick .qbtn{width:30px;height:30px}
+  #qNew,#qSave,#qHelp{display:none}          /* reachable from the menus */
+  #side{width:100%;max-height:74dvh;top:auto;bottom:0;border-radius:16px 16px 0 0;border-left:0;
+    border-top:1px solid var(--line2);transform:translateY(103%);box-shadow:0 -18px 44px rgba(0,0,0,.5)}
+  body.show-panel #side{transform:none}
+  #side .panel-sec{border-bottom:1px solid var(--line)}
+  #colorRow{gap:8px}
+}
+
+/* ── touch ergonomics (phones, tablets, touch laptops) ─────────────────── */
+@media (hover:none) and (pointer:coarse){
+  .tool{width:44px;height:44px}
+  .mbtn{padding:9px 10px;font-size:13px}
+  .mitem{padding:11px 12px;font-size:13.5px}
+  .msep{margin:5px 4px}
+  .qbtn{min-width:34px;min-height:32px}
+  input,select,textarea{font-size:16px}       /* stops iOS focus-zoom */
+  .modal{min-width:0;width:min(560px,94vw);max-height:88dvh}
+  .modal-ov{padding:12px}
+  .homebox{width:min(680px,96vw);padding:16px 14px 12px}
+  .hgrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .hc-grid{grid-template-columns:1fr}
+  #layerList .lrow{min-height:38px}
+  .sw{width:30px;height:30px}
+  #statusbar{font-size:11px}
+}
+
+/* toasts: readable, never wider than the thumb-safe area */
+@media (max-width:700px){
+  .toast{max-width:min(340px,88vw);font-size:12.5px;line-height:1.45;padding:9px 12px;
+    left:50%;transform:translateX(-50%)}
+  #toastWrap,.toastWrap{left:0;right:0;align-items:center}
+}
+
+/* ── very small phones ─────────────────────────────────────────────────── */
+@media (max-width:420px){
+  .hgrid{grid-template-columns:repeat(1,minmax(0,1fr))}
+  .mbtn{padding:8px 6px;font-size:11.5px}
+  #quick .qbtn{width:28px;height:28px}
+  #panelToggle{width:30px;margin-left:2px}
+}
+
+/* toasts must sit above the bottom rail on touch layouts */
+@media (max-width:700px){
+  #toasts{bottom:calc(96px + env(safe-area-inset-bottom))}
+}
+
+/* landscape phones & short windows: bottom rail + one-row chrome */
+@media (max-height:520px) and (orientation:landscape){
+  #topbar{height:calc(38px + env(safe-area-inset-top));flex-wrap:nowrap;padding-top:env(safe-area-inset-top)}
+  #menus{order:5;height:auto;flex:1 1 auto;border-top:0;overflow-x:auto}
+  #boardTabs{order:4;flex:0 1 auto;max-width:42%;height:auto;margin:0 4px;border-top:0;padding:0}
+  .btab{max-width:130px;padding:4px 8px}
+  #qNew,#qSave,#qHelp{display:none}
+  #main{flex-direction:column}
+  #stage{order:1;min-height:0}
+  #toolrail{order:2;flex-direction:row;width:100%;height:calc(46px + env(safe-area-inset-bottom));
+    border-right:0;border-top:1px solid var(--line);padding:0 4px env(safe-area-inset-bottom);
+    gap:1px;overflow-x:auto;overflow-y:hidden;align-items:center;scrollbar-width:none}
+  #toolrail::-webkit-scrollbar{display:none}
+  #toolrail .tsep{width:1px;height:22px;margin:0 3px;border-left:1px solid var(--line);flex:0 0 auto}
+  .tool{width:40px;height:40px;flex:0 0 auto}
+  #statusbar{height:calc(26px + env(safe-area-inset-bottom));font-size:10.5px;gap:8px;padding-bottom:env(safe-area-inset-bottom)}
+  #stHint,#stCoords{display:none}
+  #side{max-height:92dvh}
+  #toasts{bottom:calc(76px + env(safe-area-inset-bottom))}
+}
+
 </style>
 </head>
 <body>
@@ -1030,9 +1185,9 @@ function hitShape(pDoc){
   return null}
 function screenHandleHit(scr){
   const H=G._handles;if(!H)return null;
-  if(dist(scr,H.rotP)<9)return'rot';
+  if(dist(scr,H.rotP)<9*HITPAD())return'rot';
   const names=['nw','ne','se','sw'];
-  for(let i=0;i<4;i++)if(dist(scr,H.corners[i])<8)return names[i];
+  for(let i=0;i<4;i++)if(dist(scr,H.corners[i])<8*HITPAD())return names[i];
   return null}
 
 /* ---------- brush stamping ---------- */
@@ -1168,12 +1323,12 @@ const TOOLS={
       // node hit?
       for(let si=0;si<s.subpaths.length;si++)for(let i=0;i<s.subpaths[si].nodes.length;i++){
         const np=M.apply(t,s.subpaths[si].nodes[i].p);
-        if(dist(np,p)<8/zoom){nodeSel={sub:si,idx:i};
+        if(dist(np,p)<8*HITPAD()/zoom){nodeSel={sub:si,idx:i};
           const nd=s.subpaths[si].nodes[i];
           // handle hit?
           const inD=nd.in&&!eqPt(nd.in,nd.p)?dist(M.apply(t,nd.in),p):1e9;
           const outD=nd.out&&!eqPt(nd.out,nd.p)?dist(M.apply(t,nd.out),p):1e9;
-          if(inD<8/zoom||outD<8/zoom){G.hDrag={s,si,i,h:inD<outD?'in':'out',alt:e.altKey};pushUndo()}
+          if(inD<8*HITPAD()/zoom||outD<8*HITPAD()/zoom){G.hDrag={s,si,i,h:inD<outD?'in':'out',alt:e.altKey};pushUndo()}
           else{G.nDrag={s,si,i,orig:{p:{...nd.p},in:nd.in&&{...nd.in},out:nd.out&&{...nd.out}},start:p};pushUndo()}
           needRender=true;return}}
       nodeSel=null;
@@ -3280,7 +3435,7 @@ function buildMenus(){
         d.addEventListener('click',()=>{close();it.a()});
         root.appendChild(d)}
       const r=b.getBoundingClientRect();
-      root.style.left=r.left+'px';root.style.top=r.bottom+4+'px';root.style.display='block'});
+      root.style.display='block';const _mr=root.getBoundingClientRect();root.style.left=Math.max(6,Math.min(r.left,innerWidth-_mr.width-6))+'px';root.style.top=Math.max(6,Math.min(r.bottom+4,innerHeight-_mr.height-6))+'px'});
     b.addEventListener('mouseenter',()=>{if(openBtn&&openBtn!==b)b.click()});
     nav.appendChild(b)});
   document.addEventListener('pointerdown',e=>{
@@ -3312,7 +3467,7 @@ function demoDoc(){
 /* ---------- init ---------- */
 function resizeCanvas(){
   const r=$('#stage').getBoundingClientRect();
-  dpr=window.devicePixelRatio||1;
+  dpr=Math.min(window.devicePixelRatio||1,(window.matchMedia&&matchMedia('(pointer:coarse)').matches?2:2.5));
   cv.width=Math.max(50,Math.round(r.width*dpr));
   cv.height=Math.max(50,Math.round(r.height*dpr));
   needRender=true}
@@ -4117,7 +4272,7 @@ async function placePSD(buf,name){
    Shape Z-order · Gradient Paint tool · Text-on-Path ·
    Recent Colors · Autosave
    ============================================================ */
-const APP_VERSION='10.0';
+const APP_VERSION='10.2';
 let CUR_LAYER=null;
 
 /* ---------- Layer FX (non-destructive, render-time) ---------- */
@@ -7560,6 +7715,278 @@ if(globalThis.__CHITRA_TEST__){Object.assign(globalThis.__CHITRA_TEST__,{pushUnd
   getHistNames:()=>histNames.slice(),getRedoNames:()=>redoNames.slice()})}
 /* ============ end v9.5 ============ */
 /* Portfolio Mockup Library is provided by mockups.html + assets/mockups/. */
+
+/* ═══ v10.2 multi-device layer ═══ */
+/* ══════════════════════════════════════════════════════════════════════════
+   ArtViSiON STUDiO — multi-device layer (v10.2)
+   Injected at the END of the app's own <script>, so it shares the same
+   top-level lexical scope (doc, zoom, panX, G, needRender, setZoom, fitView…).
+   Adds: touch hit tolerance, pinch-zoom / two-finger pan, slide-over panels,
+   orientation + breakpoint relayout, and phone chrome wiring.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* bigger hit radius on touch screens (nodes / transform handles) */
+function HITPAD() {
+  try { return window.matchMedia('(pointer: coarse)').matches ? 2.2 : 1; } catch (e) { return 1; }
+}
+
+(function () {
+  'use strict';
+  var PHONE = 700, TABLET = 980;
+
+  function w() { return window.innerWidth || document.documentElement.clientWidth; }
+  function isCoarse() { try { return window.matchMedia('(pointer: coarse)').matches; } catch (e) { return false; } }
+  function category() { return w() <= PHONE ? 'phone' : w() <= TABLET ? 'tablet' : 'desktop'; }
+
+  /* ── chrome: panel toggle button + scrim ───────────────────────────────── */
+  function injectChrome() {
+    var top = document.getElementById('topbar');
+    if (top && !document.getElementById('panelToggle')) {
+      var b = document.createElement('button');
+      b.id = 'panelToggle';
+      b.className = 'qbtn';
+      b.type = 'button';
+      b.title = 'Properties / Layers panel';
+      b.setAttribute('aria-label', 'Properties and layers panel');
+      b.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">' +
+        '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M15 4v16"/></svg>';
+      b.addEventListener('click', function () {
+        document.body.classList.toggle('show-panel');
+      });
+      top.appendChild(b);
+    }
+    if (!document.getElementById('panelScrim')) {
+      var sc = document.createElement('div');
+      sc.id = 'panelScrim';
+      sc.setAttribute('aria-hidden', 'true');
+      sc.addEventListener('click', function () { document.body.classList.remove('show-panel'); });
+      document.body.appendChild(sc);
+    }
+  }
+
+  function closePanel() { document.body.classList.remove('show-panel'); }
+
+  /* ── viewport meta upgrade (older builds shipped a plain viewport) ─────── */
+  function fixViewport() {
+    var m = document.querySelector('meta[name="viewport"]');
+    if (m) m.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover');
+  }
+
+  /* ── breakpoint / orientation relayout ─────────────────────────────────── */
+  var cat = null, rt = 0;
+  function relayout(force) {
+    var c = category();
+    document.body.classList.toggle('is-phone', c === 'phone');
+    document.body.classList.toggle('is-tablet', c === 'tablet');
+    if (c !== cat || force) {
+      cat = c;
+      closePanel();
+      window.setTimeout(function () {
+        try { resizeCanvas(); } catch (e) {}
+        try { if (typeof doc !== 'undefined' && doc) fitView(); } catch (e) {}
+      }, 70);
+    }
+  }
+
+  /* ── pinch zoom + two-finger pan ───────────────────────────────────────── */
+  var pts = new Map(), pinch = null, live = false;
+
+  function dist2(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+  function pair() { return Array.from(pts.values()); }
+
+  function isCanvas(t) { return t && (t.id === 'cv' || t === cv); }
+
+  function pinchStart() {
+    var v = pair();
+    if (v.length < 2) return;
+    var r = cv.getBoundingClientRect();
+    var cx = (v[0].x + v[1].x) / 2, cy = (v[0].y + v[1].y) / 2;
+    pinch = {
+      d0: Math.max(1, dist2(v[0], v[1])),
+      z0: zoom,
+      // doc point under the initial pinch centre — stays glued to the fingers
+      doc0: { x: (cx - r.left - panX) / zoom, y: (cy - r.top - panY) / zoom }
+    };
+    /* cancel any single-finger gesture that had already started */
+    try { G = {}; } catch (e) {}
+    try { if (typeof RT !== 'undefined') RT = null; } catch (e) {}
+    try { if (typeof pen !== 'undefined') pen = null; } catch (e) {}
+    try { needRender = true; } catch (e) {}
+  }
+
+  function pinchMove() {
+    var v = pair();
+    if (!pinch || v.length < 2) return false;
+    var r = cv.getBoundingClientRect();
+    var cx = (v[0].x + v[1].x) / 2, cy = (v[0].y + v[1].y) / 2;
+    var k = dist2(v[0], v[1]) / pinch.d0;
+    zoom = Math.max(0.03, Math.min(32, pinch.z0 * k));
+    panX = (cx - r.left) - pinch.doc0.x * zoom;
+    panY = (cy - r.top) - pinch.doc0.y * zoom;
+    var zv = document.getElementById('zVal');
+    if (zv) zv.textContent = Math.round(zoom * 100) + '%';
+    needRender = true;
+    return true;
+  }
+
+  function onDown(e) {
+    if (e.pointerType === 'mouse' || !isCanvas(e.target)) return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size >= 2) {
+      live = true;
+      if (!pinch) pinchStart();
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }
+
+  function onMove(e) {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinchMove()) { e.preventDefault(); e.stopPropagation(); }
+  }
+
+  function onUp(e) {
+    if (!pts.has(e.pointerId)) {
+      if (live) { e.stopPropagation(); }
+      return;
+    }
+    var wasPinching = !!pinch;
+    pts.delete(e.pointerId);
+    if (pts.size < 2) pinch = null;
+    if (pts.size === 0) live = false;
+    if (wasPinching) { e.stopPropagation(); e.preventDefault(); }
+  }
+
+  function installGestures() {
+    // capture phase on window → runs before the canvas's own listeners
+    window.addEventListener('pointerdown', onDown, true);
+    window.addEventListener('pointermove', onMove, true);
+    window.addEventListener('pointerup', onUp, true);
+    window.addEventListener('pointercancel', function (e) {
+      pts.delete(e.pointerId);
+      if (pts.size < 2) pinch = null;
+      if (!pts.size) live = false;
+    }, true);
+    // trackpad pinch (Chrome reports ctrlKey wheel) already handled by the app
+    window.addEventListener('wheel', function (e) {
+      if (e.ctrlKey && isCanvas(e.target)) e.preventDefault();
+    }, { passive: false, capture: true });
+    // block iOS double-tap zoom / long-press callout on the canvas
+    var c = document.getElementById('cv');
+    if (c) {
+      // keep the app's own context menu alive (Android long-press fires contextmenu)
+      c.style.webkitTouchCallout = 'none';
+      c.style.webkitUserSelect = 'none';
+    }
+  }
+
+  /* ── keyboard: Esc closes the slide-over panel ─────────────────────────── */
+  window.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && document.body.classList.contains('show-panel')) {
+      closePanel();
+      e.stopPropagation();
+    }
+  }, true);
+
+  /* ── menu dropdown clamp so it never leaves the viewport ───────────────── */
+  function clampMenus() {
+    var root = document.getElementById('menuRoot');
+    if (!root) return;
+    var mo = new MutationObserver(function () {
+      if (root.style.display === 'block') {
+        var r = root.getBoundingClientRect();
+        var left = parseFloat(root.style.left || '0');
+        var top = parseFloat(root.style.top || '0');
+        var nl = Math.max(6, Math.min(left, window.innerWidth - r.width - 6));
+        var nt = Math.max(6, Math.min(top, window.innerHeight - r.height - 6));
+        if (nl !== left) root.style.left = nl + 'px';
+        if (nt !== top) root.style.top = nt + 'px';
+      }
+    });
+    mo.observe(root, { attributes: true, attributeFilter: ['style'] });
+  }
+
+  /* ── device-aware framing: keep more canvas visible on small screens ──── */
+  function installFit() {
+    if (typeof fitView !== 'function' || fitView.__avFit) return;
+    var original = fitView;
+    var better = function () {
+      try {
+        if (!doc) return original.apply(this, arguments);
+        if (w() > PHONE) return original.apply(this, arguments);
+        var r = cv.getBoundingClientRect();
+        var pad = 18;
+        zoom = Math.max(0.03, Math.min(32, Math.min((r.width - pad * 2) / doc.w, (r.height - pad * 2) / doc.h)));
+        panX = (r.width - doc.w * zoom) / 2;
+        panY = (r.height - doc.h * zoom) / 2;
+        var zv = document.getElementById('zVal');
+        if (zv) zv.textContent = Math.round(zoom * 100) + '%';
+        needRender = true;
+      } catch (e) { try { original.apply(this, arguments); } catch (e2) {} }
+    };
+    better.__avFit = true;
+    fitView = better;
+  }
+
+  /* ── low-end phones/tablets: render lighter, never block the UI ────────── */
+  function installPerf() {
+    var lowEnd = false;
+    try {
+      var mem = navigator.deviceMemory || 8;
+      var cores = navigator.hardwareConcurrency || 8;
+      lowEnd = mem <= 4 || cores <= 4;
+    } catch (e) {}
+    if (!lowEnd) return;
+    document.documentElement.classList.add('low-end');
+    try {
+      dpr = Math.min(dpr, 1.5);
+      resizeCanvas();
+    } catch (e) {}
+  }
+
+  /* ── install ───────────────────────────────────────────────────────────── */
+  function install() {
+    if (window.__avDeviceLayer) return;
+    window.__avDeviceLayer = true;
+    fixViewport();
+    injectChrome();
+    installGestures();
+    clampMenus();
+    installFit();
+    installPerf();
+    relayout(true);
+    // re-apply the device framing once the app has finished booting
+    window.setTimeout(function () { try { if (typeof fitView === 'function' && w() <= PHONE) fitView(); } catch (e) {} }, 700);
+    window.addEventListener('resize', function () {
+      clearTimeout(rt);
+      rt = window.setTimeout(function () { relayout(false); }, 160);
+    });
+    window.addEventListener('orientationchange', function () {
+      window.setTimeout(function () { relayout(true); }, 320);
+    });
+    if (isCoarse()) document.documentElement.classList.add('touch-ui');
+    // keep pinch-accurate after a CDR import on a small screen
+    var _imp = window.importCDRFile;
+    if (typeof _imp === 'function' && !_imp.__avWrapped) {
+      var wrapped = function (buf, name) {
+        return _imp.apply(this, arguments).then(function (r) {
+          window.setTimeout(function () {
+            try { if (typeof fitView === 'function') fitView(); } catch (e) {}
+            if (w() <= TABLET) closePanel();
+          }, 60);
+          return r;
+        });
+      };
+      wrapped.__avWrapped = true;
+      window.importCDRFile = wrapped;
+    }
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(install, 0); });
+  else setTimeout(install, 0);
+})();
+
 </script>
 <!-- ═══ ArtViSiON CDR engine v10 — pako (inflate) ═══ -->
 <script>/*! pako 2.1.0 | MIT AND Zlib */
