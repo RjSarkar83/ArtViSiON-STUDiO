@@ -2,13 +2,39 @@
 
 # ◆ ArtViSiON STUDiO
 
-**Hybrid Vector + Bitmap + Animation Editor · Real CorelDRAW (.cdr/.cdt) Import · Pro Converter · 174 Portfolio Mockups**
+**Hybrid Vector + Bitmap + Animation Editor · Clip Studio × Procreate brush pack · Real CorelDRAW (.cdr/.cdt) Import · Pro Converter · 174 Portfolio Mockups**
 
 *Browser-based · local-first · GitHub Pages-ready · MIT*
 
 </div>
 
 ArtViSiON Studio combines a vector/bitmap design editor with an integrated Pro Converter and the searchable **Vector Portfolio mockup library**. The portfolio integration includes 174 original SVG scenes across 23 categories. The editor's unrelated tools and the Converter integration remain included.
+
+## 🖌️ v11.0 — Clip Studio Paint × Procreate feature pack (21 Oct 2026)
+
+ArtViSiON Studio ab Clip Studio Paint aur Procreate ke **core tools** ke saath aata hai. Sab kuch wahi single `index.html`, sabhi local, koi upload nahi.
+
+| Feature | Kahan | Kis app se inspired |
+| --- | --- | --- |
+| **Brush Studio** — 13 built-in brushes (G-Pen, Mapping, Ink, Textured, Pencil, Airbrush, Marker, Watercolor, Charcoal, Tone, 3 erasers), pressure→size/opacity, taper, jitter, scatter, paper grain, brush blend, live pressure preview, apne presets save/delete | Brush / Eraser properties → ⚙ ya canvas ke neeche brush shelf | Procreate Brush Studio · CSP sub-tool |
+| **Stabilizer / StreamLine** (0–100 %) | Brush/eraser properties | CSP 手ブレ補正 · Procreate StreamLine |
+| **QuickShape** — stroke ke end par ~0.4 s hold → line / circle / ellipse / rectangle | Hold at stroke end (toggle properties me) | Procreate |
+| **ColorDrop** — palette swatch ko canvas par drag karo → region fill (selection ho to poora selection) | Colors panel drag → canvas | Procreate |
+| **Alpha Lock (α)** — sirf existing pixels par paint | Layer row chip α | Procreate |
+| **Reference Layer (◎)** — bucket / ColorDrop is layer ko reference karta hai | Layer row chip ◎ | CSP reference layer |
+| **Vector Eraser** — vector strokes intersection par real nodes me katte hain | Eraser properties → “Vector erase” | CSP vector eraser |
+| **Drawing Guides** — 1-pt / 2-pt perspective, isometric, grid, radial + stroke snapping | Guide tool (U) / View ▸ Drawing Guides | CSP rulers · Procreate drawing guide |
+| **Lasso select (Q)** + Feather / Expand / Contract | Tool rail + Select menu | Procreate · CSP |
+| **Screentone** (dots / lines / cross), **Gradient Map**, **Focus Lines**, **Liquify** (push/twirl/pinch/bloat) | Filter menu | CSP tones · Procreate liquify |
+| **Comic panel templates** (6 layouts, margins + gutters, vector panels) | File ▸ Comic Panel Template | CSP panel division |
+| **Flip canvas** H/V | Image menu | Procreate / CSP |
+
+### Notes
+- Naye tools purane undo/history ke saath kaam karte hain (har action ka naam History panel me: “Brush”, “Vector Erase”, “ColorDrop”, “Screentone”…).
+- Alpha Lock aur Reference Layer `.artvision` project, autosave, artboard save/load aur undo ke saath persist hote hain.
+- Brush presets aur dynamics `localStorage` me save hote hain (browser ke saath rehte hain).
+- ColorDrop drag se swatch ka normal click-to-select ab suppress nahi hota — drag 7 px cross karne par hi drop mode chalta hai.
+- Touch devices: brush shelf phone par bottom rail ke upar baithti hai; pressure `pointerType` ke hisaab se handle hota hai (mouse = full pressure).
 
 ## ✨ v10.3 — True-vector zoom + 2026 app support
 

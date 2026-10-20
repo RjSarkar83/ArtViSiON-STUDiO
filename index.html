@@ -4274,7 +4274,7 @@ async function placePSD(buf,name){
    Shape Z-order · Gradient Paint tool · Text-on-Path ·
    Recent Colors · Autosave
    ============================================================ */
-const APP_VERSION='10.3';
+const APP_VERSION='11.0';
 let CUR_LAYER=null;
 
 /* ---------- Layer FX (non-destructive, render-time) ---------- */
@@ -8627,6 +8627,2612 @@ function HITPAD() {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(install, 0); });
   else setTimeout(install, 0);
 })();
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ArtViSiON STUDiO v11.0 — CLIP STUDIO PAINT × PROCREATE feature pack
+   ──────────────────────────────────────────────────────────────────────────
+   Naya is build me:
+     • Brush Studio — dynamic brush engine (pressure size/opacity, taper,
+       jitter, scatter, paper grain, brush blend mode), 13 built-in brushes
+     • Stabilizer / StreamLine (CSP "hand-brush correction" + Procreate)
+     • QuickShape — stroke ke end par hold karo → perfect line / circle /
+       ellipse / rectangle
+     • ColorDrop — palette se color drag karke canvas par chhodo
+     • Alpha Lock (α) + Reference Layers (◎) — Procreate + CSP layer roles
+     • Vector Eraser — vector strokes ko intersection par kaato (CSP)
+     • Drawing Guides — 1-point / 2-point perspective, isometric, grid,
+       radial + ruler snapping (CSP rulers / Procreate drawing guide)
+     • Lasso selection (Q) + Feather / Expand / Contract
+     • Screentone (halftone) · Gradient Map · Focus Lines · Liquify
+     • Comic panel templates · Flip canvas
+   Module app ke apne <script> ke end me inject hota hai, isliye doc / TOOLS /
+   opts jaise sabhi bindings share hote hain.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const V11_VER = '11.0';
+const V11_LS_BRUSH = 'artvision_v11_brush';
+const V11_LS_PRESETS = 'artvision_v11_presets';
+
+const V11_BUILTIN_PRESETS = [
+  { id:'gpen',     name:'G-Pen',        emoji:'✒️', size:7,  soft:8,   op:100, eraser:false,
+    dyn:{stabilize:28,pSize:78,pOpacity:0,taper:35,jitter:0,scatter:0,grain:0}, blend:'source-over' },
+  { id:'mapping',  name:'Mapping Pen',  emoji:'🖊️', size:3,  soft:4,   op:100, eraser:false,
+    dyn:{stabilize:42,pSize:88,pOpacity:0,taper:50,jitter:0,scatter:0,grain:0}, blend:'source-over' },
+  { id:'ink',      name:'Ink Brush',    emoji:'🖌️', size:24, soft:22,  op:100, eraser:false,
+    dyn:{stabilize:20,pSize:60,pOpacity:35,taper:60,jitter:6,scatter:4,grain:12}, blend:'source-over' },
+  { id:'textured', name:'Textured Pen', emoji:'✏️', size:14, soft:30,  op:95,  eraser:false,
+    dyn:{stabilize:25,pSize:55,pOpacity:20,taper:30,jitter:8,scatter:0,grain:48}, blend:'source-over' },
+  { id:'pencil',   name:'Pencil',       emoji:'🩶', size:9,  soft:34,  op:80,  eraser:false,
+    dyn:{stabilize:18,pSize:45,pOpacity:35,taper:22,jitter:14,scatter:3,grain:55}, blend:'source-over' },
+  { id:'airbrush', name:'Airbrush',     emoji:'💨', size:70, soft:100, op:42,  eraser:false,
+    dyn:{stabilize:10,pSize:0,pOpacity:70,taper:0,jitter:0,scatter:0,grain:0}, blend:'source-over' },
+  { id:'marker',   name:'Marker',       emoji:'🖍️', size:32, soft:8,   op:72,  eraser:false,
+    dyn:{stabilize:15,pSize:20,pOpacity:0,taper:0,jitter:0,scatter:0,grain:6}, blend:'multiply' },
+  { id:'water',    name:'Watercolor',   emoji:'🎨', size:60, soft:62,  op:34,  eraser:false,
+    dyn:{stabilize:14,pSize:30,pOpacity:45,taper:20,jitter:10,scatter:18,grain:28}, blend:'multiply' },
+  { id:'charcoal', name:'Charcoal',     emoji:'🪨', size:34, soft:52,  op:78,  eraser:false,
+    dyn:{stabilize:8,pSize:40,pOpacity:30,taper:26,jitter:22,scatter:14,grain:74}, blend:'source-over' },
+  { id:'tone',     name:'Tone Brush',   emoji:'🔲', size:30, soft:6,   op:100, eraser:false,
+    dyn:{stabilize:10,pSize:0,pOpacity:0,taper:0,jitter:0,scatter:0,grain:70}, blend:'source-over' },
+  { id:'eraserSoft', name:'Soft Eraser', emoji:'🧽', size:48, soft:70, op:100, eraser:true,
+    dyn:{stabilize:20,pSize:55,pOpacity:25,taper:20,jitter:0,scatter:0,grain:0}, blend:'destination-out' },
+  { id:'eraserHard', name:'Hard Eraser', emoji:'◻️', size:24, soft:2,  op:100, eraser:true,
+    dyn:{stabilize:26,pSize:60,pOpacity:0,taper:25,jitter:0,scatter:0,grain:0}, blend:'destination-out' },
+  { id:'eraserKnead', name:'Kneaded Eraser', emoji:'🩹', size:56, soft:45, op:55, eraser:true,
+    dyn:{stabilize:12,pSize:30,pOpacity:50,taper:10,jitter:8,scatter:6,grain:35}, blend:'destination-out' }
+];
+
+const V11_DYN_DEFAULTS = {
+  stabilize:28, pSize:70, pOpacity:0, taper:30, jitter:0, scatter:0, grain:0,
+  blend:'source-over', quickShape:true, qsDelay:380
+};
+
+const V11 = {
+  dyn: Object.assign({}, V11_DYN_DEFAULTS),
+  presetId: 'gpen',
+  pressure: 0.5,
+  vectorErase: false,
+  lastDropAt: 0
+};
+
+let V11_PRESETS = V11_BUILTIN_PRESETS.map(p => Object.assign({}, p, { dyn:Object.assign({}, p.dyn) }));
+
+/* ---------- settings storage ---------- */
+function v11LoadSettings(){
+  try{
+    const raw = lsGet(V11_LS_BRUSH);
+    if(raw){
+      const j = JSON.parse(raw);
+      if(j && j.dyn) Object.assign(V11.dyn, V11_DYN_DEFAULTS, j.dyn);
+      if(j && j.presetId) V11.presetId = j.presetId;
+    }
+    const rawP = lsGet(V11_LS_PRESETS);
+    if(rawP){
+      const arr = JSON.parse(rawP);
+      if(Array.isArray(arr)){
+        for(const p of arr){
+          if(!p || !p.id || !p.name) continue;
+          if(V11_PRESETS.some(x => x.id === p.id)) continue;
+          V11_PRESETS.push(Object.assign({ emoji:'✎', custom:true, eraser:false }, p,
+            { dyn:Object.assign({}, V11_DYN_DEFAULTS, p.dyn || {}) }));
+        }
+      }
+    }
+  }catch(e){}
+}
+function v11SaveSettings(){
+  try{ lsSet(V11_LS_BRUSH, JSON.stringify({ dyn:V11.dyn, presetId:V11.presetId })) }catch(e){}
+}
+function v11SavePresets(){
+  try{
+    const custom = V11_PRESETS.filter(p => p.custom);
+    lsSet(V11_LS_PRESETS, JSON.stringify(custom));
+  }catch(e){}
+}
+
+/* ---------- tiny helpers ---------- */
+function v11Clamp(v,a,b){ return Math.min(b, Math.max(a, v)) }
+function v11Rng(seed){
+  let s = (seed >>> 0) || 1;
+  return function(){ s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296 };
+}
+function v11HexOf(color){
+  try{
+    if(typeof color === 'string' && color[0] === '#') return color;
+    const c = normColor(color);
+    return c;
+  }catch(e){ return '#000000' }
+}
+function v11ByTool(t){ return (V11_PRESETS || []).filter(p => !!p.eraser === (t === 'eraser')) }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   1 · DYNAMIC BRUSH ENGINE  (Procreate brush studio + CSP sub-tool)
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const v11StampCache = new Map();
+function v11StampSprite(color, soft){
+  const key = color + '|' + v11Clamp(Math.round(soft * 100), 0, 100);
+  let c = v11StampCache.get(key);
+  if(c) return c;
+  const S = 128;
+  c = mkCanvas(S, S);
+  const g = c.getContext('2d');
+  const R = S/2 - 1;
+  if(soft <= 0.02){
+    g.fillStyle = color;
+    g.beginPath(); g.arc(S/2, S/2, R, 0, TAU); g.fill();
+  }else{
+    const ir = Math.max(0.5, R * (1 - soft));
+    const gr = g.createRadialGradient(S/2, S/2, ir, S/2, S/2, R);
+    gr.addColorStop(0, color);
+    gr.addColorStop(0.7, withAlpha(color, 0.92));
+    gr.addColorStop(1, withAlpha(color, 0));
+    g.fillStyle = gr;
+    g.fillRect(0, 0, S, S);
+  }
+  if(v11StampCache.size > 40){
+    const first = v11StampCache.keys().next().value;
+    v11StampCache.delete(first);
+  }
+  v11StampCache.set(key, c);
+  return c;
+}
+
+function v11SizeFactor(pr){
+  const ps = v11Clamp(V11.dyn.pSize / 100, 0, 1);
+  return Math.max(0.06, 1 - ps * (1 - v11Clamp(pr, 0, 1)));
+}
+function v11AlphaFactor(pr){
+  const po = v11Clamp(V11.dyn.pOpacity / 100, 0, 1);
+  return Math.max(0.06, 1 - po * (1 - v11Clamp(pr, 0, 1)));
+}
+
+function v11PathLength(pts){
+  let d = 0;
+  for(let i = 1; i < pts.length; i++) d += Math.hypot(pts[i].x - pts[i-1].x, pts[i].y - pts[i-1].y);
+  return d;
+}
+
+function v11MovingAvg(pts, win){
+  if(win < 2 || pts.length < 3) return pts.slice();
+  const out = new Array(pts.length);
+  for(let i = 0; i < pts.length; i++){
+    let sx = 0, sy = 0, sp = 0, n = 0;
+    for(let k = -win; k <= win; k++){
+      const j = v11Clamp(i + k, 0, pts.length - 1);
+      sx += pts[j].x; sy += pts[j].y; sp += (pts[j].pr == null ? 0.5 : pts[j].pr); n++;
+    }
+    out[i] = { x:sx/n, y:sy/n, pr:sp/n };
+  }
+  return out;
+}
+
+function v11RdpObj(pts, eps){
+  if(pts.length < 3) return pts.slice();
+  const keep = new Uint8Array(pts.length);
+  keep[0] = keep[pts.length-1] = 1;
+  const stack = [[0, pts.length-1]];
+  while(stack.length){
+    const ab = stack.pop(), a = ab[0], b = ab[1];
+    let maxD = 0, idx = -1;
+    const ax = pts[a].x, ay = pts[a].y, bx = pts[b].x, by = pts[b].y;
+    const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1e-9;
+    for(let i = a+1; i < b; i++){
+      const d = Math.abs((pts[i].x-ax)*dy - (pts[i].y-ay)*dx) / len;
+      if(d > maxD){ maxD = d; idx = i }
+    }
+    if(maxD > eps){ keep[idx] = 1; stack.push([a, idx], [idx, b]) }
+  }
+  const out = [];
+  for(let i = 0; i < pts.length; i++) if(keep[i]) out.push(pts[i]);
+  return out;
+}
+
+/* stroke point list banao: smoothing + simplification */
+function v11FinalPts(S){
+  const raw = S.pts;
+  if(!raw || raw.length < 2) return raw ? raw.slice() : [];
+  let pts = raw.slice();
+  const stab = v11Clamp(V11.dyn.stabilize / 100, 0, 1);
+  if(stab > 0.03){
+    const win = Math.max(1, Math.round(stab * 8));
+    pts = v11MovingAvg(pts, win);
+  }
+  pts = v11RdpObj(pts, 0.45);
+  return pts;
+}
+
+/* main stamping routine (used by live preview + final render + quick shapes) */
+function v11StampPath(g, pts, st, opt){
+  opt = opt || {};
+  if(!pts || pts.length < 1) return;
+  const rng = v11Rng(opt.seed || 12345);
+  const taper = v11Clamp(opt.taper == null ? 0 : opt.taper, 0, 1);
+  const total = v11PathLength(pts);
+  const baseR = Math.max(0.35, st.size / 2);
+  const taperLen = taper > 0 ? Math.max(6, st.size * (2 + taper * 5)) : 0;
+  const jitterAmt = baseR * v11Clamp(V11.dyn.jitter / 100, 0, 1) * 0.9;
+  const scatterAmt = baseR * v11Clamp(V11.dyn.scatter / 100, 0, 1) * 1.6;
+  const spacing = Math.max(0.7, baseR * 0.16);
+
+  let walk = 0;
+  for(let i = 0; i < pts.length; i++){
+    const p = pts[i];
+    const prev = i ? pts[i-1] : p;
+    const seg = Math.hypot(p.x - prev.x, p.y - prev.y);
+    const steps = i ? Math.max(1, Math.ceil(seg / spacing)) : 1;
+    const pr0 = prev.pr == null ? 0.5 : prev.pr;
+    const pr1 = p.pr == null ? 0.5 : p.pr;
+    for(let k = i ? 0 : 0; k <= steps; k++){
+      const t = i ? k / steps : 0;
+      const x = lerp(prev.x, p.x, t), y = lerp(prev.y, p.y, t);
+      const pr = lerp(pr0, pr1, t);
+      let sizeF = v11SizeFactor(pr);
+      if(taperLen > 0){
+        const d = walk + seg * t;
+        const inF = Math.min(1, d / taperLen);
+        const outF = Math.min(1, Math.max(0, (total - d) / taperLen));
+        sizeF *= Math.min(inF, outF);
+      }
+      let r = baseR * Math.max(0.05, sizeF);
+      let dx = 0, dy = 0;
+      if(jitterAmt > 0){ dx += (rng() - 0.5) * 2 * jitterAmt; dy += (rng() - 0.5) * 2 * jitterAmt }
+      if(scatterAmt > 0){
+        const ang = Math.atan2(p.y - prev.y, p.x - prev.x) + Math.PI / 2;
+        const off = (rng() - 0.5) * 2 * scatterAmt;
+        dx += Math.cos(ang) * off; dy += Math.sin(ang) * off;
+      }
+      const alpha = v11AlphaFactor(pr);
+      v11Dab(g, x + dx, y + dy, r, st.soft, st.color, alpha);
+    }
+    walk += seg;
+  }
+  g.globalAlpha = 1;
+}
+
+function v11Dab(g, x, y, r, soft, color, alpha){
+  if(r < 0.2) return;
+  const sp = v11StampSprite(color, soft);
+  g.globalAlpha = alpha == null ? 1 : alpha;
+  g.drawImage(sp, x - r, y - r, r * 2, r * 2);
+}
+
+/* ---------- paper grain ---------- */
+let v11GrainTile = null;
+function v11GrainSprite(){
+  if(v11GrainTile) return v11GrainTile;
+  const S = 256, c = mkCanvas(S, S), g = c.getContext('2d');
+  const rng = v11Rng(20261021);
+  for(let i = 0; i < 3200; i++){
+    const x = rng() * S, y = rng() * S, r = 0.5 + rng() * 1.9, a = 0.15 + rng() * 0.85;
+    g.fillStyle = 'rgba(255,255,255,' + a.toFixed(3) + ')';
+    g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+  }
+  v11GrainTile = c;
+  return c;
+}
+function v11ApplyGrain(canvas, amount){
+  if(amount <= 0.01) return;
+  const g = canvas.getContext('2d');
+  const pat = g.createPattern(v11GrainSprite(), 'repeat');
+  if(!pat) return;
+  g.save();
+  g.globalCompositeOperation = 'destination-out';
+  g.globalAlpha = v11Clamp(amount, 0, 1);
+  g.fillStyle = pat;
+  g.fillRect(0, 0, canvas.width, canvas.height);
+  g.restore();
+}
+
+/* ---------- stroke lifecycle ---------- */
+function v11StrokeDown(p, e, eraser){
+  if(!doc) return;
+  commitFloat();
+  const L = ensureRasterLayer();
+  if(!L) return;
+  bakeOffset(L);
+  pushUndo(null, eraser ? 'Eraser' : 'Brush');
+  const st = {
+    size: Math.max(1, eraser ? opts.eraserSize : opts.brushSize),
+    soft: v11Clamp((eraser ? opts.eraserSoft : opts.brushSoft) / 100, 0, 1),
+    color: eraser ? '#ffffff' : ((e && e.altKey) ? secondary : primary),
+    opacity: v11Clamp((eraser ? opts.eraserOp : opts.brushOp) / 100, 0.02, 1),
+    eraser: !!eraser
+  };
+  const tmp = mkCanvas(doc.w, doc.h);
+  const pr = V11.pressure;
+  const start = { x:p.x, y:p.y, pr:pr };
+  const S = {
+    layer:L, tmp:tmp, st:st, eraser:!!eraser,
+    pts:[start], smooth:{ x:p.x, y:p.y }, prev:{ x:p.x, y:p.y }, prevPr:pr,
+    seed:(Math.random() * 1e9) | 0, quick:null, quickTried:false,
+    ray:null, anchor:{ x:p.x, y:p.y }, alphaSnap:null,
+    started:performance.now(), lastMove:performance.now(), moved:0
+  };
+  if(L.alphaLock && !eraser) S.alphaSnap = cloneCanvas(L.canvas);
+  G.v11 = S;
+  G.stroke = {
+    layer:L, tmp:tmp,
+    mode: eraser ? 'destination-out' : (V11.dyn.blend && V11.dyn.blend !== 'destination-out' ? V11.dyn.blend : 'source-over'),
+    opacity: st.opacity, st:st, last:{ x:p.x, y:p.y }
+  };
+  const g = tmp.getContext('2d');
+  v11Dab(g, p.x, p.y, st.size / 2, st.soft, st.color, 1);
+  v11ScheduleQuickShape();
+  docDirty = true; needRender = true;
+}
+
+function v11StrokeMove(p){
+  const S = G.v11;
+  if(!S) return;
+  let q = p;
+  if(v11GuideSnapOn() && (S.eraser || curTool === 'brush')) q = v11SnapPaintPoint(p, S);
+  const a = v11Clamp(1 - (V11.dyn.stabilize / 100) * 0.9, 0.06, 1);
+  const prev = { x:S.smooth.x, y:S.smooth.y };
+  S.smooth.x += (q.x - S.smooth.x) * a;
+  S.smooth.y += (q.y - S.smooth.y) * a;
+  const d = Math.hypot(S.smooth.x - prev.x, S.smooth.y - prev.y);
+  S.moved += Math.hypot(q.x - p.x, q.y - p.y) + d;
+  const pr = V11.pressure;
+  if(d > 0.28){
+    const g = S.tmp.getContext('2d');
+    const steps = Math.max(1, Math.ceil(d / Math.max(0.8, S.st.size * 0.075)));
+    for(let i = 1; i <= steps; i++){
+      const t = i / steps;
+      const x = lerp(prev.x, S.smooth.x, t), y = lerp(prev.y, S.smooth.y, t);
+      const prr = lerp(S.prevPr, pr, t);
+      v11Dab(g, x, y, Math.max(0.35, S.st.size/2 * v11SizeFactor(prr)), S.st.soft, S.st.color, v11AlphaFactor(prr));
+    }
+    g.globalAlpha = 1;
+    S.prev = { x:S.smooth.x, y:S.smooth.y };
+    S.prevPr = pr;
+  }
+  S.pts.push({ x:q.x, y:q.y, pr:pr });
+  S.lastMove = performance.now();
+  if(S.quick) v11RenderQuickShape(S);
+  v11ScheduleQuickShape();
+  needRender = true;
+}
+
+function v11StrokeUp(){
+  clearTimeout(v11QuickTimer);
+  const S = G.v11;
+  if(!S){ G.stroke = null; return }
+  const g = S.tmp.getContext('2d');
+  g.setTransform(1,0,0,1,0,0);
+  g.clearRect(0,0,doc.w,doc.h);
+  if(S.quick){
+    v11DrawQuickShapeTo(g, S);
+  }else{
+    const pts = v11FinalPts(S);
+    v11StampPath(g, pts, S.st, { taper:V11.dyn.taper/100, seed:S.seed });
+  }
+  if(V11.dyn.grain > 0) v11ApplyGrain(S.tmp, V11.dyn.grain / 100);
+  let out = S.tmp;
+  try{
+    if(typeof opts.sym !== 'undefined' && opts.sym && opts.sym.on) out = symRasterCombine(S.tmp);
+  }catch(e){}
+  const og = out.getContext('2d');
+  if(S.alphaSnap){
+    og.save(); og.globalCompositeOperation = 'destination-in'; og.drawImage(S.alphaSnap,0,0); og.restore();
+  }
+  if(typeof pixSel !== 'undefined' && pixSel){
+    og.save(); og.globalCompositeOperation = 'destination-in'; og.drawImage(maskCanvas(),0,0); og.restore();
+  }
+  const onMask = (typeof maskEditId !== 'undefined') && maskEditId === S.layer.id && !!(S.layer.mask && S.layer.mask.enabled);
+  const lg = (onMask ? S.layer.mask.canvas : S.layer.canvas).getContext('2d');
+  const mode = S.eraser ? 'destination-out'
+    : (V11.dyn.blend && V11.dyn.blend !== 'destination-out' ? V11.dyn.blend : 'source-over');
+  lg.save();
+  lg.globalAlpha = S.st.opacity;
+  lg.globalCompositeOperation = mode;
+  lg.drawImage(out, 0, 0);
+  lg.restore();
+  layerVerBump(S.layer);
+  G.stroke = null; G.v11 = null;
+  docDirty = true; needRender = true; uiLayersRefresh();
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   2 · QUICKSHAPE  (Procreate style — hold at the end of a stroke)
+   ══════════════════════════════════════════════════════════════════════════ */
+let v11QuickTimer = null;
+
+function v11ScheduleQuickShape(){
+  if(!V11.dyn.quickShape) return;
+  clearTimeout(v11QuickTimer);
+  v11QuickTimer = setTimeout(v11TryQuickShape, v11Clamp(V11.dyn.qsDelay || 380, 180, 1200));
+}
+
+function v11PolyArea(pts){
+  let a = 0;
+  for(let i = 0; i < pts.length; i++){
+    const p = pts[i], q = pts[(i+1) % pts.length];
+    a += p.x * q.y - q.x * p.y;
+  }
+  return Math.abs(a / 2);
+}
+
+function v11DetectShape(raw){
+  if(!raw || raw.length < 5) return null;
+  let x = 1e9, y = 1e9, x2 = -1e9, y2 = -1e9;
+  for(const p of raw){
+    if(p.x < x) x = p.x; if(p.x > x2) x2 = p.x;
+    if(p.y < y) y = p.y; if(p.y > y2) y2 = p.y;
+  }
+  const w = x2 - x, h = y2 - y;
+  if(w < 6 && h < 6) return null;
+  const diag = Math.hypot(w, h) || 1;
+  const len = v11PathLength(raw);
+  const first = raw[0], last = raw[raw.length - 1];
+  const closed = Math.hypot(last.x - first.x, last.y - first.y) < Math.max(10, diag * 0.24) && len > diag * 1.35;
+  const box = { x:x, y:y, x2:x2, y2:y2 };
+  if(closed){
+    const simp = v11RdpObj(raw, Math.max(1.6, diag * 0.045));
+    const corners = simp.length;
+    const area = v11PolyArea(simp);
+    const fill = area / Math.max(1, w * h);
+    if(corners >= 4 && corners <= 7 && fill > 0.88) return { kind:'rect', box:box };
+    const ratio = Math.min(w, h) / Math.max(1, Math.max(w, h));
+    return { kind: ratio > 0.86 ? 'circle' : 'ellipse', box:box };
+  }
+  // straight line?
+  let dev = 0;
+  const ax = first.x, ay = first.y, bx = last.x, by = last.y;
+  const dx = bx - ax, dy = by - ay, L = Math.hypot(dx, dy) || 1e-9;
+  for(const p of raw){
+    const d = Math.abs((p.x - ax) * dy - (p.y - ay) * dx) / L;
+    if(d > dev) dev = d;
+  }
+  if(L > 12 && dev < Math.max(2.4, L * 0.05)) return { kind:'line', a:{ x:ax, y:ay }, b:{ x:bx, y:by } };
+  return null;
+}
+
+function v11TryQuickShape(){
+  const S = G.v11;
+  if(!S || S.quickTried) return;
+  if(performance.now() - S.lastMove < 260) return;
+  S.quickTried = true;
+  const shape = v11DetectShape(S.pts);
+  if(!shape) return;
+  S.quick = shape;
+  v11RenderQuickShape(S);
+  const nm = shape.kind === 'line' ? 'Line' : shape.kind === 'rect' ? 'Rectangle' : shape.kind === 'circle' ? 'Circle' : 'Ellipse';
+  toast('QuickShape: ' + nm + ' — release karke commit karo', 'ok', 1600);
+}
+
+function v11QuickShapePts(shape){
+  const b = shape.box || {};
+  const pts = [];
+  if(shape.kind === 'line'){
+    return [ { x:shape.a.x, y:shape.a.y, pr:0.86 }, { x:shape.b.x, y:shape.b.y, pr:0.86 } ];
+  }
+  if(shape.kind === 'rect'){
+    const r = [{ x:b.x, y:b.y }, { x:b.x2, y:b.y }, { x:b.x2, y:b.y2 }, { x:b.x, y:b.y2 }, { x:b.x, y:b.y }];
+    return r.map(p => ({ x:p.x, y:p.y, pr:0.86 }));
+  }
+  const cx = (b.x + b.x2) / 2, cy = (b.y + b.y2) / 2;
+  const rx = (b.x2 - b.x) / 2, ry = (b.y2 - b.y) / 2;
+  const N = 200;
+  for(let i = 0; i <= N; i++){
+    const t = i / N * TAU;
+    pts.push({ x:cx + Math.cos(t) * rx, y:cy + Math.sin(t) * ry, pr:0.86 });
+  }
+  return pts;
+}
+
+function v11DrawQuickShapeTo(g, S){
+  g.setTransform(1,0,0,1,0,0);
+  g.clearRect(0,0,doc.w,doc.h);
+  const pts = v11QuickShapePts(S.quick);
+  v11StampPath(g, pts, S.st, { taper:0, seed:S.seed });
+}
+
+function v11RenderQuickShape(S){
+  const g = S.tmp.getContext('2d');
+  v11DrawQuickShapeTo(g, S);
+  needRender = true;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   3 · PRESETS / PRESSURE / BRUSH SETTINGS
+   ══════════════════════════════════════════════════════════════════════════ */
+function v11ApplyPreset(id, silent){
+  const p = V11_PRESETS.find(x => x.id === id);
+  if(!p) return;
+  V11.presetId = id;
+  Object.assign(V11.dyn, V11_DYN_DEFAULTS, p.dyn || {});
+  if(p.eraser){
+    opts.eraserSize = p.size; opts.eraserSoft = p.soft; opts.eraserOp = p.op;
+  }else{
+    opts.brushSize = p.size; opts.brushSoft = p.soft; opts.brushOp = p.op;
+  }
+  v11SaveSettings();
+  v11SyncShelf();
+  try{ uiProps() }catch(e){}
+  if(!silent) toast(p.emoji + ' ' + p.name + ' brush selected', 'ok', 1500);
+}
+
+function v11CurrentPresetName(){
+  const p = V11_PRESETS.find(x => x.id === V11.presetId);
+  return p ? p.emoji + ' ' + p.name : 'Custom';
+}
+
+/* pointer pressure capture — tools ke handlers se pehle chalta hai */
+(function(){
+  function setPr(e){
+    if(!e) return;
+    if(e.pointerType === 'mouse' || e.pointerType === ''){ V11.pressure = 1; return; }
+    if(typeof e.pressure === 'number' && e.pressure > 0) V11.pressure = Math.max(0.06, e.pressure);
+    else V11.pressure = 0.5;
+  }
+  window.addEventListener('pointerdown', setPr, true);
+  window.addEventListener('pointermove', setPr, true);
+  window.addEventListener('pointerup', function(){ V11.pressure = 0.5 }, true);
+})();
+
+/* ══════════════════════════════════════════════════════════════════════════
+   4 · BRUSH SHELF + PROPERTIES + BRUSH STUDIO UI
+   ══════════════════════════════════════════════════════════════════════════ */
+function v11BuildShelf(){
+  if(document.getElementById('v11Shelf')) return;
+  const host = $('#stage');
+  if(!host) return;
+  const bar = el('div', 'v11shelf');
+  bar.id = 'v11Shelf';
+  bar.innerHTML = '<div class="v11shelf-scroll" id="v11ShelfList"></div>' +
+    '<button class="v11shelf-gear" id="v11StudioBtn" title="Brush Studio — presets, pressure, stabilizer">⚙</button>';
+  host.appendChild(bar);
+  const gear = document.getElementById('v11StudioBtn');
+  if(gear) gear.addEventListener('click', v11BrushStudio);
+  v11SyncShelf();
+}
+
+function v11SyncShelf(){
+  const bar = document.getElementById('v11Shelf');
+  if(!bar) return;
+  const show = (curTool === 'brush' || curTool === 'eraser');
+  bar.style.display = show ? 'flex' : 'none';
+  if(!show) return;
+  const list = document.getElementById('v11ShelfList');
+  if(!list) return;
+  const presets = v11ByTool(curTool);
+  const active = presets.some(p => p.id === V11.presetId) ? V11.presetId : (presets[0] && presets[0].id);
+  list.innerHTML = presets.map(p =>
+    '<button class="v11brush' + (p.id === active ? ' on' : '') + '" data-preset="' + p.id + '" title="' +
+    escapeHtml(p.name) + ' · ' + p.size + 'px">' + p.emoji + '</button>').join('');
+  list.querySelectorAll('[data-preset]').forEach(b => {
+    b.addEventListener('click', () => v11ApplyPreset(b.dataset.preset));
+  });
+}
+
+function v11PropsExtras(){
+  const body = document.getElementById('propBody');
+  if(!body) return;
+  const tool = curTool;
+  if(tool !== 'brush' && tool !== 'eraser'){
+    if(tool === 'guide') v11GuideProps(body);
+    if(tool === 'lasso') body.insertAdjacentHTML('beforeend',
+      '<div class="pnote" style="border-top:1px solid var(--line);margin-top:8px;padding-top:10px"><b>Lasso select</b><br>Drag karke freehand selection banao · <b>Shift</b>=add · <b>Alt</b>=subtract · <b>Ctrl+D</b>=deselect.<br>Baad me Select menu se Feather / Expand / Contract.</div>');
+    return;
+  }
+  const isEr = (tool === 'eraser');
+  let h = '<div class="pnote" style="border-top:1px solid var(--line);margin-top:8px;padding-top:10px"><b>Brush Studio</b> · ' + v11CurrentPresetName() + '</div>';
+  h += '<div class="chips">';
+  h += '<span class="chip" id="v11StudioChip">⚙ Brush Studio…</span>';
+  if(isEr) h += '<span class="chip' + (V11.vectorErase ? ' on' : '') + '" id="v11VecChip">' + (V11.vectorErase ? '✓' : '○') + ' Vector erase</span>';
+  else h += '<span class="chip' + (V11.dyn.quickShape ? ' on' : '') + '" id="v11QsChip">' + (V11.dyn.quickShape ? '✓' : '○') + ' QuickShape</span>';
+  h += '</div>';
+  h += pr('Stabilizer', rngHTML('v11Stab', 0, 100, Math.round(V11.dyn.stabilize)));
+  h += pr('Pressure→Size', rngHTML('v11Psz', 0, 100, Math.round(V11.dyn.pSize)));
+  if(!isEr) h += pr('Paper grain', rngHTML('v11Grain', 0, 100, Math.round(V11.dyn.grain)));
+  h += '<div class="pnote">' + (isEr
+    ? 'Vector erase ON + vector layer = stroke intersection par cut.<br>Shift dabake seedha erase.'
+    : 'Stroke ke end par <b>hold</b> karo → QuickShape (line / circle / rect).') + '</div>';
+  body.insertAdjacentHTML('beforeend', h);
+  v11BindProps(isEr);
+}
+
+function v11BindProps(isEr){
+  bindRng('v11Stab', n => { V11.dyn.stabilize = n; v11SaveSettings() });
+  bindRng('v11Psz', n => { V11.dyn.pSize = n; v11SaveSettings() });
+  if(!isEr) bindRng('v11Grain', n => { V11.dyn.grain = n; v11SaveSettings() });
+  const st = document.getElementById('v11StudioChip');
+  if(st) st.addEventListener('click', v11BrushStudio);
+  const qs = document.getElementById('v11QsChip');
+  if(qs) qs.addEventListener('click', () => {
+    V11.dyn.quickShape = !V11.dyn.quickShape;
+    v11SaveSettings(); uiProps();
+    toast('QuickShape ' + (V11.dyn.quickShape ? 'ON — hold at stroke end' : 'OFF'), 'ok', 1500);
+  });
+  const ve = document.getElementById('v11VecChip');
+  if(ve) ve.addEventListener('click', () => {
+    V11.vectorErase = !V11.vectorErase;
+    uiProps();
+    toast(V11.vectorErase ? 'Vector eraser ON — vector layer par strokes cut honge' : 'Vector eraser OFF', 'ok', 2000);
+  });
+}
+
+function v11BrushStudio(){
+  if(!doc) return;
+  const isEr = curTool === 'eraser';
+  const blendOpts = [['source-over','Normal'],['multiply','Multiply'],['screen','Screen'],['overlay','Overlay'],
+    ['darken','Darken'],['lighten','Lighten'],['hard-light','Hard Light'],['soft-light','Soft Light']];
+  const presets = v11ByTool(curTool);
+  const body =
+    '<div style="display:flex;gap:14px;flex-wrap:wrap">' +
+      '<div style="flex:1;min-width:280px">' +
+        '<div class="pnote" style="padding-top:0"><b>Brush set</b> — click to apply</div>' +
+        '<div class="chips" id="v11PresetGrid" style="max-height:92px;overflow:auto">' +
+          presets.map(p => '<span class="chip' + (p.id === V11.presetId ? ' on' : '') + '" data-bp="' + p.id + '">' + p.emoji + ' ' + escapeHtml(p.name) + '</span>').join('') +
+        '</div>' +
+        '<canvas id="v11Preview" width="560" height="120" style="width:100%;border-radius:10px;border:1px solid var(--line2);background:#191b21;display:block;margin-top:6px"></canvas>' +
+        '<div class="pnote" id="v11PresetInfo"></div>' +
+      '</div>' +
+      '<div style="flex:1;min-width:250px">' +
+        pr('Size', rngHTML('v11dSize', 1, 300, isEr ? opts.eraserSize : opts.brushSize)) +
+        pr('Opacity', rngHTML('v11dOp', 2, 100, isEr ? opts.eraserOp : opts.brushOp)) +
+        pr('Softness', rngHTML('v11dSoft', 0, 100, isEr ? opts.eraserSoft : opts.brushSoft)) +
+        '<div class="pnote" style="border-top:1px solid var(--line);margin-top:8px;padding-top:8px"><b>Dynamics</b></div>' +
+        pr('Stabilizer', rngHTML('v11dStab', 0, 100, Math.round(V11.dyn.stabilize))) +
+        pr('Pressure→Size', rngHTML('v11dPsz', 0, 100, Math.round(V11.dyn.pSize))) +
+        pr('Pressure→Opac', rngHTML('v11dPop', 0, 100, Math.round(V11.dyn.pOpacity))) +
+        pr('Taper', rngHTML('v11dTaper', 0, 100, Math.round(V11.dyn.taper))) +
+        pr('Jitter', rngHTML('v11dJit', 0, 100, Math.round(V11.dyn.jitter))) +
+        pr('Scatter', rngHTML('v11dScat', 0, 100, Math.round(V11.dyn.scatter))) +
+        pr('Grain', rngHTML('v11dGrain', 0, 100, Math.round(V11.dyn.grain))) +
+        '<div class="prow"><label>Blend</label><div class="pctl"><select id="v11dBlend" style="flex:1">' +
+          blendOpts.map(b => '<option value="' + b[0] + '"' + (V11.dyn.blend === b[0] ? ' selected' : '') + '>' + b[1] + '</option>').join('') +
+        '</select></div></div>' +
+        '<div class="prow"><label>QuickShape</label><div class="pctl"><input type="checkbox" id="v11dQS" ' + (V11.dyn.quickShape ? 'checked' : '') + '><span class="pnote" style="padding:0 0 0 6px">hold at stroke end</span></div></div>' +
+      '</div>' +
+    '</div>' +
+    '<div style="display:flex;gap:8px;align-items:center;margin-top:10px;border-top:1px solid var(--line);padding-top:10px;flex-wrap:wrap">' +
+      '<input type="text" id="v11PName" placeholder="New preset name" style="flex:1;min-width:150px">' +
+      '<button class="btn" id="v11PSave">Save as preset</button>' +
+      '<button class="btn danger" id="v11PDel">Delete preset</button>' +
+    '</div>';
+
+  const m = modal({
+    title: 'Brush Studio — Clip Studio × Procreate',
+    body: body,
+    buttons: [{ l:'Done', cls:'acc', fnClose:true }],
+    onOpen: (mm) => {
+      mm.style.width = 'min(720px,94vw)';
+      const pv = mm.querySelector('#v11Preview');
+      const info = mm.querySelector('#v11PresetInfo');
+      const preview = () => {
+        v11StudioPreview(pv);
+        const p = V11_PRESETS.find(x => x.id === V11.presetId);
+        info.innerHTML = '<b>' + (p ? escapeHtml(p.name) : 'Custom') + '</b> · ' +
+          Math.round(isEr ? opts.eraserSize : opts.brushSize) + 'px · ' +
+          Math.round(isEr ? opts.eraserOp : opts.brushOp) + '% opacity · ' +
+          'stab ' + Math.round(V11.dyn.stabilize) + '% · grain ' + Math.round(V11.dyn.grain) + '%';
+      };
+      const syncFromUI = () => { v11SaveSettings(); preview(); v11SyncShelf() };
+      const num = (id) => { const e2 = mm.querySelector('#' + id); return e2 ? +e2.value : 0 };
+      bindRng('v11dSize', n => { if(isEr) opts.eraserSize = n; else opts.brushSize = n; syncFromUI() });
+      bindRng('v11dOp', n => { if(isEr) opts.eraserOp = n; else opts.brushOp = n; syncFromUI() });
+      bindRng('v11dSoft', n => { if(isEr) opts.eraserSoft = n; else opts.brushSoft = n; syncFromUI() });
+      bindRng('v11dStab', n => { V11.dyn.stabilize = n; syncFromUI() });
+      bindRng('v11dPsz', n => { V11.dyn.pSize = n; syncFromUI() });
+      bindRng('v11dPop', n => { V11.dyn.pOpacity = n; syncFromUI() });
+      bindRng('v11dTaper', n => { V11.dyn.taper = n; syncFromUI() });
+      bindRng('v11dJit', n => { V11.dyn.jitter = n; syncFromUI() });
+      bindRng('v11dScat', n => { V11.dyn.scatter = n; syncFromUI() });
+      bindRng('v11dGrain', n => { V11.dyn.grain = n; syncFromUI() });
+      const bl = mm.querySelector('#v11dBlend');
+      if(bl) bl.addEventListener('change', () => { V11.dyn.blend = bl.value; syncFromUI() });
+      const qs = mm.querySelector('#v11dQS');
+      if(qs) qs.addEventListener('change', () => { V11.dyn.quickShape = qs.checked; syncFromUI() });
+      mm.querySelectorAll('[data-bp]').forEach(b => b.addEventListener('click', () => {
+        v11ApplyPreset(b.dataset.bp, true);
+        mm.querySelectorAll('[data-bp]').forEach(x => x.classList.toggle('on', x === b));
+        // preset values ko sliders me sync karo
+        const setv = (id, v) => { const e2 = mm.querySelector('#' + id); if(e2){ e2.value = v; const vv = mm.querySelector('#' + id + 'V'); if(vv) vv.textContent = v } };
+        setv('v11dSize', isEr ? opts.eraserSize : opts.brushSize);
+        setv('v11dOp', isEr ? opts.eraserOp : opts.brushOp);
+        setv('v11dSoft', isEr ? opts.eraserSoft : opts.brushSoft);
+        ['Stab','Psz','Pop','Taper','Jit','Scat','Grain'].forEach(k => {});
+        setv('v11dStab', Math.round(V11.dyn.stabilize));
+        setv('v11dPsz', Math.round(V11.dyn.pSize));
+        setv('v11dPop', Math.round(V11.dyn.pOpacity));
+        setv('v11dTaper', Math.round(V11.dyn.taper));
+        setv('v11dJit', Math.round(V11.dyn.jitter));
+        setv('v11dScat', Math.round(V11.dyn.scatter));
+        setv('v11dGrain', Math.round(V11.dyn.grain));
+        preview();
+      }));
+      const saveB = mm.querySelector('#v11PSave');
+      if(saveB) saveB.addEventListener('click', () => {
+        const nmIn = mm.querySelector('#v11PName');
+        const nm = (nmIn.value || '').trim();
+        if(!nm){ toast('Preset ka naam likho', 'err'); return }
+        const id = 'u' + Date.now().toString(36);
+        const p = {
+          id: id, name: nm.slice(0, 24), emoji: '✎', custom: true, eraser: isEr,
+          size: Math.round(isEr ? opts.eraserSize : opts.brushSize),
+          soft: Math.round(isEr ? opts.eraserSoft : opts.brushSoft),
+          op: Math.round(isEr ? opts.eraserOp : opts.brushOp),
+          blend: V11.dyn.blend, dyn: Object.assign({}, V11.dyn)
+        };
+        V11_PRESETS.push(p);
+        v11SavePresets();
+        V11.presetId = id;
+        v11SaveSettings();
+        toast('Preset saved: ' + p.name, 'ok');
+        m.close(); v11BrushStudio();
+      });
+      const delB = mm.querySelector('#v11PDel');
+      if(delB) delB.addEventListener('click', () => {
+        const p = V11_PRESETS.find(x => x.id === V11.presetId);
+        if(!p || !p.custom){ toast('Built-in preset delete nahi hota', 'err'); return }
+        V11_PRESETS = V11_PRESETS.filter(x => x.id !== p.id);
+        V11.presetId = (v11ByTool(curTool)[0] || {}).id || 'gpen';
+        v11SavePresets(); v11SaveSettings();
+        m.close(); v11BrushStudio(); v11SyncShelf();
+      });
+      preview();
+    }
+  });
+  return m;
+}
+
+function v11StudioPreview(canvas){
+  if(!canvas) return;
+  const g = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  g.setTransform(1,0,0,1,0,0);
+  g.clearRect(0, 0, W, H);
+  g.fillStyle = '#191b21'; g.fillRect(0, 0, W, H);
+  g.strokeStyle = 'rgba(255,255,255,.04)'; g.lineWidth = 1;
+  for(let x = 0; x < W; x += 28){ g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke() }
+  const pts = [];
+  for(let i = 0; i <= 70; i++){
+    const t = i / 70;
+    const x = 18 + t * (W - 36);
+    const y = H/2 + Math.sin(t * Math.PI * 2.1) * H * 0.24;
+    pts.push({ x:x, y:y, pr:0.25 + 0.75 * Math.sin(t * Math.PI) });
+  }
+  const st = {
+    size: Math.min(70, Math.max(3, curTool === 'eraser' ? opts.eraserSize : opts.brushSize)),
+    soft: (curTool === 'eraser' ? opts.eraserSoft : opts.brushSoft) / 100,
+    color: '#e8ecff', opacity: 1, eraser: false
+  };
+  g.save();
+  g.globalAlpha = 0.95;
+  v11StampPath(g, pts, st, { taper: V11.dyn.taper / 100, seed: 4242 });
+  g.restore();
+  g.fillStyle = 'rgba(157,185,255,.7)';
+  g.font = '11px ui-monospace,monospace';
+  g.fillText('PRESSURE PREVIEW', 12, 16);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   5 · COLORDROP  (Procreate signature gesture)
+   ══════════════════════════════════════════════════════════════════════════ */
+let v11DropState = null;
+
+function v11BindColorDrop(){
+  document.addEventListener('pointerdown', (e) => {
+    if(e.button !== 0) return;
+    const elx = e.target.closest && e.target.closest('#swPri,#swSec,.pal');
+    if(!elx) return;
+    let hex = null;
+    if(elx.id === 'swPri') hex = primary;
+    else if(elx.id === 'swSec') hex = secondary;
+    else{
+      try{ hex = rgbToHex.apply(null, (getComputedStyle(elx).backgroundColor.match(/\d+/g) || [0,0,0]).slice(0,3).map(Number)) }catch(err){ hex = null }
+    }
+    if(!hex) return;
+    v11DropState = { x:e.clientX, y:e.clientY, hex:hex, moved:false, ghost:null };
+    const mv = (ev) => {
+      const st = v11DropState;
+      if(!st) return;
+      const d = Math.hypot(ev.clientX - st.x, ev.clientY - st.y);
+      if(!st.moved && d < 7) return;
+      if(!st.moved){
+        st.moved = true;
+        const gh = document.createElement('div');
+        gh.className = 'v11dropghost';
+        gh.style.background = st.hex;
+        document.body.appendChild(gh);
+        st.ghost = gh;
+        document.documentElement.classList.add('v11-dropping');
+      }
+      if(st.ghost){ st.ghost.style.left = (ev.clientX - 17) + 'px'; st.ghost.style.top = (ev.clientY - 17) + 'px' }
+      const cvEl = document.getElementById('cv');
+      if(cvEl){
+        const r = cvEl.getBoundingClientRect();
+        const over = ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
+        st.ghost.classList.toggle('over', over);
+      }
+    };
+    const up = (ev) => {
+      window.removeEventListener('pointermove', mv, true);
+      window.removeEventListener('pointerup', up, true);
+      const st = v11DropState;
+      v11DropState = null;
+      document.documentElement.classList.remove('v11-dropping');
+      if(!st) return;
+      if(st.ghost) st.ghost.remove();
+      if(!st.moved) return;
+      const cvEl = document.getElementById('cv');
+      if(!cvEl) return;
+      const r = cvEl.getBoundingClientRect();
+      if(ev.clientX < r.left || ev.clientX > r.right || ev.clientY < r.top || ev.clientY > r.bottom){
+        toast('ColorDrop: canvas ke andar drop karo', 'err', 1800); return;
+      }
+      const p = viewToDoc(ev.clientX - r.left, ev.clientY - r.top);
+      v11ColorDrop(st.hex, p);
+    };
+    window.addEventListener('pointermove', mv, true);
+    window.addEventListener('pointerup', up, true);
+    window.addEventListener('pointercancel', up, true);
+  }, true);
+  document.addEventListener('click', (e) => {
+    if(V11.lastDropAt && Date.now() - V11.lastDropAt < 420){
+      e.preventDefault(); e.stopPropagation();
+    }
+  }, true);
+}
+
+function v11CanvasHasPixels(cv){
+  try{
+    const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+    for(let i = 3; i < d.length; i += 4 * 7) if(d[i] > 3) return true;
+  }catch(e){ return true }
+  return false;
+}
+
+function v11FlattenRefs(exclude){
+  if(!doc) return null;
+  const refs = [];
+  const scan = (arr) => {
+    for(const L of arr){
+      if(L.type === 'group'){ if(L.visible) scan(L.children || []); continue }
+      if(L.ref && L.visible && L !== exclude) refs.push(L);
+    }
+  };
+  scan(doc.layers);
+  if(!refs.length) return null;
+  const c = mkCanvas(doc.w, doc.h), g = c.getContext('2d');
+  for(const L of refs){
+    g.save(); g.globalAlpha = L.opacity == null ? 1 : L.opacity;
+    g.globalCompositeOperation = L.blend === 'source-over' ? 'source-over' : L.blend;
+    if(L.type === 'raster') g.drawImage(L.canvas, L.offset.x, L.offset.y);
+    else for(const s of L.shapes) drawShape(g, s);
+    g.restore();
+  }
+  return c;
+}
+
+function v11FillSourceFor(L){
+  const ref = v11FlattenRefs(L);
+  if(ref) return ref;
+  if(v11CanvasHasPixels(L.canvas)) return L.canvas;
+  try{ renderComposite(); return comp }catch(e){ return L.canvas }
+}
+
+function v11PaintMaskInto(L, seen, hex){
+  const g = L.canvas.getContext('2d');
+  const img = g.getImageData(0, 0, doc.w, doc.h);
+  const d = img.data;
+  const c = hexToRgb(hex);
+  for(let i = 0; i < seen.length; i++){
+    if(!seen[i]) continue;
+    const j = i * 4;
+    d[j] = c.r; d[j+1] = c.g; d[j+2] = c.b; d[j+3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  layerVerBump(L);
+}
+
+function v11ColorDrop(hex, p){
+  if(!doc) return;
+  let L = activeLayer();
+  if(!L || L.type !== 'raster' || L.locked){
+    const nl = newRasterLayer('ColorDrop');
+    insertLayer(nl, L);
+    uiLayers();
+    L = nl;
+  }
+  pushUndo(null, 'ColorDrop');
+  bakeOffset(L);
+  if(typeof pixSel !== 'undefined' && pixSel){
+    const g = L.canvas.getContext('2d');
+    const tmp = mkCanvas(doc.w, doc.h), tg = tmp.getContext('2d');
+    tg.fillStyle = hex; tg.fillRect(0, 0, doc.w, doc.h);
+    tg.globalCompositeOperation = 'destination-in';
+    tg.drawImage(maskCanvas(), 0, 0);
+    g.drawImage(tmp, 0, 0);
+    layerVerBump(L);
+  }else{
+    const x0 = Math.floor(p.x), y0 = Math.floor(p.y);
+    if(x0 < 0 || y0 < 0 || x0 >= doc.w || y0 >= doc.h){ undoStack.pop(); uiQuick(); toast('Canvas ke andar drop karo', 'err'); return }
+    const srcC = v11FillSourceFor(L);
+    let img;
+    try{ img = srcC.getContext('2d').getImageData(0, 0, doc.w, doc.h) }catch(e){ toast('ColorDrop fail: ' + e.message, 'err'); return }
+    const px = img.data;
+    const si = (y0 * doc.w + x0) * 4;
+    const tr = px[si], tg2 = px[si+1], tb = px[si+2], ta = px[si+3];
+    const tol = v11Clamp(opts.fillTol || 32, 0, 128);
+    const match = i => Math.abs(px[i] - tr) <= tol && Math.abs(px[i+1] - tg2) <= tol &&
+      Math.abs(px[i+2] - tb) <= tol && Math.abs(px[i+3] - ta) <= tol;
+    const seen = floodScan(px, doc.w, doc.h, x0, y0, match);
+    v11PaintMaskInto(L, seen, hex);
+  }
+  V11.lastDropAt = Date.now();
+  docDirty = true; needRender = true; uiLayersRefresh();
+  toast('ColorDrop: ' + hex.toUpperCase() + ' fill', 'ok', 1600);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   6 · LAYER ROLES — Alpha Lock + Reference Layer
+   ══════════════════════════════════════════════════════════════════════════ */
+function v11DisplayOrder(layers){
+  const out = [];
+  const walk = (L, depth) => {
+    out.push(L);
+    if(L.type === 'group' && L.expanded !== false){
+      const ch = (L.children || []).slice().reverse();
+      for(const c of ch) walk(c, depth + 1);
+    }
+  };
+  for(let i = layers.length - 1; i >= 0; i--) walk(layers[i], 0);
+  return out;
+}
+
+function v11DecorateLayers(){
+  const list = document.getElementById('layerList');
+  if(!list || !doc) return;
+  const rows = Array.from(list.querySelectorAll('.lrow'));
+  const flat = v11DisplayOrder(doc.layers);
+  rows.forEach((row, i) => {
+    const L = flat[i];
+    if(!L || L.type === 'group') return;
+    if(row.querySelector('.v11alpha')) return;
+    const alpha = el('button', 'lact v11alpha' + (L.alphaLock ? ' on' : ''), 'α');
+    alpha.title = 'Alpha Lock — sirf existing pixels par paint (Procreate)';
+    alpha.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      pushUndo(null, 'Alpha Lock');
+      L.alphaLock = !L.alphaLock;
+      uiLayers();
+      toast('Alpha lock ' + (L.alphaLock ? 'ON' : 'OFF') + ' — ' + L.name, 'ok', 1500);
+    });
+    const ref = el('button', 'lact v11ref' + (L.ref ? ' on' : ''), '◎');
+    ref.title = 'Reference layer — bucket / ColorDrop is layer ko reference karega (CSP)';
+    ref.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      pushUndo(null, 'Reference Layer');
+      L.ref = !L.ref;
+      uiLayers();
+      toast('Reference layer ' + (L.ref ? 'ON' : 'OFF') + ' — ' + L.name, 'ok', 1500);
+    });
+    const acts = Array.from(row.querySelectorAll('.lact'));
+    const lock = acts.find(b => b.title === 'Lock layer');
+    if(lock){ row.insertBefore(ref, lock); row.insertBefore(alpha, ref) }
+    else{ row.appendChild(alpha); row.appendChild(ref) }
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   7 · VECTOR ERASER  (Clip Studio "vector eraser")
+   ══════════════════════════════════════════════════════════════════════════ */
+function v11Densify(pts, step){
+  const out = [];
+  if(!pts || !pts.length) return out;
+  for(let i = 0; i < pts.length - 1; i++){
+    const a = pts[i], b = pts[i+1];
+    const d = Math.hypot(b.x - a.x, b.y - a.y);
+    const n = Math.max(1, Math.ceil(d / step));
+    for(let k = 0; k < n; k++){
+      const t = k / n;
+      out.push({ x:lerp(a.x, b.x, t), y:lerp(a.y, b.y, t) });
+    }
+  }
+  out.push({ x:pts[pts.length-1].x, y:pts[pts.length-1].y });
+  return out;
+}
+
+function v11CutRing(pts, p, r){
+  const runs = [];
+  let cur = [];
+  for(const q of pts){
+    const inside = Math.hypot(q.x - p.x, q.y - p.y) < r;
+    if(inside){
+      if(cur.length > 1) runs.push(cur);
+      cur = [];
+    }else cur.push({ x:q.x, y:q.y });
+  }
+  if(cur.length > 1) runs.push(cur);
+  return runs;
+}
+
+function v11VecEraseAt(p){
+  const VE = G.v11VE;
+  if(!VE) return false;
+  const L = VE.L, r = VE.r;
+  let changed = false;
+  for(const s of L.shapes.slice()){
+    if(s.type === 'text') continue;
+    if(s.fill) continue;                       // sirf line-art / stroke shapes
+    const sw = (s.stroke && s.stroke.width) || 0;
+    const rr = r + sw / 2;
+    let bb;
+    try{ bb = shapeBBoxDoc(s) }catch(e){ continue }
+    if(p.x < bb.x - rr - 4 || p.x > bb.x2 + rr + 4 || p.y < bb.y - rr - 4 || p.y > bb.y2 + rr + 4) continue;
+    let rings;
+    try{ rings = flatRings(s) }catch(e){ continue }
+    if(!rings || !rings.length) continue;
+    const subs = [];
+    let cut = false;
+    for(let ri = 0; ri < rings.length; ri++){
+      const ring = rings[ri];
+      const wasClosed = (s.type === 'path') ? !!(s.subpaths[ri] && s.subpaths[ri].closed)
+        : (s.type === 'rect' || s.type === 'ellipse' || s.type === 'poly');
+      const dense = v11Densify(ring.map(q => ({ x:q.x, y:q.y })), 2);
+      const runs = v11CutRing(dense, p, rr);
+      if(!(runs.length === 1 && runs[0].length === dense.length)) cut = true;
+      for(const run of runs){
+        const simp = v11RdpObj(run, 0.6);
+        if(simp.length < 2) continue;
+        subs.push({
+          nodes: simp.map(q => ({ p:{ x:q.x, y:q.y }, in:null, out:null })),
+          closed: wasClosed && runs.length === 1 && run.length === dense.length
+        });
+      }
+    }
+    if(!cut) continue;
+    changed = true;
+    if(!subs.length){
+      const idx = L.shapes.indexOf(s);
+      if(idx >= 0) L.shapes.splice(idx, 1);
+    }else{
+      s.type = 'path';
+      s.subpaths = subs;
+      s.t = null;
+      s._dirty = true;
+    }
+  }
+  if(changed){
+    docDirty = true; needRender = true; uiLayersRefresh();
+  }
+  return changed;
+}
+
+function v11VecEraseDown(p, e){
+  const L = activeLayer();
+  if(!L || L.type !== 'vector' || L.locked){
+    V11._vecFallback = true;
+    return v11StrokeDown(p, e, true);
+  }
+  V11._vecFallback = false;
+  pushUndo(null, 'Vector Erase');
+  G.v11VE = { L:L, last:{ x:p.x, y:p.y }, r:Math.max(2, opts.eraserSize / 2) };
+  v11VecEraseAt(p);
+}
+
+function v11VecEraseMove(p){
+  const VE = G.v11VE;
+  if(!VE) return;
+  const d = Math.hypot(p.x - VE.last.x, p.y - VE.last.y);
+  if(d < 1.6) return;
+  const steps = Math.min(8, Math.ceil(d / Math.max(2, VE.r * 0.6)));
+  for(let i = 1; i <= steps; i++){
+    const t = i / steps;
+    v11VecEraseAt({ x:lerp(VE.last.x, p.x, t), y:lerp(VE.last.y, p.y, t) });
+  }
+  VE.last = { x:p.x, y:p.y };
+}
+
+function v11VecEraseUp(){
+  if(G.v11VE){ G.v11VE = null; docDirty = true; needRender = true; uiProps() }
+  if(G.v11){ v11StrokeUp() }
+}
+
+/* ---------- bucket fill with reference layers ---------- */
+function v11HasReferenceLayers(){
+  return !!v11FlattenRefs(activeLayer());
+}
+
+function v11FillReferenced(p){
+  const L = activeLayer();
+  if(!L || L.type !== 'raster' || L.locked){ toast('Reference fill ke liye bitmap layer select karo', 'err'); return }
+  pushUndo(null, 'Reference Fill');
+  bakeOffset(L);
+  const src = v11FlattenRefs(L);
+  if(!src){ toast('Koi reference layer ON nahi hai (◎)', 'err'); return }
+  const x0 = Math.floor(p.x), y0 = Math.floor(p.y);
+  if(x0 < 0 || y0 < 0 || x0 >= doc.w || y0 >= doc.h){ undoStack.pop(); uiQuick(); return }
+  const img = src.getContext('2d').getImageData(0, 0, doc.w, doc.h);
+  const px = img.data;
+  const si = (y0 * doc.w + x0) * 4;
+  const tr = px[si], tg = px[si+1], tb = px[si+2], ta = px[si+3];
+  const tol = opts.fillTol;
+  const match = i => Math.abs(px[i] - tr) <= tol && Math.abs(px[i+1] - tg) <= tol && Math.abs(px[i+2] - tb) <= tol && Math.abs(px[i+3] - ta) <= tol;
+  const seen = floodScan(px, doc.w, doc.h, x0, y0, match);
+  if(typeof pixSel !== 'undefined' && pixSel){
+    for(let i = 0; i < seen.length; i++) if(seen[i] && !pixSel.mask[i]) seen[i] = 0;
+  }
+  v11PaintMaskInto(L, seen, primary);
+  docDirty = true; needRender = true; uiLayersRefresh();
+  toast('Reference fill applied', 'ok', 1600);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   8 · DRAWING GUIDES — perspective / isometric / grid + ruler snapping
+   ══════════════════════════════════════════════════════════════════════════ */
+const V11_GUIDE_TYPES = [
+  ['off','Off'], ['grid','Grid'], ['iso','Isometric'],
+  ['persp1','1-pt Perspective'], ['persp2','2-pt Perspective'], ['radial','Radial']
+];
+
+function v11GuideState(create){
+  if(!doc) return null;
+  if(!doc.vguide && create){
+    doc.vguide = {
+      type:'off', snap:true, grid:64, opacity:0.45,
+      vp1:{ x:doc.w * 0.22, y:doc.h * 0.55 },
+      vp2:{ x:doc.w * 0.78, y:doc.h * 0.55 },
+      horizon:doc.h * 0.55, spokes:12
+    };
+  }
+  return doc.vguide || null;
+}
+function v11GuideSnapOn(){
+  const st = v11GuideState(false);
+  return !!(st && st.snap && st.type !== 'off');
+}
+
+function v11ScreenOf(p){ return { x:p.x * zoom + panX, y:p.y * zoom + panY } }
+
+function v11DrawGuideLines(g){
+  const st = v11GuideState(false);
+  if(!st || st.type === 'off') return;
+  const x0 = panX, y0 = panY, w = doc.w * zoom, h = doc.h * zoom;
+  g.save();
+  g.beginPath(); g.rect(x0, y0, w, h); g.clip();
+  g.globalAlpha = st.opacity == null ? 0.45 : st.opacity;
+  g.strokeStyle = '#5b8cff';
+  g.lineWidth = 1;
+  const S = p => ({ x:p.x * zoom + panX, y:p.y * zoom + panY });
+  const line = (a, b) => { const A = S(a), B = S(b); g.beginPath(); g.moveTo(A.x, A.y); g.lineTo(B.x, B.y); g.stroke() };
+
+  if(st.type === 'grid'){
+    const step = Math.max(6, st.grid || 64);
+    for(let x = 0; x <= doc.w; x += step) line({ x:x, y:0 }, { x:x, y:doc.h });
+    for(let y = 0; y <= doc.h; y += step) line({ x:0, y:y }, { x:doc.w, y:y });
+  }
+
+  if(st.type === 'iso'){
+    const L = Math.hypot(doc.w, doc.h) * 1.4, cx = doc.w/2, cy = doc.h/2;
+    const fam = (ang, gap) => {
+      const dx = Math.cos(ang), dy = Math.sin(ang), nx = -dy, ny = dx;
+      const n = Math.ceil(L / gap);
+      for(let k = -n; k <= n; k++){
+        const ox = cx + nx * k * gap, oy = cy + ny * k * gap;
+        line({ x:ox - dx * L, y:oy - dy * L }, { x:ox + dx * L, y:oy + dy * L });
+      }
+    };
+    fam(Math.PI/6, 46);
+    fam(-Math.PI/6, 46);
+    fam(Math.PI/2, 46);
+  }
+
+  if(st.type === 'persp1' || st.type === 'persp2'){
+    g.save();
+    g.setLineDash([6, 5]);
+    g.strokeStyle = 'rgba(120,190,255,.85)';
+    line({ x:0, y:st.horizon }, { x:doc.w, y:st.horizon });
+    g.restore();
+    const vps = [st.vp1];
+    if(st.type === 'persp2') vps.push(st.vp2);
+    const R = Math.hypot(doc.w, doc.h) * 1.6;
+    for(const vp of vps){
+      const step = Math.PI / 24;
+      for(let a = 0; a < TAU; a += step){
+        line({ x:vp.x, y:vp.y }, { x:vp.x + Math.cos(a) * R, y:vp.y + Math.sin(a) * R });
+      }
+    }
+  }
+
+  if(st.type === 'radial'){
+    const cx = doc.w/2, cy = doc.h/2, R = Math.hypot(doc.w, doc.h);
+    const n = clamp(st.spokes || 12, 4, 48);
+    for(let i = 0; i < n; i++){
+      const a = i / n * TAU;
+      line({ x:cx, y:cy }, { x:cx + Math.cos(a) * R, y:cy + Math.sin(a) * R });
+    }
+  }
+  g.restore();
+}
+
+function v11DrawGuideHandles(g){
+  const st = v11GuideState(false);
+  if(!st || st.type === 'off') return;
+  const draw = (p, label, color) => {
+    const s = v11ScreenOf(p);
+    g.save();
+    g.beginPath(); g.arc(s.x, s.y, 7, 0, TAU);
+    g.fillStyle = 'rgba(15,17,22,.85)'; g.fill();
+    g.lineWidth = 2; g.strokeStyle = color; g.stroke();
+    g.fillStyle = color; g.font = '600 9px ui-monospace,monospace';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(label, s.x, s.y + 0.5);
+    g.restore();
+  };
+  if(st.type === 'persp1' || st.type === 'persp2'){
+    draw(st.vp1, 'V1', '#ffb86b');
+    if(st.type === 'persp2') draw(st.vp2, 'V2', '#ffb86b');
+  }
+}
+
+function v11GuideHit(p){
+  const st = v11GuideState(false);
+  if(!st || st.type === 'off') return null;
+  const tol = 14 * HITPAD() / zoom;
+  if(st.type === 'persp1' || st.type === 'persp2'){
+    if(dist(p, st.vp1) < tol) return 'vp1';
+    if(st.type === 'persp2' && dist(p, st.vp2) < tol) return 'vp2';
+    if(Math.abs(p.y - st.horizon) < tol * 0.7) return 'horizon';
+  }
+  return null;
+}
+
+function v11GuideDirs(st, anchor){
+  const primary = [], secondary = [];
+  const push = (arr, dx, dy) => {
+    const a = Math.atan2(dy, dx);
+    arr.push(a); arr.push(a + Math.PI);
+  };
+  if(st.type === 'persp1'){
+    push(primary, st.vp1.x - anchor.x, st.vp1.y - anchor.y);
+    secondary.push(0, Math.PI, Math.PI / 2, -Math.PI / 2);
+  }else if(st.type === 'persp2'){
+    push(primary, st.vp1.x - anchor.x, st.vp1.y - anchor.y);
+    push(primary, st.vp2.x - anchor.x, st.vp2.y - anchor.y);
+    secondary.push(Math.PI / 2, -Math.PI / 2);
+  }else if(st.type === 'iso'){
+    primary.push(Math.PI/6, Math.PI + Math.PI/6, -Math.PI/6, Math.PI - Math.PI/6, Math.PI/2, -Math.PI/2);
+  }else if(st.type === 'radial'){
+    const n = clamp(st.spokes || 12, 4, 48);
+    for(let i = 0; i < n; i++){ const a = i / n * TAU; primary.push(a, a + Math.PI) }
+  }
+  return { primary: primary, secondary: secondary };
+}
+
+function v11SnapToDirs(p, anchor, dirs, lock){
+  const list = dirs || {};
+  const primary = list.primary || list;
+  const secondary = list.secondary || [];
+  if(!primary.length && !secondary.length) return p;
+  let a = lock && lock.ray;
+  if(a == null){
+    const vx = p.x - anchor.x, vy = p.y - anchor.y;
+    const len = Math.hypot(vx, vy) || 1;
+    const bestOf = arr => {
+      let best = null, bestDot = -2;
+      for(const d of arr){
+        const dot = (Math.cos(d) * vx + Math.sin(d) * vy) / len;
+        if(dot > bestDot){ bestDot = dot; best = d }
+      }
+      return best == null ? null : { a:best, dot:bestDot };
+    };
+    const bp = bestOf(primary);
+    // perspective rays win when the cursor is within ~40° of them
+    if(bp && (bp.dot > 0.766 || !secondary.length)) a = bp.a;
+    else{
+      const bs = bestOf(secondary);
+      a = (bs && bs.dot >= (bp ? bp.dot : -2)) ? bs.a : (bp ? bp.a : bs.a);
+    }
+    if(lock){ lock.ray = a }
+  }
+  const dx = Math.cos(a), dy = Math.sin(a);
+  const t = (p.x - anchor.x) * dx + (p.y - anchor.y) * dy;
+  return { x:anchor.x + dx * t, y:anchor.y + dy * t };
+}
+
+function v11SnapPaintPoint(p, S){
+  const st = v11GuideState(false);
+  if(!st || !st.snap || st.type === 'off') return p;
+  if(st.type === 'grid'){
+    const g = Math.max(4, st.grid || 64);
+    return { x:Math.round(p.x / g) * g, y:Math.round(p.y / g) * g };
+  }
+  const anchor = (st.type === 'radial') ? { x:doc.w/2, y:doc.h/2 } : S.anchor;
+  return v11SnapToDirs(p, anchor, v11GuideDirs(st, anchor), S);
+}
+
+function v11GuideProps(body){
+  const st = v11GuideState(true);
+  if(!st) return;
+  let h = '<div class="pnote" style="border-top:1px solid var(--line);margin-top:8px;padding-top:10px"><b>Drawing Guides</b> · CSP rulers + Procreate guide</div>';
+  h += '<div class="chips" id="v11GuideTypes">' + V11_GUIDE_TYPES.map(t =>
+    '<span class="chip' + (st.type === t[0] ? ' on' : '') + '" data-gt="' + t[0] + '">' + t[1] + '</span>').join('') + '</div>';
+  h += '<div class="prow"><label>Snap stroke</label><div class="pctl"><input type="checkbox" id="v11GuideSnap" ' + (st.snap ? 'checked' : '') + '></div></div>';
+  h += pr('Grid size', rngHTML('v11GuideGrid', 8, 256, Math.round(st.grid || 64)));
+  h += pr('Opacity', rngHTML('v11GuideOp', 10, 100, Math.round((st.opacity == null ? 0.45 : st.opacity) * 100)));
+  h += '<div class="chips"><span class="chip" id="v11GuideReset">↺ Reset vanishing points</span></div>';
+  h += '<div class="pnote">Guide tool (U) se V1/V2 aur horizon drag karo. Snap ON hone par brush/line strokes ruler par lock ho jate hain.</div>';
+  body.insertAdjacentHTML('beforeend', h);
+  const grid = document.getElementById('v11GuideGrid');
+  const op = document.getElementById('v11GuideOp');
+  const sn = document.getElementById('v11GuideSnap');
+  body.querySelectorAll('[data-gt]').forEach(b => b.addEventListener('click', () => {
+    st.type = b.dataset.gt;
+    needRender = true; uiProps();
+    toast('Guide: ' + (V11_GUIDE_TYPES.find(x => x[0] === st.type) || [0,'Off'])[1], 'ok', 1400);
+  }));
+  if(sn) sn.addEventListener('change', () => { st.snap = sn.checked; needRender = true });
+  if(grid) grid.addEventListener('input', () => { st.grid = +grid.value; const v = document.getElementById('v11GuideGridV'); if(v) v.textContent = grid.value; needRender = true });
+  if(op) op.addEventListener('input', () => { st.opacity = +op.value / 100; const v = document.getElementById('v11GuideOpV'); if(v) v.textContent = op.value; needRender = true });
+  const rst = document.getElementById('v11GuideReset');
+  if(rst) rst.addEventListener('click', () => {
+    st.vp1 = { x:doc.w * 0.22, y:doc.h * 0.55 };
+    st.vp2 = { x:doc.w * 0.78, y:doc.h * 0.55 };
+    st.horizon = doc.h * 0.55;
+    needRender = true;
+  });
+}
+
+function v11GuideDialog(){
+  if(!doc) return;
+  const st = v11GuideState(true);
+  const body =
+    '<p style="margin-top:0">Clip Studio style rulers — perspective, isometric aur grid. <b>Snap stroke</b> ON hone par brush aur line tool ruler par lock ho jaate hain.</p>' +
+    '<div class="chips" id="v11GuideTypes2">' + V11_GUIDE_TYPES.map(t =>
+      '<span class="chip' + (st.type === t[0] ? ' on' : '') + '" data-gt2="' + t[0] + '">' + t[1] + '</span>').join('') + '</div>' +
+    '<div class="mrow"><label>Snap</label><input type="checkbox" id="v11GDSnap" ' + (st.snap ? 'checked' : '') + '></div>' +
+    '<div class="mrow"><label>Grid size</label><input type="range" id="v11GDGrid" min="8" max="256" value="' + Math.round(st.grid || 64) + '"><span class="rv" id="v11GDGridV">' + Math.round(st.grid || 64) + '</span></div>' +
+    '<div class="mrow"><label>Opacity</label><input type="range" id="v11GDOp" min="10" max="100" value="' + Math.round((st.opacity == null ? .45 : st.opacity) * 100) + '"><span class="rv" id="v11GDOpV">' + Math.round((st.opacity == null ? .45 : st.opacity) * 100) + '</span></div>' +
+    '<div class="pnote">Canvas par <b>Guide tool (U)</b> se V1 / V2 aur horizon drag karo. 1-pt aur 2-pt perspective dono available hain.</div>';
+  modal({
+    title:'Drawing Guides — perspective / isometric',
+    body:body,
+    buttons:[{ l:'Reset VPs', fn:mm => { st.vp1={x:doc.w*.22,y:doc.h*.55}; st.vp2={x:doc.w*.78,y:doc.h*.55}; st.horizon=doc.h*.55; needRender=true } },
+      { l:'Done', cls:'acc', fnClose:true }],
+    onOpen:mm => {
+      mm.querySelectorAll('[data-gt2]').forEach(b => b.addEventListener('click', () => {
+        mm.querySelectorAll('[data-gt2]').forEach(x => x.classList.remove('on'));
+        b.classList.add('on');
+        st.type = b.dataset.gt2; needRender = true;
+        setTool('guide');
+      }));
+      const sn = mm.querySelector('#v11GDSnap');
+      sn.addEventListener('change', () => { st.snap = sn.checked; needRender = true });
+      const gr = mm.querySelector('#v11GDGrid');
+      gr.addEventListener('input', () => { st.grid = +gr.value; mm.querySelector('#v11GDGridV').textContent = gr.value; needRender = true });
+      const op = mm.querySelector('#v11GDOp');
+      op.addEventListener('input', () => { st.opacity = +op.value/100; mm.querySelector('#v11GDOpV').textContent = op.value; needRender = true });
+    }
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   9 · LASSO SELECTION + FEATHER / EXPAND / CONTRACT
+   ══════════════════════════════════════════════════════════════════════════ */
+function v11PolyMask(pts){
+  const c = mkCanvas(doc.w, doc.h);
+  const g = c.getContext('2d');
+  g.fillStyle = '#fff';
+  g.beginPath();
+  g.moveTo(pts[0].x, pts[0].y);
+  for(let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
+  g.closePath();
+  g.fill();
+  const d = g.getImageData(0, 0, doc.w, doc.h).data;
+  const m = new Uint8Array(doc.w * doc.h);
+  for(let i = 0; i < m.length; i++) m[i] = d[i*4+3] > 96 ? 255 : 0;
+  return m;
+}
+
+function v11FeatherDialog(){
+  if(!pixSel){ toast('Pehle koi selection banao (M / Q / W)', 'err'); return }
+  modal({
+    title:'Feather Selection',
+    body:'<div class="mrow"><label>Radius</label><input type="range" id="v11FeR" min="0" max="60" value="8"><span class="rv" id="v11FeRV">8</span></div><p class="pnote">Selection ke kinare soft ho jaate hain — photo blend ke liye.</p>',
+    buttons:[{ l:'Cancel' }, { l:'Feather', cls:'acc', fnClose:true, fn:() => {
+      const r = +document.getElementById('v11FeR').value;
+      if(r <= 0) return;
+      pushUndo(null, 'Feather');
+      const c = mkCanvas(doc.w, doc.h), g = c.getContext('2d');
+      g.filter = 'blur(' + r + 'px)';
+      g.drawImage(maskCanvas(), 0, 0);
+      g.filter = 'none';
+      const d = g.getImageData(0, 0, doc.w, doc.h).data;
+      const m = new Uint8Array(doc.w * doc.h);
+      for(let i = 0; i < m.length; i++) m[i] = d[i*4+3] > 110 ? 255 : 0;
+      setPixSel(m);
+      toast('Feather ' + r + 'px applied', 'ok');
+    }}],
+    onOpen:mm => {
+      const r = mm.querySelector('#v11FeR');
+      r.addEventListener('input', () => mm.querySelector('#v11FeRV').textContent = r.value);
+    }
+  });
+}
+
+function v11GrowSelection(radius, expand){
+  if(!pixSel){ toast('Pehle selection banao', 'err'); return }
+  if(radius <= 0) return;
+  pushUndo(null, 'Selection Modify');
+  const src = maskCanvas();
+  const c = mkCanvas(doc.w, doc.h), g = c.getContext('2d');
+  if(expand){
+    g.drawImage(src, 0, 0);
+    const N = Math.max(10, Math.round(radius * 3));
+    for(let i = 0; i < N; i++){
+      const a = i / N * TAU;
+      g.drawImage(src, Math.cos(a) * radius, Math.sin(a) * radius);
+    }
+  }else{
+    g.drawImage(src, 0, 0);
+    const N = Math.max(10, Math.round(radius * 3));
+    g.globalCompositeOperation = 'destination-in';
+    for(let i = 0; i < N; i++){
+      const a = i / N * TAU;
+      g.drawImage(src, -Math.cos(a) * radius, -Math.sin(a) * radius);
+    }
+  }
+  const d = g.getImageData(0, 0, doc.w, doc.h).data;
+  const m = new Uint8Array(doc.w * doc.h);
+  for(let i = 0; i < m.length; i++) m[i] = d[i*4+3] > 110 ? 255 : 0;
+  setPixSel(m);
+  toast((expand ? 'Expanded' : 'Contracted') + ' by ' + radius + 'px', 'ok');
+}
+
+function v11GrowDialog(expand){
+  if(!pixSel){ toast('Pehle selection banao', 'err'); return }
+  modal({
+    title: expand ? 'Expand Selection' : 'Contract Selection',
+    body:'<div class="mrow"><label>Pixels</label><input type="range" id="v11GrR" min="1" max="40" value="4"><span class="rv" id="v11GrRV">4</span></div>',
+    buttons:[{ l:'Cancel' }, { l:expand ? 'Expand' : 'Contract', cls:'acc', fnClose:true, fn:() => {
+      v11GrowSelection(+document.getElementById('v11GrR').value, expand);
+    }}],
+    onOpen:mm => { const r = mm.querySelector('#v11GrR'); r.addEventListener('input', () => mm.querySelector('#v11GrRV').textContent = r.value) }
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   10 · SCREENTONE / HALFTONE  (CSP manga tones)
+   ══════════════════════════════════════════════════════════════════════════ */
+function v11LumAt(d, w, h, x, y){
+  let sum = 0, n = 0;
+  for(let oy = -1; oy <= 1; oy++) for(let ox = -1; ox <= 1; ox++){
+    const xx = clamp(Math.round(x + ox), 0, w-1), yy = clamp(Math.round(y + oy), 0, h-1);
+    const i = (yy * w + xx) * 4;
+    const a = d[i+3] / 255;
+    sum += ((d[i]*0.299 + d[i+1]*0.587 + d[i+2]*0.114) * a + 255 * (1 - a));
+    n++;
+  }
+  return sum / n;
+}
+
+function v11ScreentoneDialog(){
+  if(!doc) return;
+  const body =
+    '<p style="margin-top:0">Bitmap artwork ko manga-style <b>screentone</b> me badlo — dot size luminance se control hota hai (dark area = bada dot).</p>' +
+    '<div class="mrow"><label>Pattern</label><div class="radioRow" id="v11StPat">' +
+      '<span class="chip on" data-st="dots">● Dots</span><span class="chip" data-st="lines">▤ Lines</span><span class="chip" data-st="cross">▩ Cross</span></div></div>' +
+    '<div class="mrow"><label>Cell size</label><input type="range" id="v11StPitch" min="4" max="28" value="9"><span class="rv" id="v11StPitchV">9</span></div>' +
+    '<div class="mrow"><label>Angle</label><input type="range" id="v11StAng" min="0" max="90" value="45"><span class="rv" id="v11StAngV">45</span></div>' +
+    '<div class="mrow"><label>Ink colour</label><input type="color" id="v11StColor" value="#101010"></div>' +
+    '<div class="mrow"><label>Output</label><div class="radioRow" id="v11StOut">' +
+      '<span class="chip on" data-so="new">New tone layer</span><span class="chip" data-so="merge">Merge into layer</span></div></div>' +
+    '<div class="pnote">Selection ho to sirf selection ke andar tone banega.</div>';
+  modal({
+    title:'Screentone / Halftone',
+    body:body,
+    buttons:[{ l:'Cancel' }, { l:'Apply tone', cls:'acc', fnClose:true, fn:m => {
+      const pat = (m.querySelector('#v11StPat .on') || {}).dataset.st || 'dots';
+      const pitch = +m.querySelector('#v11StPitch').value;
+      const ang = +m.querySelector('#v11StAng').value;
+      const color = m.querySelector('#v11StColor').value;
+      const outMode = (m.querySelector('#v11StOut .on') || {}).dataset.so || 'new';
+      v11ApplyScreentone(pat, pitch, ang, color, outMode);
+    }}],
+    onOpen:m => {
+      const bind = (sel, vid) => {
+        const r = m.querySelector(sel);
+        r.addEventListener('input', () => { const v = m.querySelector(vid); if(v) v.textContent = r.value });
+      };
+      bind('#v11StPitch', '#v11StPitchV');
+      bind('#v11StAng', '#v11StAngV');
+      m.querySelectorAll('#v11StPat .chip').forEach(c => c.addEventListener('click', () => {
+        m.querySelectorAll('#v11StPat .chip').forEach(x => x.classList.remove('on'));
+        c.classList.add('on');
+      }));
+      m.querySelectorAll('#v11StOut .chip').forEach(c => c.addEventListener('click', () => {
+        m.querySelectorAll('#v11StOut .chip').forEach(x => x.classList.remove('on'));
+        c.classList.add('on');
+      }));
+    }
+  });
+}
+
+function v11ApplyScreentone(pattern, pitch, angleDeg, color, outMode){
+  const L = activeRasterForFilter(false);
+  if(!L) return;
+  pushUndo(null, 'Screentone');
+  bakeOffset(L);
+  const w = doc.w, h = doc.h;
+  const srcC = cloneCanvas(L.canvas);
+  const sd = srcC.getContext('2d').getImageData(0, 0, w, h).data;
+  const tone = mkCanvas(w, h), tg = tone.getContext('2d');
+  const ang = angleDeg * Math.PI / 180;
+  const cos = Math.cos(ang), sin = Math.sin(ang);
+  const diag = Math.hypot(w, h);
+  const cx0 = w/2, cy0 = h/2;
+  tg.fillStyle = color;
+  tg.strokeStyle = color;
+  for(let v = -diag; v <= diag; v += pitch){
+    for(let u = -diag; u <= diag; u += pitch){
+      const cx = cx0 + u * cos - v * sin;
+      const cy = cy0 + u * sin + v * cos;
+      if(cx < -pitch || cy < -pitch || cx > w + pitch || cy > h + pitch) continue;
+      const lum = v11LumAt(sd, w, h, cx, cy);
+      const dark = 1 - lum / 255;
+      if(dark < 0.07) continue;
+      if(pattern === 'dots'){
+        const r = pitch * 0.58 * Math.sqrt(dark);
+        if(r < 0.35) continue;
+        tg.beginPath(); tg.arc(cx, cy, r, 0, TAU); tg.fill();
+      }else{
+        tg.save(); tg.translate(cx, cy); tg.rotate(ang);
+        const th = Math.max(0.6, pitch * dark * 0.85);
+        tg.fillRect(-pitch * 0.62, -th/2, pitch * 1.24, th);
+        if(pattern === 'cross'){
+          tg.rotate(Math.PI / 2);
+          tg.fillRect(-pitch * 0.62, -th/2, pitch * 1.24, th);
+        }
+        tg.restore();
+      }
+    }
+  }
+  if(typeof pixSel !== 'undefined' && pixSel){
+    tg.globalCompositeOperation = 'destination-in';
+    tg.drawImage(maskCanvas(), 0, 0);
+    tg.globalCompositeOperation = 'source-over';
+  }
+  if(outMode === 'new'){
+    const NL = newRasterLayer('Screentone');
+    NL.canvas = tone; NL.offset = { x:0, y:0 };
+    layerVerBump(NL);
+    insertLayer(NL, L);
+    uiLayers();
+  }else{
+    const g = L.canvas.getContext('2d');
+    g.drawImage(tone, 0, 0);
+    layerVerBump(L);
+  }
+  docDirty = true; needRender = true; uiLayersRefresh();
+  toast('Screentone applied (' + pattern + ' · ' + pitch + 'px)', 'ok', 2200);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   11 · GRADIENT MAP  (Procreate / CSP)
+   ══════════════════════════════════════════════════════════════════════════ */
+const V11_GRAD_PRESETS = [
+  { id:'sunset', name:'Sunset', stops:['#120a2f','#5b2a86','#ff6b6b','#ffd166'] },
+  { id:'teal',   name:'Teal → Orange', stops:['#04263a','#0aa3a3','#ffb703','#fff3e0'] },
+  { id:'neon',   name:'Neon', stops:['#12002f','#7b2ff7','#f107a3','#00e5ff'] },
+  { id:'mono',   name:'Mono', stops:['#000000','#ffffff'] },
+  { id:'sepia',  name:'Sepia', stops:['#2b1a0f','#8b5e34','#e6c9a8','#fff8ef'] },
+  { id:'duo',    name:'Duotone', stops:['#0b1d51','#ff9de2'] }
+];
+
+function v11BuildLut(stops){
+  const c = mkCanvas(256, 1), g = c.getContext('2d');
+  const gr = g.createLinearGradient(0, 0, 255, 0);
+  stops.forEach((col, i) => gr.addColorStop(stops.length > 1 ? i / (stops.length - 1) : 0, col));
+  g.fillStyle = gr;
+  g.fillRect(0, 0, 256, 1);
+  return g.getImageData(0, 0, 256, 1).data;
+}
+
+function v11GradientMapDialog(){
+  if(!doc) return;
+  const st = V11_GRAD_PRESETS[0];
+  const body =
+    '<p style="margin-top:0">Image ki luminance ko gradient par map karo — duotone / cinematic looks ke liye.</p>' +
+    '<div class="chips" id="v11GmPresets">' + V11_GRAD_PRESETS.map((p, i) =>
+      '<span class="chip' + (i === 0 ? ' on' : '') + '" data-gm="' + p.id + '">' + p.name + '</span>').join('') + '</div>' +
+    '<div style="display:flex;gap:10px;align-items:center;margin-top:8px">' +
+      '<label style="font-size:11.5px;color:var(--tx2)">Stop 1</label><input type="color" id="v11Gm1" value="' + st.stops[0] + '">' +
+      '<label style="font-size:11.5px;color:var(--tx2)">Stop 2</label><input type="color" id="v11Gm2" value="' + (st.stops[1] || st.stops[0]) + '">' +
+      '<label style="font-size:11.5px;color:var(--tx2)">Stop 3</label><input type="color" id="v11Gm3" value="' + (st.stops[2] || st.stops[st.stops.length-1]) + '">' +
+      '<label style="font-size:11.5px;color:var(--tx2)">Stop 4</label><input type="color" id="v11Gm4" value="' + (st.stops[3] || st.stops[st.stops.length-1]) + '">' +
+    '</div>' +
+    '<canvas id="v11GmBar" width="520" height="26" style="width:100%;height:26px;border-radius:8px;margin-top:10px;border:1px solid var(--line2)"></canvas>' +
+    '<div class="pnote">Selection ho to sirf usi area par lagta hai. Layer auto-rasterize hoti hai.</div>';
+  modal({
+    title:'Gradient Map',
+    body:body,
+    buttons:[{ l:'Cancel' }, { l:'Apply', cls:'acc', fnClose:true, fn:m => {
+      const stops = ['#v11Gm1','#v11Gm2','#v11Gm3','#v11Gm4'].map(id => m.querySelector(id).value);
+      v11ApplyGradientMap(stops);
+    }}],
+    onOpen:m => {
+      m.style.width = 'min(620px,94vw)';
+      const bar = m.querySelector('#v11GmBar'), bg = bar.getContext('2d');
+      const drawBar = () => {
+        const stops = ['#v11Gm1','#v11Gm2','#v11Gm3','#v11Gm4'].map(id => m.querySelector(id).value);
+        const gr = bg.createLinearGradient(0, 0, bar.width, 0);
+        stops.forEach((c, i) => gr.addColorStop(i / 3, c));
+        bg.fillStyle = gr; bg.fillRect(0, 0, bar.width, bar.height);
+      };
+      drawBar();
+      m.querySelectorAll('input[type=color]').forEach(i => i.addEventListener('input', drawBar));
+      m.querySelectorAll('[data-gm]').forEach(b => b.addEventListener('click', () => {
+        const p = V11_GRAD_PRESETS.find(x => x.id === b.dataset.gm);
+        if(!p) return;
+        m.querySelectorAll('[data-gm]').forEach(x => x.classList.remove('on'));
+        b.classList.add('on');
+        ['#v11Gm1','#v11Gm2','#v11Gm3','#v11Gm4'].forEach((id, i) => {
+          m.querySelector(id).value = p.stops[Math.min(i, p.stops.length - 1)];
+        });
+        drawBar();
+      }));
+    }
+  });
+}
+
+function v11ApplyGradientMap(stops){
+  const L = activeRasterForFilter(true);
+  if(!L) return;
+  pushUndo(null, 'Gradient Map');
+  const lut = v11BuildLut(stops);
+  applyMaskedCanvas(L, g => {
+    const img = g.getImageData(0, 0, doc.w, doc.h);
+    const d = img.data;
+    for(let i = 0; i < d.length; i += 4){
+      if(d[i+3] < 4) continue;
+      const lum = (d[i] * 0.299 + d[i+1] * 0.587 + d[i+2] * 0.114) | 0;
+      const j = clamp(lum, 0, 255) * 4;
+      d[i] = lut[j]; d[i+1] = lut[j+1]; d[i+2] = lut[j+2];
+    }
+    g.putImageData(img, 0, 0);
+  });
+  toast('Gradient map applied', 'ok');
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   12 · FOCUS LINES  (CSP manga speed lines)
+   ══════════════════════════════════════════════════════════════════════════ */
+function v11FocusLinesDialog(){
+  if(!doc) return;
+  const body =
+    '<p style="margin-top:0">Manga <b>focus lines</b> — center ki taraf patli hoti radial lines. Selection ho to usi ke andar.</p>' +
+    '<div class="mrow"><label>Lines</label><input type="range" id="v11FlN" min="24" max="360" value="140"><span class="rv" id="v11FlNV">140</span></div>' +
+    '<div class="mrow"><label>Length</label><input type="range" id="v11FlL" min="20" max="95" value="62"><span class="rv" id="v11FlLV">62</span></div>' +
+    '<div class="mrow"><label>Thickness</label><input type="range" id="v11FlW" min="1" max="18" value="5"><span class="rv" id="v11FlWV">5</span></div>' +
+    '<div class="mrow"><label>Inner gap</label><input type="range" id="v11FlG" min="0" max="60" value="24"><span class="rv" id="v11FlGV">24</span></div>' +
+    '<div class="mrow"><label>Ink</label><input type="color" id="v11FlC" value="#101010"></div>' +
+    '<div class="mrow"><label>Output</label><div class="radioRow" id="v11FlOut"><span class="chip on" data-fo="new">New layer</span><span class="chip" data-fo="merge">Merge</span></div></div>';
+  modal({
+    title:'Focus Lines (manga)',
+    body:body,
+    buttons:[{ l:'Cancel' }, { l:'Draw', cls:'acc', fnClose:true, fn:m => {
+      v11DrawFocusLines({
+        count:+m.querySelector('#v11FlN').value,
+        len:+m.querySelector('#v11FlL').value / 100,
+        width:+m.querySelector('#v11FlW').value,
+        gap:+m.querySelector('#v11FlG').value / 100,
+        color:m.querySelector('#v11FlC').value,
+        out:(m.querySelector('#v11FlOut .on') || {}).dataset.fo || 'new'
+      });
+    }}],
+    onOpen:m => {
+      m.querySelectorAll('input[type=range]').forEach(r => {
+        const v = m.querySelector('#' + r.id + 'V');
+        if(v) r.addEventListener('input', () => v.textContent = r.value);
+      });
+      m.querySelectorAll('#v11FlOut .chip').forEach(c => c.addEventListener('click', () => {
+        m.querySelectorAll('#v11FlOut .chip').forEach(x => x.classList.remove('on'));
+        c.classList.add('on');
+      }));
+    }
+  });
+}
+
+function v11DrawFocusLines(o){
+  if(!doc) return;
+  const L = activeRasterForFilter(true);
+  if(!L && o.out === 'merge') return;
+  pushUndo(null, 'Focus Lines');
+  const c = mkCanvas(doc.w, doc.h), g = c.getContext('2d');
+  const cx = pixSel ? (pixSel.bbox.x + pixSel.bbox.x2) / 2 : doc.w / 2;
+  const cy = pixSel ? (pixSel.bbox.y + pixSel.bbox.y2) / 2 : doc.h / 2;
+  const R = Math.hypot(doc.w, doc.h) * 0.62;
+  const rng = v11Rng(8811);
+  g.fillStyle = o.color;
+  for(let i = 0; i < o.count; i++){
+    const a = rng() * TAU;
+    const r0 = R * (o.gap + rng() * 0.16);
+    const r1 = R * (o.gap + 0.14 + o.len * (0.65 + rng() * 0.35));
+    const w = o.width * (0.35 + rng() * 0.9);
+    const dx = Math.cos(a), dy = Math.sin(a);
+    const nx = -dy, ny = dx;
+    g.beginPath();
+    g.moveTo(cx + dx * r0 + nx * w * 0.5, cy + dy * r0 + ny * w * 0.5);
+    g.lineTo(cx + dx * r1 + nx * w * 0.5, cy + dy * r1 + ny * w * 0.5);
+    g.lineTo(cx + dx * r1 - nx * w * 0.5, cy + dy * r1 - ny * w * 0.5);
+    g.lineTo(cx + dx * r0 - nx * w * 0.5, cy + dy * r0 - ny * w * 0.5);
+    g.closePath();
+    g.fill();
+  }
+  if(typeof pixSel !== 'undefined' && pixSel){
+    g.globalCompositeOperation = 'destination-in';
+    g.drawImage(maskCanvas(), 0, 0);
+  }
+  if(o.out === 'merge' && L){
+    L.canvas.getContext('2d').drawImage(c, 0, 0);
+    layerVerBump(L);
+  }else{
+    const NL = newRasterLayer('Focus Lines');
+    NL.canvas = c; NL.offset = { x:0, y:0 };
+    layerVerBump(NL);
+    insertLayer(NL, L || null);
+    uiLayers();
+  }
+  docDirty = true; needRender = true; uiLayersRefresh();
+  toast('Focus lines drawn', 'ok');
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   13 · LIQUIFY  (Procreate liquify)
+   ══════════════════════════════════════════════════════════════════════════ */
+function v11Warp(src, dx, dy, w, h){
+  const sg = src.getContext('2d');
+  const sd = sg.getImageData(0, 0, w, h).data;
+  const out = mkCanvas(w, h);
+  const og = out.getContext('2d');
+  const od = og.createImageData(w, h);
+  const dd = od.data;
+  const at = (x, y, c) => {
+    if(x < 0) x = 0; if(y < 0) y = 0; if(x > w - 1.001) x = w - 1.001; if(y > h - 1.001) y = h - 1.001;
+    const i = ((y | 0) * w + (x | 0)) * 4;
+    return sd[i + c];
+  };
+  for(let y = 0; y < h; y++){
+    for(let x = 0; x < w; x++){
+      const i = y * w + x;
+      const sx = x + dx[i], sy = y + dy[i];
+      const x0 = Math.floor(sx), y0 = Math.floor(sy);
+      const fx = sx - x0, fy = sy - y0;
+      const j = i * 4;
+      for(let c = 0; c < 4; c++){
+        const a = at(x0, y0, c), b = at(x0 + 1, y0, c);
+        const cc = at(x0, y0 + 1, c), d2 = at(x0 + 1, y0 + 1, c);
+        dd[j + c] = (a * (1 - fx) + b * fx) * (1 - fy) + (cc * (1 - fx) + d2 * fx) * fy;
+      }
+    }
+  }
+  og.putImageData(od, 0, 0);
+  return out;
+}
+
+function v11Liquify(){
+  if(!doc) return;
+  let L = activeLayer();
+  if(!L){ toast('Koi layer nahi', 'err'); return }
+  if(L.type !== 'raster'){
+    L = activeRasterForFilter(true);      // vector layer → auto rasterize
+    if(!L) return;
+  }
+  if(L.locked){ toast('Layer locked hai', 'err'); return }
+  bakeOffset(L);
+  pushUndo(null, 'Liquify');
+  const src = cloneCanvas(L.canvas);
+  const W = doc.w, H = doc.h;
+  const scale = Math.min(1, 560 / W, 380 / H);
+  const pw = Math.max(8, Math.round(W * scale)), ph = Math.max(8, Math.round(H * scale));
+  const small = mkCanvas(pw, ph);
+  small.getContext('2d').drawImage(src, 0, 0, pw, ph);
+  const DX = new Float32Array(pw * ph), DY = new Float32Array(pw * ph);
+  let mode = 'push';
+  let size = 60, strength = 55;
+  let drawing = false, last = null, raf = 0;
+  const body =
+    '<div style="display:flex;gap:12px;flex-wrap:wrap">' +
+      '<canvas id="v11LqCv" width="' + pw + '" height="' + ph + '" style="width:min(100%,' + pw + 'px);border-radius:10px;border:1px solid var(--line2);touch-action:none;cursor:crosshair"></canvas>' +
+      '<div style="flex:1;min-width:180px">' +
+        '<div class="chips" id="v11LqModes">' +
+          ['push','Push'].map((x,i)=>'<span class="chip'+(i===0?' on':'')+'" data-lqm="push">↔ Push</span>').join('') +
+          '<span class="chip" data-lqm="twirl">🌀 Twirl</span>' +
+          '<span class="chip" data-lqm="pinch">◍ Pinch</span>' +
+          '<span class="chip" data-lqm="bloat">◎ Bloat</span>' +
+        '</div>' +
+        '<div class="mrow"><label>Size</label><input type="range" id="v11LqS" min="10" max="200" value="60"><span class="rv" id="v11LqSV">60</span></div>' +
+        '<div class="mrow"><label>Strength</label><input type="range" id="v11LqP" min="5" max="100" value="55"><span class="rv" id="v11LqPV">55</span></div>' +
+        '<div class="chips"><span class="chip" id="v11LqReset">↺ Reset</span></div>' +
+        '<div class="pnote">Canvas par drag karo — effect live dikhega. Apply karne par full-resolution layer update hoti hai.</div>' +
+      '</div>' +
+    '</div>';
+  const m = modal({
+    title:'Liquify — push · twirl · pinch · bloat',
+    body:body,
+    buttons:[{ l:'Cancel', fnClose:true }, { l:'Apply', cls:'acc', fnClose:true, fn:() => {
+      const bigDX = new Float32Array(W * H), bigDY = new Float32Array(W * H);
+      const inv = 1 / scale;
+      for(let y = 0; y < H; y++){
+        const sy = Math.min(ph - 1, (y * scale) | 0);
+        for(let x = 0; x < W; x++){
+          const sx = Math.min(pw - 1, (x * scale) | 0);
+          const si = sy * pw + sx, di = y * W + x;
+          bigDX[di] = DX[si] * inv; bigDY[di] = DY[si] * inv;
+        }
+      }
+      const warped = v11Warp(src, bigDX, bigDY, W, H);
+      const g = L.canvas.getContext('2d');
+      g.clearRect(0, 0, W, H);
+      if(typeof pixSel !== 'undefined' && pixSel){
+        const clip = mkCanvas(W, H), cg = clip.getContext('2d');
+        cg.drawImage(warped, 0, 0);
+        cg.globalCompositeOperation = 'destination-in';
+        cg.drawImage(maskCanvas(), 0, 0);
+        g.drawImage(src, 0, 0);
+        g.drawImage(clip, 0, 0);
+      }else{
+        g.drawImage(warped, 0, 0);
+      }
+      layerVerBump(L);
+      docDirty = true; needRender = true; uiLayersRefresh();
+      toast('Liquify applied', 'ok');
+    }}],
+    onOpen: mm => {
+      mm.style.width = 'min(760px,96vw)';
+      const cv2 = mm.querySelector('#v11LqCv');
+      const g = cv2.getContext('2d');
+      const applyDab = (x, y, px, py, sx, sy) => {
+        const r = size;
+        const x0 = Math.max(0, Math.floor(x - r)), x1 = Math.min(pw-1, Math.ceil(x + r));
+        const y0 = Math.max(0, Math.floor(y - r)), y1 = Math.min(ph-1, Math.ceil(y + r));
+        const s = strength / 100;
+        for(let yy = y0; yy <= y1; yy++){
+          for(let xx = x0; xx <= x1; xx++){
+            const ddx = xx - x, ddy = yy - y;
+            const d = Math.hypot(ddx, ddy);
+            if(d > r) continue;
+            const wgt = Math.pow(1 - d / r, 1.6) * s;
+            const i = yy * pw + xx;
+            if(mode === 'push'){
+              DX[i] += (x - px) * wgt * 0.9;
+              DY[i] += (y - py) * wgt * 0.9;
+            }else if(mode === 'twirl'){
+              const a = wgt * 0.55;
+              const c = Math.cos(a), sn = Math.sin(a);
+              DX[i] += (ddx * c - ddy * sn) - ddx;
+              DY[i] += (ddx * sn + ddy * c) - ddy;
+            }else{
+              const k = (mode === 'pinch' ? 1 : -1) * wgt * 0.55;
+              DX[i] += ddx * k;
+              DY[i] += ddy * k;
+            }
+          }
+        }
+      };
+      const paint = () => {
+        raf = 0;
+        const warped = v11Warp(small, DX, DY, pw, ph);
+        g.drawImage(warped, 0, 0);
+      };
+      const schedule = () => { if(!raf) raf = requestAnimationFrame(paint) };
+      paint();
+      const pos = (e) => {
+        const r = cv2.getBoundingClientRect();
+        return { x:(e.clientX - r.left) / r.width * pw, y:(e.clientY - r.top) / r.height * ph };
+      };
+      cv2.addEventListener('pointerdown', e => {
+        cv2.setPointerCapture(e.pointerId);
+        drawing = true; last = pos(e);
+      });
+      cv2.addEventListener('pointermove', e => {
+        if(!drawing) return;
+        const p = pos(e);
+        applyDab(p.x, p.y, last.x, last.y);
+        last = p;
+        schedule();
+      });
+      cv2.addEventListener('pointerup', () => { drawing = false });
+      mm.querySelectorAll('[data-lqm]').forEach(b => b.addEventListener('click', () => {
+        mm.querySelectorAll('[data-lqm]').forEach(x => x.classList.remove('on'));
+        b.classList.add('on');
+        mode = b.dataset.lqm;
+      }));
+      const sz = mm.querySelector('#v11LqS'), stg = mm.querySelector('#v11LqP');
+      sz.addEventListener('input', () => { size = +sz.value; mm.querySelector('#v11LqSV').textContent = sz.value });
+      stg.addEventListener('input', () => { strength = +stg.value; mm.querySelector('#v11LqPV').textContent = stg.value });
+      const reset = mm.querySelector('#v11LqReset');
+      reset.addEventListener('click', () => { DX.fill(0); DY.fill(0); paint() });
+    }
+  });
+  return m;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   14 · COMIC PANEL TEMPLATES  (Clip Studio "panel division")
+   ══════════════════════════════════════════════════════════════════════════ */
+const V11_LAYOUTS = [
+  { id:'grid2', name:'Grid 2×2', cells:[
+    [0,0,.5,.5],[.5,0,.5,.5],[0,.5,.5,.5],[.5,.5,.5,.5] ] },
+  { id:'grid6', name:'Grid 3×2', cells:[
+    [0,0,1/3,.5],[1/3,0,1/3,.5],[2/3,0,1/3,.5],
+    [0,.5,1/3,.5],[1/3,.5,1/3,.5],[2/3,.5,1/3,.5] ] },
+  { id:'strip4', name:'Strip 4 rows', cells:[
+    [0,0,1,.25],[0,.25,1,.25],[0,.5,1,.25],[0,.75,1,.25] ] },
+  { id:'manga5', name:'Manga 5-panel', cells:[
+    [0,0,1,.34],[0,.34,.5,.33],[.5,.34,.5,.33],[0,.67,.5,.33],[.5,.67,.5,.33] ] },
+  { id:'splash3', name:'Splash + 2', cells:[
+    [0,0,.62,1],[.62,0,.38,.5],[.62,.5,.38,.5] ] },
+  { id:'wide3', name:'Cinema 3 rows', cells:[
+    [0,0,1,.3],[0,.3,.5,.7],[.5,.3,.5,.7] ] }
+];
+
+function v11ComicPanelDialog(){
+  if(!doc) return;
+  const body =
+    '<p style="margin-top:0">Ek naya <b>vector layer</b> banega jisme white panels + black borders honge — usi ke andar apna art clip karo (Clip Studio panel division jaisa).</p>' +
+    '<div class="chips" id="v11CpLay">' + V11_LAYOUTS.map((l, i) =>
+      '<span class="chip' + (i === 0 ? ' on' : '') + '" data-cp2="' + l.id + '">' + l.name + '</span>').join('') + '</div>' +
+    '<div class="mrow"><label>Margin</label><input type="range" id="v11CpM" min="0" max="80" value="24"><span class="rv" id="v11CpMV">24</span></div>' +
+    '<div class="mrow"><label>Gutter</label><input type="range" id="v11CpG" min="0" max="50" value="12"><span class="rv" id="v11CpGV">12</span></div>' +
+    '<div class="mrow"><label>Border</label><input type="range" id="v11CpB" min="0" max="14" value="4"><span class="rv" id="v11CpBV">4</span></div>' +
+    '<div class="mrow"><label>Panel fill</label><input type="color" id="v11CpFill" value="#ffffff"></div>';
+  modal({
+    title:'Comic Panel Template',
+    body:body,
+    buttons:[{ l:'Cancel' }, { l:'Create panels', cls:'acc', fnClose:true, fn:m => {
+      const id = (m.querySelector('#v11CpLay .on') || {}).dataset.cp2 || 'grid2';
+      v11MakeComicPanels(id, +m.querySelector('#v11CpM').value, +m.querySelector('#v11CpG').value,
+        +m.querySelector('#v11CpB').value, m.querySelector('#v11CpFill').value);
+    }}],
+    onOpen:m => {
+      m.querySelectorAll('input[type=range]').forEach(r => {
+        const v = m.querySelector('#' + r.id + 'V');
+        if(v) r.addEventListener('input', () => v.textContent = r.value);
+      });
+      m.querySelectorAll('[data-cp2]').forEach(b => b.addEventListener('click', () => {
+        m.querySelectorAll('[data-cp2]').forEach(x => x.classList.remove('on'));
+        b.classList.add('on');
+      }));
+    }
+  });
+}
+
+function v11MakeComicPanels(id, margin, gutter, border, fill){
+  const lay = V11_LAYOUTS.find(l => l.id === id) || V11_LAYOUTS[0];
+  pushUndo(null, 'Comic Panels');
+  const L = newVectorLayer('Comic panels');
+  insertLayer(L, activeLayer());
+  const W = doc.w, H = doc.h;
+  const m = Math.min(margin, Math.min(W, H) * 0.18);
+  const gut = Math.min(gutter, Math.min(W, H) * 0.08);
+  for(const cell of lay.cells){
+    const [fx, fy, fw, fh] = cell;
+    const x = m + fx * (W - 2 * m) + gut / 2;
+    const y = m + fy * (H - 2 * m) + gut / 2;
+    const w = fw * (W - 2 * m) - gut;
+    const h = fh * (H - 2 * m) - gut;
+    if(w < 4 || h < 4) continue;
+    L.shapes.push({
+      id:uid(), type:'rect', x:x, y:y, w:w, h:h,
+      fill:{ type:'solid', color:fill },
+      stroke: border > 0 ? { width:border, color:'#111111', join:'miter', cap:'butt' } : null,
+      t:null, _dirty:true
+    });
+  }
+  layerVerBump(L);
+  docDirty = true; needRender = true; uiLayers(); uiProps(); uiLayersRefresh();
+  toast('Comic panels ready — ' + L.shapes.length + ' panels (naya vector layer)', 'ok', 2600);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   15 · FLIP CANVAS / LAYER ROLES (menu helpers)
+   ══════════════════════════════════════════════════════════════════════════ */
+function v11FlipCanvas(horiz){
+  if(!doc) return;
+  pushUndo(null, 'Flip Canvas');
+  const F = M.mul(M.translate(horiz ? doc.w : 0, horiz ? 0 : doc.h),
+    M.mul(M.scale(horiz ? -1 : 1, horiz ? 1 : -1), M.id()));
+  const walk = (L) => {
+    if(L.type === 'group'){ (L.children || []).forEach(walk); return }
+    if(L.type === 'raster'){
+      bakeOffset(L);
+      const c = mkCanvas(doc.w, doc.h), g = c.getContext('2d');
+      g.translate(horiz ? doc.w : 0, horiz ? 0 : doc.h);
+      g.scale(horiz ? -1 : 1, horiz ? 1 : -1);
+      g.drawImage(L.canvas, 0, 0);
+      L.canvas = c; layerVerBump(L);
+    }else{
+      for(const s of L.shapes){ s.t = M.mul(F, s.t || M.id()); s._dirty = true }
+    }
+  };
+  (doc.layers || []).forEach(walk);
+  const st = v11GuideState(false);
+  if(st){ st.vp1.x = doc.w - st.vp1.x; st.vp2.x = doc.w - st.vp2.x }
+  docDirty = true; needRender = true; uiLayersRefresh();
+  toast('Canvas flipped ' + (horiz ? 'horizontally' : 'vertically'), 'ok');
+}
+
+function v11ToggleAlphaLock(){
+  const L = activeLayer();
+  if(!L || L.type === 'group') return;
+  pushUndo(null, 'Alpha Lock');
+  L.alphaLock = !L.alphaLock;
+  uiLayers();
+  toast('Alpha lock ' + (L.alphaLock ? 'ON' : 'OFF') + ' — ' + L.name, 'ok', 1600);
+}
+function v11ToggleRef(){
+  const L = activeLayer();
+  if(!L || L.type === 'group') return;
+  pushUndo(null, 'Reference Layer');
+  L.ref = !L.ref;
+  uiLayers();
+  toast('Reference layer ' + (L.ref ? 'ON' : 'OFF') + ' — ' + L.name, 'ok', 1800);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   16 · WHAT'S NEW
+   ══════════════════════════════════════════════════════════════════════════ */
+function v11WhatsNewDialog(){
+  modal({
+    title:'ArtViSiON Studio v11.0 — Clip Studio × Procreate',
+    body:
+      '<h4>🖌️ Brush Studio (Procreate + CSP)</h4>' +
+      '<p>13 built-in brushes · pressure→size/opacity · taper · jitter · scatter · paper grain · brush blend modes · live preview · apne presets save/delete. Chhoti brush shelf canvas ke neeche milti hai.</p>' +
+      '<h4>🌊 Stabilizer / StreamLine</h4>' +
+      '<p>Brush strokes ki hand-shake correction — 0–100 %. CSP ka “手ブレ補正” aur Procreate StreamLine dono ka equivalent.</p>' +
+      '<h4>◇ QuickShape (Procreate)</h4>' +
+      '<p>Stroke ke end par <b>hold</b> karo (≈0.4 s) — line, circle, ellipse ya rectangle snap ho jata hai. Release = commit.</p>' +
+      '<h4>💧 ColorDrop (Procreate)</h4>' +
+      '<p>Colors panel se color <b>drag</b> karke canvas par chhodo — region fill ho jata hai. Selection ho to poora selection bhar jata hai.</p>' +
+      '<h4>🔒 Alpha Lock + ◎ Reference Layer</h4>' +
+      '<p>Layer row me α = sirf existing pixels par paint. ◎ = bucket / ColorDrop is layer ko reference karega (CSP reference layer).</p>' +
+      '<h4>✂️ Vector Eraser (CSP)</h4>' +
+      '<p>Eraser tool me “Vector erase” ON karo — vector strokes intersection par real nodes me kat jaate hain, pixels nahi bante.</p>' +
+      '<h4>📐 Drawing Guides (CSP rulers)</h4>' +
+      '<p>1-point / 2-point perspective, isometric, grid aur radial guides. Guide tool (U) se vanishing points drag karo; snap ON hone par brush/line strokes ruler par lock hote hain.</p>' +
+      '<h4>🪢 Lasso + Selection ops</h4>' +
+      '<p>Freehand lasso (Q), feather, expand, contract — manga aur photo compositing dono ke liye.</p>' +
+      '<h4>🔲 Screentone · 🌈 Gradient Map · 💥 Focus Lines · 💧 Liquify</h4>' +
+      '<p>Filter menu me manga screentone (dots/lines/cross), gradient map (duotone/cinematic), focus lines aur Procreate-style liquify (push/twirl/pinch/bloat).</p>' +
+      '<h4>🗯 Comic panel templates + Flip canvas</h4>' +
+      '<p>File ▸ Comic Panel Template: 6 layouts, margins/gutters, ek click me vector panels. Image menu me flip canvas H/V.</p>' +
+      '<p style="margin-top:10px"><b>Tip:</b> Brush Studio me “Save as preset” se apni brush library banao — browser me save rehti hai.</p>',
+    buttons:[{ l:'Chalo try karein!', cls:'acc', fnClose:true }]
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   17 · TOOLS + UI PATCHING + INSTALL
+   ══════════════════════════════════════════════════════════════════════════ */
+function v11AddTools(){
+  Object.assign(ICONS, {
+    lasso:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="3 2.6"><path d="M4.5 14.5c-1.4-4 .9-9.2 5.6-10.6 4.6-1.4 9.6 1.2 9.4 5.8-.2 4.2-5 5.1-7.8 6.6-1.7.9-2.1 2.4-1 3.4 1.3 1.2 3.6.8 4.4-.8"/><circle cx="15.1" cy="19.2" r="2.2" fill="currentColor" stroke="none"/></svg>',
+    guide:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M3 21L21 3M6.5 17.5l3-3M10.5 13.5l3-3M14.5 9.5l3-3"/><circle cx="18" cy="6" r="2.2" fill="currentColor" stroke="none"/><circle cx="6" cy="18" r="1.4" fill="currentColor" stroke="none"/></svg>'
+  });
+  Object.assign(HINTS, {
+    lasso:'Drag=freehand selection · Shift=add · Alt=subtract · Ctrl+D=deselect',
+    guide:'V1 / V2 / horizon drag karo · Properties me guide type + snap'
+  });
+  let i = TOOLDEFS.findIndex(t => Array.isArray(t) && t[0] === 'marquee');
+  if(i >= 0 && !TOOLDEFS.some(t => Array.isArray(t) && t[0] === 'lasso')) TOOLDEFS.splice(i + 1, 0, ['lasso', 'Lasso Select — Q', 'Q']);
+  let j = TOOLDEFS.findIndex(t => Array.isArray(t) && t[0] === 'zoom');
+  if(j >= 0 && !TOOLDEFS.some(t => Array.isArray(t) && t[0] === 'guide')) TOOLDEFS.splice(j, 0, ['guide', 'Guide / Ruler — U', 'U']);
+
+  TOOLS.lasso = {
+    cursor:'crosshair',
+    down(p, e){
+      commitFloat();
+      G.v11lasso = { pts:[{ x:p.x, y:p.y }], add:!!e.shiftKey, sub:!!e.altKey };
+    },
+    move(p){
+      const L = G.v11lasso;
+      if(!L) return;
+      const last = L.pts[L.pts.length-1];
+      if(dist(last, p) > 1.2) L.pts.push({ x:p.x, y:p.y });
+      needRender = true;
+    },
+    up(p){
+      const L = G.v11lasso;
+      G.v11lasso = null;
+      if(!L) return;
+      if(p) L.pts.push({ x:p.x, y:p.y });
+      if(L.pts.length < 4){ clearPixSel(); return }
+      const m = v11PolyMask(L.pts);
+      combineSelMask(m, L.add, L.sub);
+      needRender = true;
+      toast('Lasso selection', 'ok', 1200);
+    }
+  };
+
+  TOOLS.guide = {
+    cursor:'move',
+    down(p, e){
+      const st = v11GuideState(true);
+      if(!st) return;
+      if(st.type === 'off'){
+        toast('Properties me guide type chuno: Grid / Isometric / Perspective', 'ok', 2400);
+        return;
+      }
+      const hit = v11GuideHit(p);
+      if(!hit){ needRender = true; return }
+      pushUndo(null, 'Guide');
+      G.v11guide = { what:hit, start:p };
+    },
+    move(p){
+      const gd = G.v11guide;
+      if(!gd) return;
+      const st = v11GuideState(true);
+      if(gd.what === 'vp1') st.vp1 = { x:p.x, y:p.y };
+      else if(gd.what === 'vp2') st.vp2 = { x:p.x, y:p.y };
+      else if(gd.what === 'horizon'){
+        st.horizon = v11Clamp(p.y, -doc.h, doc.h * 2);
+        st.vp1.y = st.horizon; st.vp2.y = st.horizon;
+      }
+      needRender = true;
+    },
+    up(){ if(G.v11guide){ G.v11guide = null; uiProps() } }
+  };
+
+  /* brush / eraser — naya dynamic engine */
+  TOOLS.brush = {
+    cursor:'none',
+    down(p, e){ v11StrokeDown(p, e, false) },
+    move(p){ v11StrokeMove(p) },
+    up(){ v11StrokeUp() },
+    cancel(){ if(G.v11){ G.v11 = null; G.stroke = null; needRender = true } }
+  };
+  TOOLS.eraser = {
+    cursor:'none',
+    down(p, e){ if(V11.vectorErase) v11VecEraseDown(p, e); else v11StrokeDown(p, e, true) },
+    move(p){
+      if(G.v11VE) v11VecEraseMove(p);
+      else if(G.v11) v11StrokeMove(p);
+    },
+    up(){
+      if(G.v11VE) v11VecEraseUp();
+      else if(G.v11) v11StrokeUp();
+    }
+  };
+
+  /* bucket — reference layers support */
+  const fillDown = TOOLS.fill.down;
+  TOOLS.fill.down = function(p, e){
+    if(v11HasReferenceLayers()){
+      v11FillReferenced(p);
+    }else return fillDown.call(this, p, e);
+  };
+
+  /* line tool — guide snapping */
+  const lineDown = TOOLS.line.down, lineMove = TOOLS.line.move;
+  TOOLS.line.down = function(p, e){
+    const r = lineDown.call(this, p, e);
+    if(G.draft) G.draft.v11lock = {};
+    return r;
+  };
+  TOOLS.line.move = function(p, e){
+    if(G.draft && v11GuideSnapOn()){
+      const st = v11GuideState(false);
+      if(st && st.type === 'grid'){
+        const g = Math.max(4, st.grid || 64);
+        p = { x:Math.round(p.x / g) * g, y:Math.round(p.y / g) * g };
+      }else if(st){
+        if(!G.draft.v11lock) G.draft.v11lock = {};
+        p = v11SnapToDirs(p, G.draft.a, v11GuideDirs(st, G.draft.a), G.draft.v11lock);
+      }
+    }
+    return lineMove.call(this, p, e);
+  };
+}
+
+function v11PatchUI(){
+  const baseProps = uiProps;
+  uiProps = function(){
+    baseProps.apply(this, arguments);
+    try{ v11PropsExtras() }catch(e){}
+  };
+  const baseLayers = uiLayers;
+  uiLayers = function(){
+    baseLayers.apply(this, arguments);
+    try{ v11DecorateLayers() }catch(e){}
+  };
+  const baseOverlay = drawOverlay;
+  drawOverlay = function(g){
+    baseOverlay.call(this, g);
+    try{ v11DrawOverlayExtras(g) }catch(e){}
+  };
+  const baseSetTool = setTool;
+  setTool = function(t){
+    baseSetTool.apply(this, arguments);
+    try{ v11SyncShelf() }catch(e){}
+  };
+  const baseUiProps2 = uiProps;
+  // ensure brush shelf follows tool changes triggered elsewhere (e.g. keyboard)
+  window.addEventListener('focus', () => { try{ v11SyncShelf() }catch(e){} });
+}
+
+function v11DrawOverlayExtras(g){
+  if(!doc) return;
+  v11DrawGuideLines(g);
+  v11DrawGuideHandles(g);
+  // lasso in progress
+  if(G.v11lasso && G.v11lasso.pts.length > 1){
+    const pts = G.v11lasso.pts;
+    g.save();
+    g.beginPath();
+    g.moveTo(pts[0].x * zoom + panX, pts[0].y * zoom + panY);
+    for(let i = 1; i < pts.length; i++) g.lineTo(pts[i].x * zoom + panX, pts[i].y * zoom + panY);
+    g.closePath();
+    g.setLineDash([5, 4]);
+    g.lineWidth = 1;
+    g.strokeStyle = 'rgba(255,255,255,.9)';
+    g.stroke();
+    g.strokeStyle = 'rgba(0,0,0,.55)';
+    g.lineDashOffset = 4;
+    g.stroke();
+    g.restore();
+  }
+  // quick shape badge
+  const S = G.v11;
+  if(S && S.quick && hoverScr){
+    const nm = S.quick.kind === 'line' ? 'Line' : S.quick.kind === 'rect' ? 'Rectangle' : S.quick.kind === 'circle' ? 'Circle' : 'Ellipse';
+    const txt = '◇ QuickShape · ' + nm;
+    g.save();
+    g.font = '600 11px ui-monospace,monospace';
+    const w = g.measureText(txt).width + 18;
+    const x = v11Clamp(hoverScr.x + 16, 8, cv.clientWidth - w - 8);
+    const y = v11Clamp(hoverScr.y - 34, 8, cv.clientHeight - 30);
+    g.fillStyle = 'rgba(24,27,35,.92)';
+    g.strokeStyle = 'rgba(91,140,255,.8)';
+    g.lineWidth = 1;
+    if(g.roundRect){ g.beginPath(); g.roundRect(x, y, w, 24, 7); g.fill(); g.stroke() }
+    else{ g.fillRect(x, y, w, 24); g.strokeRect(x, y, w, 24) }
+    g.fillStyle = '#9db9ff';
+    g.fillText(txt, x + 9, y + 16);
+    g.restore();
+  }
+  // guide tool hint when off
+  if(curTool === 'guide'){
+    const st = v11GuideState(false);
+    if(!st || st.type === 'off'){
+      g.save();
+      g.font = '600 11px ui-monospace,monospace';
+      g.fillStyle = 'rgba(157,185,255,.9)';
+      g.fillText('Guide type OFF — Properties me Grid / Isometric / Perspective chuno', 16, cv.clientHeight - 48);
+      g.restore();
+    }
+  }
+}
+
+/* ---------- menus ---------- */
+function v11InstallMenus(){
+  const menu = (name) => MENUS[name] || null;
+  const has = (arr, label) => arr.some(it => it && it.l === label);
+  const F = menu('File'); if(F && !has(F, 'Comic Panel Template… 🗯')){
+    F.push('-', { l:'Comic Panel Template… 🗯', a:v11ComicPanelDialog });
+  }
+  const I = menu('Image');
+  if(I && !has(I, 'Flip Canvas Horizontal')){
+    I.push('-', { l:'Flip Canvas Horizontal', a:() => v11FlipCanvas(true) },
+      { l:'Flip Canvas Vertical', a:() => v11FlipCanvas(false) });
+  }
+  const La = menu('Layer');
+  if(La && !has(La, 'Alpha Lock (toggle) α')){
+    La.push('-', { l:'Alpha Lock (toggle) α', a:v11ToggleAlphaLock },
+      { l:'Reference Layer (toggle) ◎', a:v11ToggleRef });
+  }
+  const Fi = menu('Filter');
+  if(Fi && !has(Fi, 'Screentone / Halftone… 🔲')){
+    Fi.push('-',
+      { l:'Screentone / Halftone… 🔲', a:v11ScreentoneDialog },
+      { l:'Gradient Map… 🌈', a:v11GradientMapDialog },
+      { l:'Liquify… 💧', a:v11Liquify },
+      { l:'Focus Lines (manga)… 💥', a:v11FocusLinesDialog });
+  }
+  const S = menu('Select');
+  if(S && !has(S, 'Feather Selection…')){
+    S.push('-', { l:'Feather Selection…', a:v11FeatherDialog },
+      { l:'Expand Selection…', a:() => v11GrowDialog(true) },
+      { l:'Contract Selection…', a:() => v11GrowDialog(false) });
+  }
+  const V = menu('View');
+  if(V && !has(V, 'Drawing Guides… 📐')){
+    V.push({ l:'Drawing Guides… 📐', a:v11GuideDialog });
+  }
+  const H = menu('Help');
+  if(H && !has(H, 'What’s new in v11.0 — CSP × Procreate 🚀')){
+    H.unshift({ l:'What’s new in v11.0 — CSP × Procreate 🚀', a:v11WhatsNewDialog }, '-');
+  }
+  const nav = document.getElementById('menus');
+  if(nav){ nav.innerHTML = ''; buildMenus() }
+}
+
+/* ---------- keyboard ---------- */
+function v11InstallKeys(){
+  window.addEventListener('keydown', (e) => {
+    const tag = ((e.target && e.target.tagName) || '').toLowerCase();
+    if(tag === 'input' || tag === 'textarea' || tag === 'select' || e.isComposing) return;
+    if(e.ctrlKey || e.metaKey || e.altKey) return;
+    const k = (e.key || '').toLowerCase();
+    if(k === 'q'){ e.preventDefault(); setTool('lasso'); return }
+    if(k === 'u'){ e.preventDefault(); setTool('guide'); return }
+  }, false);
+}
+
+/* ---------- persistence wrappers ---------- */
+function v11HydrateFlags(docObj, payload){
+  if(!docObj || !payload) return;
+  const map = new Map();
+  const scan = arr => {
+    for(const lm of arr || []){
+      if(!lm) continue;
+      map.set(lm.id, lm);
+      if(lm.children) scan(lm.children);
+    }
+  };
+  if(payload.layers) scan(payload.layers);
+  if(Array.isArray(payload.boards)) payload.boards.forEach(b => scan(b.layers));
+  const walk = arr => {
+    for(const L of arr || []){
+      const lm = map.get(L.id);
+      if(lm){ L.alphaLock = !!lm.alphaLock; L.ref = !!lm.ref }
+      if(L.children) walk(L.children);
+    }
+  };
+  walk(docObj.layers);
+}
+
+function v11PatchPersistence(){
+  const s0 = serializeLayer;
+  serializeLayer = function(L){
+    const r = s0.apply(this, arguments);
+    try{ r.m.alphaLock = !!L.alphaLock; r.m.ref = !!L.ref }catch(e){}
+    return r;
+  };
+  const m0 = metaOf;
+  metaOf = function(L){
+    const m = m0.apply(this, arguments);
+    try{ m.alphaLock = !!L.alphaLock; m.ref = !!L.ref }catch(e){}
+    return m;
+  };
+  const p0 = projectLayer;
+  projectLayer = function(L){
+    const m = p0.apply(this, arguments);
+    try{ m.alphaLock = !!L.alphaLock; m.ref = !!L.ref }catch(e){}
+    return m;
+  };
+  const b0 = buildDocFromPayload;
+  buildDocFromPayload = async function(j){
+    const r = await b0.apply(this, arguments);
+    try{ v11HydrateFlags(r && r.doc, j) }catch(e){}
+    return r;
+  };
+  const l0 = loadProject;
+  loadProject = async function(j){
+    const r = await l0.apply(this, arguments);
+    try{
+      if(j && Array.isArray(j.boards) && typeof boards !== 'undefined' && boards){
+        j.boards.forEach((bp, i) => {
+          if(boards[i] && boards[i].doc) v11ApplyFlagsByOrder(boards[i].doc, bp);
+        });
+      }else if(typeof doc !== 'undefined' && doc){
+        v11ApplyFlagsByOrder(doc, j);
+      }
+      uiLayers();
+    }catch(e){}
+    return r;
+  };
+}
+
+/* ids kuch save paths me regenerate ho jaate hain — tree order same rehta hai */
+function v11ApplyFlagsByOrder(docObj, payload){
+  if(!docObj || !payload || !Array.isArray(payload.layers)) return;
+  const walk = (dest, src) => {
+    for(let i = 0; i < dest.length && i < src.length; i++){
+      const d = dest[i], s = src[i];
+      if(!d || !s) continue;
+      d.alphaLock = !!s.alphaLock;
+      d.ref = !!s.ref;
+      if(d.children && s.children) walk(d.children, s.children);
+    }
+  };
+  walk(docObj.layers, payload.layers);
+}
+
+/* ---------- CSS ---------- */
+function v11InjectCSS(){
+  if(document.getElementById('v11css')) return;
+  const st = document.createElement('style');
+  st.id = 'v11css';
+  st.textContent = `
+  .v11shelf{position:absolute;left:8px;bottom:36px;z-index:16;display:none;gap:6px;align-items:center;
+    background:rgba(24,26,33,.92);border:1px solid var(--line2);border-radius:12px;padding:5px 6px;
+    box-shadow:0 8px 24px rgba(0,0,0,.45);max-width:calc(100% - 16px)}
+  .v11shelf-scroll{display:flex;gap:5px;overflow-x:auto;scrollbar-width:none;max-width:min(62vw,560px)}
+  .v11shelf-scroll::-webkit-scrollbar{display:none}
+  .v11brush{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;
+    font-size:16px;background:var(--p2);border:1px solid transparent;cursor:pointer;flex:0 0 auto;color:var(--tx)}
+  .v11brush:hover{background:var(--p3)}
+  .v11brush.on{border-color:var(--acc);background:rgba(91,140,255,.18);box-shadow:0 0 0 1px rgba(91,140,255,.35) inset}
+  .v11shelf-gear{width:30px;height:30px;border-radius:8px;background:var(--p3);border:1px solid var(--line2);
+    color:var(--tx2);font-size:14px;cursor:pointer;flex:0 0 auto}
+  .v11shelf-gear:hover{color:#fff;border-color:var(--acc)}
+  .lact.v11alpha,.lact.v11ref{font-size:12px;line-height:1;font-weight:700}
+  .lact.v11alpha.on{color:#9db9ff;background:rgba(91,140,255,.2)}
+  .lact.v11ref.on{color:#ffb86b;background:rgba(255,184,107,.16)}
+  .v11dropghost{position:fixed;width:34px;height:34px;border-radius:50%;pointer-events:none;z-index:4000;
+    border:2px solid #fff;box-shadow:0 6px 20px rgba(0,0,0,.5),0 0 0 1px rgba(0,0,0,.35)}
+  .v11dropghost.over{transform:scale(1.18);box-shadow:0 0 0 2px rgba(91,140,255,.9),0 8px 24px rgba(0,0,0,.55)}
+  html.v11-dropping,html.v11-dropping *{cursor:copy !important}
+  .chip.on{border-color:var(--acc);background:rgba(91,140,255,.16);color:#fff}
+  @media (max-width:700px){
+    .v11shelf{bottom:calc(34px + env(safe-area-inset-bottom))}
+    .v11shelf-scroll{max-width:56vw}
+  }
+  `;
+  document.head.appendChild(st);
+}
+
+/* ---------- rebuild tool rail ---------- */
+function v11RebuildRail(){
+  const rail = document.getElementById('toolrail');
+  if(!rail) return;
+  rail.innerHTML = '';
+  buildToolrail();
+  rail.querySelectorAll('.tool').forEach(b => b.classList.toggle('on', b.dataset.tool === curTool));
+}
+
+/* keep the toast stack short (3 max) */
+function v11CapToasts(){
+  const t0 = toast;
+  toast = function(msg, cls, ms){
+    try{
+      const box = document.getElementById('toasts');
+      if(box) while(box.children.length >= 3) box.removeChild(box.firstChild);
+    }catch(e){}
+    return t0.apply(this, arguments);
+  };
+  try{ window.toast = toast }catch(e){}
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   18 · HOME LAUNCHER + HELP / SHORTCUTS — v11 entries
+   ══════════════════════════════════════════════════════════════════════════ */
+function v11DecorateHome(){
+  const box = document.querySelector('.homebox');
+  if(!box || box.querySelector('#v11HomeCsp')) return;
+  const acts = box.querySelector('.hacts');
+  if(!acts) return;
+  const style = 'display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left';
+  const btn = (label, sub, fn) => {
+    const b = el('button', 'hbtn');
+    b.id = 'v11HomeCsp';
+    b.style.cssText = style;
+    b.innerHTML = '<b style="font-size:12.5px">' + label + '</b><span style="font-size:10.5px;opacity:.72">' + sub + '</span>';
+    b.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const ov = box.closest('.modal-ov');
+      if(ov) ov.remove();
+      setTimeout(fn, 30);
+    });
+    return b;
+  };
+  const wrap = el('div', 'v11homebox');
+  wrap.style.cssText = 'margin-top:10px;border-top:1px solid var(--line2);padding-top:10px';
+  wrap.innerHTML = '<div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--tx2);font-weight:700;margin-bottom:7px">🖌️ Clip Studio × Procreate pack</div>';
+  const grid = el('div');
+  grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:7px';
+  const mk = (label, sub, fn) => {
+    const b = el('button', 'hbtn');
+    b.style.cssText = style;
+    b.innerHTML = '<b style="font-size:12.5px">' + label + '</b><span style="font-size:10.5px;opacity:.72">' + sub + '</span>';
+    b.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const ov = box.closest('.modal-ov');
+      if(ov) ov.remove();
+      setTimeout(fn, 30);
+    });
+    grid.appendChild(b);
+  };
+  mk('⚙ Brush Studio', 'Dynamic brushes · stabilizer · grain', () => { setTool('brush'); v11BrushStudio() });
+  mk('📐 Drawing Guides', 'Perspective · isometric · grid', v11GuideDialog);
+  mk('🗯 Comic Panels', '6 manga layouts, vector', v11ComicPanelDialog);
+  mk('🔲 Screentone', 'Halftone dots / lines / cross', v11ScreentoneDialog);
+  mk('🌊 Liquify', 'Push · twirl · pinch · bloat', v11Liquify);
+  mk('🚀 What’s new in v11', 'Full feature list', v11WhatsNewDialog);
+  wrap.appendChild(grid);
+  box.appendChild(wrap);
+}
+
+function v11PatchHome(){
+  const h0 = homeLauncher;
+  homeLauncher = function(){
+    h0.apply(this, arguments);
+    try{ v11DecorateHome() }catch(e){}
+  };
+  const hd0 = helpDialog;
+  helpDialog = function(){
+    hd0.apply(this, arguments);
+    try{
+      const body = document.querySelector('.modal .mbody');
+      if(!body) return;
+      const block = document.createElement('div');
+      block.innerHTML =
+        '<h4>🖌️ v11.0 — Clip Studio × Procreate pack</h4>' +
+        '<p>· <b>Brush Studio (⚙)</b> — 13 built-in brushes, pressure→size/opacity, taper, jitter, scatter, paper grain, brush blend, apna preset save. Brush/eraser select karne par canvas ke neeche brush shelf bhi aati hai.<br>' +
+        '· <b>Stabilizer / StreamLine</b> — Properties me slider (hand-shake correction).<br>' +
+        '· <b>QuickShape</b> — stroke ke end par ~0.4 s hold karo → line / circle / ellipse / rect.<br>' +
+        '· <b>ColorDrop</b> — palette swatch ko canvas par drag karo → region fill.<br>' +
+        '· <b>α Alpha Lock</b> + <b>◎ Reference Layer</b> — layer row ke chips (Procreate + CSP).<br>' +
+        '· <b>Vector Eraser</b> — eraser Properties me ON; vector strokes intersection par kat jaate hain.<br>' +
+        '· <b>Drawing Guides (U)</b> — 1-pt / 2-pt perspective, isometric, grid, radial + stroke snap.<br>' +
+        '· <b>Lasso (Q)</b> + Select menu me Feather / Expand / Contract.<br>' +
+        '· <b>Filter menu</b> → Screentone, Gradient Map, Liquify, Focus Lines.<br>' +
+        '· <b>File ▸ Comic Panel Template</b>, <b>Image ▸ Flip Canvas</b>.</p>';
+      const first = body.querySelector('h4');
+      if(first) body.insertBefore(block, first); else body.appendChild(block);
+      const head = document.querySelector('.modal .mhead');
+      if(head) head.textContent = head.textContent.replace('v10.3', 'v11.0');
+    }catch(e){}
+  };
+  const sc0 = shortcutsDialog;
+  shortcutsDialog = function(){
+    sc0.apply(this, arguments);
+    try{
+      const tbl = document.querySelector('.modal .mbody table');
+      if(!tbl) return;
+      const rows = [['Q', 'Lasso select'], ['U', 'Guide / ruler tool'], ['Alt+drag swatch', 'ColorDrop onto canvas'],
+        ['Hold at stroke end', 'QuickShape snap'], ['[ / ]', 'Brush size']];
+      for(const r of rows){
+        const tr = document.createElement('tr');
+        tr.innerHTML = '<td style="padding:4px 8px 4px 0;white-space:nowrap"><span class="kbd">' + r[0] + '</span></td><td style="color:var(--tx2)">' + r[1] + '</td>';
+        tbl.appendChild(tr);
+      }
+    }catch(e){}
+  };
+  // MENUS me purane function references stored hain — unhe naye wrappers par point karo
+  try{
+    if(MENUS && MENUS.Help){
+      for(const it of MENUS.Help){
+        if(!it || !it.a) continue;
+        if(it.l === 'Quick Guide (Hinglish)') it.a = helpDialog;
+        else if(it.l === 'Keyboard Shortcuts') it.a = shortcutsDialog;
+        else if(it.l === 'Home Screen') it.a = homeLauncher;
+      }
+    }
+  }catch(e){}
+}
+
+/* ---------- install ---------- */
+function v11Install(){
+  if(window.__av11) return;
+  window.__av11 = true;
+  v11InjectCSS();
+  v11CapToasts();
+  v11LoadSettings();
+  v11PatchPersistence();
+  v11AddTools();
+  v11PatchUI();
+  v11RebuildRail();
+  v11BuildShelf();
+  v11BindColorDrop();
+  v11InstallMenus();
+  v11InstallKeys();
+  v11PatchHome();
+  try{ uiProps() }catch(e){}
+  try{ uiLayers() }catch(e){}
+  try{ needRender = true }catch(e){}
+  try{ console.log('ArtViSiON v11.0 — Clip Studio × Procreate pack ready'); }catch(e){}
+}
+
+if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(v11Install, 0));
+else setTimeout(v11Install, 0);
 
 </script>
 <!-- ═══ ArtViSiON CDR engine v10 — pako (inflate) ═══ -->
