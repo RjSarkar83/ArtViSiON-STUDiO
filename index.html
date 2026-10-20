@@ -518,7 +518,7 @@ body.show-panel #panelScrim{display:block}
     </aside>
   </div>
 </div>
-<input type="file" id="fileInput" multiple accept=".png,.jpg,.jpeg,.webp,.gif,.bmp,.svg,.psd,.pdf,.ai,.eps,.ps,.dxf,.tif,.tiff,.json,.cdr,.cdt,.chitra,.artvision,image/*" style="display:none">
+<input type="file" id="fileInput" multiple accept=".png,.jpg,.jpeg,.webp,.gif,.bmp,.svg,.psd,.pdf,.ai,.eps,.ps,.dxf,.tif,.tiff,.json,.cdr,.cdt,.psb,.af,.afdesign,.afphoto,.chitra,.artvision,image/*" style="display:none">
 <div id="toasts"></div>
 <div id="modalRoot"></div>
 <div id="menuRoot"></div>
@@ -3123,10 +3123,12 @@ function newDocDialog(){
         m.querySelectorAll('#ndBg .chip').forEach(x=>x.classList.remove('on'));c.classList.add('on')})}})}
 /* ---------- help ---------- */
 function helpDialog(){
-  modal({title:'ArtViSiON Studio v10.0 — Quick Guide',body:`
+  modal({title:'ArtViSiON Studio v10.3 — Quick Guide',body:`
   <h4>🎯 Do engines, ek editor</h4>
   <p><b>Vector layer</b> (VEC): rectangle, ellipse, star, pen curves, text — zoom karne par kabhi pixel nahi bante, har waqt edit hote hain.</p>
   <p><b>Bitmap layer</b> (BIT): brush painting, eraser, bucket fill, photo import, filters (blur/sharpen/noise…), adjustments.</p>
+  <h4>🧩 Supported apps &amp; formats (Oct 2026)</h4>
+  <p>CorelDRAW Graphics Suite <b>2026 (v27.2)</b> · Adobe Photoshop <b>2026 (v27.11)</b> — PSD + PSB, 8/16-bit, CMYK · Adobe Illustrator <b>2026 (v30.8)</b> · Affinity by Canva <b>3.3.1</b> (SVG/PDF export) · Canva (SVG/PDF export). Poora matrix <b>Help ▸ Supported apps &amp; formats…</b> me hai.</p>
   <h4>🟠 CorelDRAW import (.cdr / .cdt)</h4>
   <p><b>File &gt; Open</b> (Ctrl+O) ya canvas par file drop karo — CorelDRAW <b>v3 se X6+</b> tak. Container RIFF ho, ZIP (<code>content/riffData.cdr</code>, <code>root.dat</code>) ya OLE compound file — jo bhi ho, parser khud detect karta hai.<br>
   · Artwork do layers me aata hai: <b>CDR bitmaps</b> (neechay) + <b>CDR vectors</b> (upar) — dono editable, kuch bhi flattened nahi<br>
@@ -4272,7 +4274,7 @@ async function placePSD(buf,name){
    Shape Z-order · Gradient Paint tool · Text-on-Path ·
    Recent Colors · Autosave
    ============================================================ */
-const APP_VERSION='10.2';
+const APP_VERSION='10.3';
 let CUR_LAYER=null;
 
 /* ---------- Layer FX (non-destructive, render-time) ---------- */
@@ -7981,6 +7983,645 @@ function HITPAD() {
       wrapped.__avWrapped = true;
       window.importCDRFile = wrapped;
     }
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(install, 0); });
+  else setTimeout(install, 0);
+})();
+
+
+/* ═══ v10.3 vector/format layer ═══ */
+/* ══════════════════════════════════════════════════════════════════════════
+   ArtViSiON STUDiO — v10.3 "true vector" renderer + modern format support
+   Injected at the end of the app script (shares its lexical scope).
+
+   1. render() override: above ~1.25× zoom the viewport is painted from the
+      real vectors at device resolution instead of upscaling the
+      document-resolution composite → no more stair-stepped ("pixelated")
+      vectors at zoom-in.
+   2. PSD/PSB: Photoshop Large Document (version 2), 16-bit, CMYK, plus the
+      64-bit layer section lengths PSB uses.
+   3. "Format support" help dialog + file-input/route upgrades for the
+      current releases of Photoshop, Illustrator, Affinity, CorelDRAW & Canva.
+   ══════════════════════════════════════════════════════════════════════════ */
+'use strict';
+
+(function () {
+  var PHONE_LIMIT = 700;
+
+  /* ══════════════════ 1. crisp vector viewport ══════════════════ */
+
+  /* cached doc-space bbox — rebuilt only when the shape or its transform changed */
+  function cullBox(s) {
+    var t = s.t;
+    if (s.__cb && s.__cbT === t && !s.__cbDirty) return s.__cb;
+    var b;
+    try { b = shapeBBoxDoc(s); } catch (e) { b = { x: -1e9, y: -1e9, x2: 1e9, y2: 1e9 }; }
+    if (!isFinite(b.x) || !isFinite(b.y)) b = { x: -1e9, y: -1e9, x2: 1e9, y2: 1e9 };
+    s.__cb = b; s.__cbT = t; s.__cbDirty = false;
+    return b;
+  }
+
+  var lastInteract = 0;
+
+  /* Defensive: a pointerdown can arrive for a pointer that is already gone
+     (synthetic events, cancelled touches, stylus palm-rejects). The browser
+     then throws NotFoundError from setPointerCapture, which aborts the whole
+     stroke handler — guard it so a stroke never dies for that reason. */
+  function installPointerGuards() {
+    try {
+      ['setPointerCapture', 'releasePointerCapture'].forEach(function (fn) {
+        var orig = Element.prototype[fn];
+        if (typeof orig !== 'function' || orig.__avGuard) return;
+        var wrapped = function (id) { try { return orig.call(this, id); } catch (e) { return undefined; } };
+        wrapped.__avGuard = true;
+        Element.prototype[fn] = wrapped;
+      });
+    } catch (e) {}
+  }
+
+  /* mark user activity so panning/zooming stays at full frame-rate and the
+     crisp pass only runs once the gesture settles */
+  function installActivityTracking() {
+    var mark = function () { lastInteract = performance.now(); };
+    ['pointerdown', 'pointermove', 'wheel', 'touchstart', 'touchmove', 'keydown'].forEach(function (ev) {
+      window.addEventListener(ev, mark, { capture: true, passive: true });
+    });
+  }
+
+  function invalidateCull() {
+    try {
+      if (!doc) return;
+      for (var i = 0; i < doc.layers.length; i++) {
+        var L = doc.layers[i];
+        if (!L.shapes) continue;
+        for (var j = 0; j < L.shapes.length; j++) if (L.shapes[j]._dirty) L.shapes[j].__cbDirty = true;
+      }
+    } catch (e) {}
+  }
+
+  /* ── hybrid renderer ────────────────────────────────────────────────────
+     Strategy for pixel-perfect vectors without dropping frames:
+       • the visible area is rendered into an offscreen TILE at true device
+         resolution (zoom × dpr), so curves are painted at the resolution they
+         are actually displayed at — never an upscaled 1× bitmap;
+       • the tile carries a margin, so panning just re-blits it 1:1 (no
+         resampling, no repaint) and stays razor sharp and cheap;
+       • when a pan/zoom leaves the tile, or the document changes, the tile is
+         rebuilt from the vector model for the shapes that are visible;
+       • tiny documents skip all of it and paint straight to the viewport.   */
+  var _tile = null, _docVer = 0;
+  var TILE_PX = 9e6, TILE_PAD = 0.30, MAXK = 24;
+
+  function countShapes() {
+    var n = 0;
+    for (var i = 0; i < doc.layers.length; i++) if (doc.layers[i].visible !== false && doc.layers[i].shapes) n += doc.layers[i].shapes.length;
+    return n;
+  }
+
+  /* ── high-resolution rendering for FX layers and groups ─────────────────
+     The stock drawLayerFxOrPlain()/drawGroupLayer() rasterise the layer into
+     a document-resolution canvas, so at 200–800 % zoom those layers came out
+     blurry even after the main renderer went crisp. These helpers rasterise
+     only the layer's own bounds (plus FX spill) at the current device scale. */
+
+  function mergeBox(a, b) {
+    if (!a) return b ? { x: b.x, y: b.y, x2: b.x2, y2: b.y2 } : null;
+    if (!b) return a;
+    return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), x2: Math.max(a.x2, b.x2), y2: Math.max(a.y2, b.y2) };
+  }
+
+  function layerBounds(L) {
+    if (!L) return null;
+    if (L.type === 'raster') {
+      if (!L.canvas) return null;
+      var ox = (L.offset && L.offset.x) || 0, oy = (L.offset && L.offset.y) || 0;
+      return { x: ox, y: oy, x2: ox + L.canvas.width, y2: oy + L.canvas.height };
+    }
+    if (L.type === 'group') {
+      var gb = null;
+      for (var i = 0; i < (L.children || []).length; i++) {
+        var ch = L.children[i];
+        if (ch.visible === false) continue;
+        gb = mergeBox(gb, layerBounds(ch));
+      }
+      return gb;
+    }
+    var b = null;
+    for (var j = 0; j < (L.shapes || []).length; j++) b = mergeBox(b, cullBox(L.shapes[j]));
+    return b;
+  }
+
+  function fxSpill(L) {
+    var fx = L.fx || {}, sp = 2;
+    if (fx.shadow && fx.shadow.on) sp = Math.max(sp, (fx.shadow.blur || 0) * 2 + Math.abs(fx.shadow.ox || 0) + Math.abs(fx.shadow.oy || 0));
+    if (fx.glow && fx.glow.on) sp = Math.max(sp, (fx.glow.blur || 0) * 2);
+    if (fx.outline && fx.outline.on) sp = Math.max(sp, (fx.outline.width || 1) * 2);
+    return sp;
+  }
+
+  var LAYER_PIX = 8e6;
+
+  /* Render one layer (with its FX) into a canvas at k device px per doc unit,
+     clipped to the doc-space rect R. Returns {canvas,x0,y0,x1,y1} or null. */
+  function renderLayerHi(L, k, R) {
+    var b = layerBounds(L);
+    if (!b) return null;
+    var sp = fxSpill(L) + 2;
+    var x0 = Math.max(R.x0, b.x - sp), y0 = Math.max(R.y0, b.y - sp);
+    var x1 = Math.min(R.x1, b.x2 + sp), y1 = Math.min(R.y1, b.y2 + sp);
+    if (!(x1 > x0) || !(y1 > y0)) return null;
+    var w = Math.ceil((x1 - x0) * k), h = Math.ceil((y1 - y0) * k);
+    if (w < 1 || h < 1) return null;
+    if (w * h > LAYER_PIX) {
+      var f = Math.sqrt(LAYER_PIX / (w * h));
+      k = k * f; w = Math.ceil((x1 - x0) * k); h = Math.ceil((y1 - y0) * k);
+      if (w < 1 || h < 1) return null;
+    }
+    var tmp = mkCanvas(w, h), tg = tmp.getContext('2d');
+    tg.imageSmoothingEnabled = true; tg.imageSmoothingQuality = 'high';
+
+    if (L.type === 'group') {
+      for (var i = 0; i < (L.children || []).length; i++) {
+        var ch = L.children[i];
+        if (ch.visible === false) continue;
+        var ci = renderLayerHi(ch, k, { x0: x0, y0: y0, x1: x1, y1: y1 });
+        if (!ci) continue;
+        tg.save();
+        tg.setTransform(1, 0, 0, 1, 0, 0);
+        tg.globalAlpha = ch.opacity == null ? 1 : ch.opacity;
+        tg.globalCompositeOperation = (!ch.blend || ch.blend === 'source-over') ? 'source-over' : ch.blend;
+        tg.drawImage(ci.canvas, (ci.x0 - x0) * k, (ci.y0 - y0) * k, (ci.x1 - ci.x0) * k, (ci.y1 - ci.y0) * k);
+        tg.restore();
+      }
+    } else if (L.type === 'raster') {
+      tg.setTransform(k, 0, 0, k, -x0 * k, -y0 * k);
+      if (L.mask && L.mask.enabled && L.mask.canvas) {
+        var mx = mkCanvas(w, h), mg = mx.getContext('2d');
+        mg.setTransform(k, 0, 0, k, -x0 * k, -y0 * k);
+        mg.drawImage(L.canvas, (L.offset && L.offset.x) || 0, (L.offset && L.offset.y) || 0);
+        mg.setTransform(1, 0, 0, 1, 0, 0);
+        mg.globalCompositeOperation = 'destination-in';
+        mg.drawImage(L.mask.canvas, -x0 * k, -y0 * k, doc.w * k, doc.h * k);
+        tg.setTransform(1, 0, 0, 1, 0, 0);
+        tg.drawImage(mx, 0, 0);
+      } else {
+        tg.drawImage(L.canvas, (L.offset && L.offset.x) || 0, (L.offset && L.offset.y) || 0);
+      }
+    } else {
+      tg.setTransform(k, 0, 0, k, -x0 * k, -y0 * k);
+      CUR_LAYER = L;
+      for (var si = 0; si < L.shapes.length; si++) drawShape(tg, L.shapes[si]);
+      CUR_LAYER = null;
+    }
+
+    var fx = L.fx;
+    if (!fx || !fxAnyOn(L)) return { canvas: tmp, x0: x0, y0: y0, x1: x1, y1: y1 };
+
+    var out = mkCanvas(w, h), og = out.getContext('2d');
+    var S = 100000;
+    if (fx.outline && fx.outline.on) {
+      var sil = silhouette(tmp, fx.outline.color || '#ffffff');
+      var r = Math.max(1, (fx.outline.width || 1) * k), steps = 14;
+      for (var o = 0; o < steps; o++) {
+        var a = o / steps * Math.PI * 2;
+        og.drawImage(sil, Math.cos(a) * r, Math.sin(a) * r);
+      }
+    }
+    if (fx.shadow && fx.shadow.on) {
+      og.save();
+      og.globalAlpha = fx.shadow.op == null ? 0.6 : fx.shadow.op / 100;
+      og.shadowColor = fx.shadow.color || '#000000';
+      og.shadowBlur = (fx.shadow.blur || 0) * k;
+      og.shadowOffsetX = (fx.shadow.ox || 0) * k + S;
+      og.shadowOffsetY = (fx.shadow.oy || 0) * k;
+      og.drawImage(tmp, -S, 0);
+      og.restore();
+    }
+    if (fx.glow && fx.glow.on) {
+      og.save();
+      og.shadowColor = fx.glow.color || '#22d3ee';
+      og.shadowBlur = (fx.glow.blur || 0) * k;
+      og.shadowOffsetX = S;
+      og.drawImage(tmp, -S, 0);
+      og.drawImage(tmp, -S, 0);
+      og.drawImage(tmp, -S, 0);
+      og.restore();
+    }
+    og.drawImage(tmp, 0, 0);
+    return { canvas: out, x0: x0, y0: y0, x1: x1, y1: y1 };
+  }
+
+  /* blit a layer rendered at the current scale into a context whose transform
+     maps doc units to k device px */
+  function blitLayerHi(g, L, k, R) {
+    var r = renderLayerHi(L, k, R);
+    if (!r) return false;
+    g.save();
+    g.globalAlpha = L.opacity == null ? 1 : L.opacity;
+    g.globalCompositeOperation = (!L.blend || L.blend === 'source-over') ? 'source-over' : L.blend;
+    g.drawImage(r.canvas, r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+    g.restore();
+    return true;
+  }
+
+  function viewDocRect(cssW, cssH) {
+    return { x0: -panX / zoom, y0: -panY / zoom, x1: (cssW - panX) / zoom, y1: (cssH - panY) / zoom };
+  }
+
+  function tileCovers(cssW, cssH) {
+    if (!_tile) return false;
+    var v = viewDocRect(cssW, cssH);
+    var m = 2 / zoom;
+    return v.x0 >= _tile.x0 + m && v.y0 >= _tile.y0 + m && v.x1 <= _tile.x1 - m && v.y1 <= _tile.y1 - m;
+  }
+
+  function buildTile(cssW, cssH) {
+    var v = viewDocRect(cssW, cssH);
+    var vw = Math.max(1, v.x1 - v.x0), vh = Math.max(1, v.y1 - v.y0);
+    var x0 = v.x0 - vw * TILE_PAD, y0 = v.y0 - vh * TILE_PAD;
+    var tw = vw * (1 + 2 * TILE_PAD), th = vh * (1 + 2 * TILE_PAD);
+    var k = Math.min(MAXK, Math.max(1, zoom * dpr));
+    // prefer a 1:1 blit: shrink the margin before lowering resolution
+    for (var pass = 0; pass < 2 && tw * k * th * k > TILE_PX; pass++) {
+      var f0 = Math.sqrt(TILE_PX / (tw * k * th * k));
+      tw *= f0; th *= f0;                 // pass 0: trim the tile area
+      if (pass === 1) k = Math.max(0.5, k * f0);
+    }
+    if (tw * k * th * k > TILE_PX) k = Math.max(0.5, Math.sqrt(TILE_PX / (tw * th)));
+    x0 += (vw * (1 + 2 * TILE_PAD) - tw) / 2; y0 += (vh * (1 + 2 * TILE_PAD) - th) / 2;
+    var t = { x0: x0, y0: y0, x1: x0 + tw, y1: y0 + th, k: k, cssW: cssW, cssH: cssH, ver: _docVer };
+    var cw = Math.max(1, Math.ceil(tw * k)), ch = Math.max(1, Math.ceil(th * k));
+    var c = mkCanvas(cw, ch);
+    var g = c.getContext('2d');
+    g.setTransform(k, 0, 0, k, -x0 * k, -y0 * k);
+    g.imageSmoothingEnabled = true;
+    g.imageSmoothingQuality = 'high';
+    var R = { x0: x0, y0: y0, x1: x0 + tw, y1: y0 + th };
+    for (var i = 0; i < doc.layers.length; i++) {
+      var L = doc.layers[i];
+      if (!L.visible) continue;
+      if (L.type === 'group' || fxAnyOn(L)) {
+        if (blitLayerHi(g, L, k, R)) continue;
+      }
+      drawLayerFxOrPlain(g, L);
+    }
+    t.canvas = c; t.cw = cw; t.ch = ch;
+    _tile = t;
+    return t;
+  }
+
+  function blitTile(t) {
+    var s = t.k, z = zoom;
+    ctx.imageSmoothingEnabled = Math.abs(s / (z * dpr) - 1) < 0.02;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(t.canvas, 0, 0, t.cw, t.ch,
+      panX + t.x0 * z, panY + t.y0 * z, (t.x1 - t.x0) * z, (t.y1 - t.y0) * z);
+  }
+
+  function paintVectorsDirect(cssW, cssH) {
+    var v = viewDocRect(cssW, cssH);
+    var s = dpr * zoom;
+    ctx.setTransform(s, 0, 0, s, panX * dpr, panY * dpr);
+    for (var i = 0; i < doc.layers.length; i++) {
+      var L = doc.layers[i];
+      if (!L.visible) continue;
+      if (L.type === 'group' || fxAnyOn(L)) {
+        if (blitLayerHi(ctx, L, s, v)) continue;
+      }
+      if (L.type === 'vector' && !L.clip && !fxAnyOn(L)) {
+        CUR_LAYER = L;
+        ctx.save();
+        ctx.globalAlpha = L.opacity;
+        for (var si = 0; si < L.shapes.length; si++) {
+          var sh = L.shapes[si];
+          if (sh._ghost) continue;
+          var bb = cullBox(sh);
+          if (bb.x2 < v.x0 || bb.x > v.x1 || bb.y2 < v.y0 || bb.y > v.y1) continue;
+          drawShape(ctx, sh);
+        }
+        ctx.restore();
+      } else {
+        drawLayerFxOrPlain(ctx, L);
+      }
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function installCrispRender() {
+    if (typeof render !== 'function' || render.__avCrisp) return;
+    var baseRender = render;
+
+    var fast = function () {
+      try {
+        if (!doc || typeof zoom !== 'number') return baseRender.apply(this, arguments);
+        if (zoom < 1.25) return baseRender.apply(this, arguments);
+        if (docDirty) {
+          invalidateCull();
+          renderComposite();
+          _tile = null;
+          _docVer++;
+        }
+        var cssW = cv.clientWidth, cssH = cv.clientHeight;
+        if (!cssW || !cssH) return baseRender.apply(this, arguments);
+
+        var busy = (performance.now() - lastInteract) < 170;
+        var small = countShapes() <= 600;
+        var usable = _tile && _tile.ver === _docVer && tileCovers(cssW, cssH);
+
+        // mid-gesture: keep whatever we have (a zoom-res tile blits sharp), else
+        // fall back to the cheap composite and schedule a crisp repaint
+        if (busy && !usable) {
+          clearTimeout(fast.__t);
+          fast.__t = setTimeout(function () { needRender = true; }, 180);
+          return baseRender.apply(this, arguments);
+        }
+        if (!usable) {
+          if (small) { /* painted directly below */ }
+          else if (busy) return baseRender.apply(this, arguments);
+          else buildTile(cssW, cssH);
+        }
+
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        // paint the dark surround only where the page does not cover it, so a
+        // zoomed-in view does not pay for a full-viewport fill every frame
+        var dx = panX, dy = panY, dw = doc.w * zoom, dh = doc.h * zoom;
+        var ix0 = Math.max(0, dx), iy0 = Math.max(0, dy), ix1 = Math.min(cssW, dx + dw), iy1 = Math.min(cssH, dy + dh);
+        ctx.fillStyle = '#131418';
+        if (ix1 <= ix0 || iy1 <= iy0) {
+          ctx.fillRect(0, 0, cssW, cssH);
+        } else {
+          if (iy0 > 0) ctx.fillRect(0, 0, cssW, iy0);
+          if (iy1 < cssH) ctx.fillRect(0, iy1, cssW, cssH - iy1);
+          if (ix0 > 0 && iy1 > iy0) ctx.fillRect(0, iy0, ix0, iy1 - iy0);
+          if (ix1 < cssW && iy1 > iy0) ctx.fillRect(ix1, iy0, cssW - ix1, iy1 - iy0);
+        }
+        ctx.save();
+        ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 26; ctx.shadowOffsetY = 6;
+        ctx.fillStyle = '#101116'; ctx.fillRect(panX, panY, doc.w * zoom, doc.h * zoom);
+        ctx.restore();
+        ctx.save();
+        ctx.beginPath(); ctx.rect(panX, panY, doc.w * zoom, doc.h * zoom); ctx.clip();
+        if (checkerPat) { ctx.fillStyle = checkerPat; ctx.fillRect(panX, panY, doc.w * zoom, doc.h * zoom); }
+        if (small) paintVectorsDirect(cssW, cssH);
+        else blitTile(_tile);
+        if (anim && anim.onionCanvas) {
+          ctx.globalAlpha = .28;
+          ctx.drawImage(anim.onionCanvas, panX, panY, doc.w * zoom, doc.h * zoom);
+          ctx.globalAlpha = 1;
+        }
+        ctx.restore();
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        drawOverlay(ctx);
+        for (var j = 0; j < doc.layers.length; j++) if (doc.layers[j].thumbDirty) drawThumb(doc.layers[j]);
+        needRender = false;
+        return;
+      } catch (e) {
+        try { console.warn('[crisp render] fallback', e && e.message); } catch (e2) {}
+        return baseRender.apply(this, arguments);
+      }
+    };
+    fast.__avCrisp = true;
+    render = fast;
+  }
+
+  /* Keep the toast column short: holding Ctrl+Z on an empty history used to
+     stack one toast per key-press until they covered the whole canvas. */
+  function installToastLimiter() {
+    if (typeof toast !== 'function' || toast.__avLim) return;
+    var base = toast;
+    var wrapped = function (msg, cls, ms) {
+      try {
+        var box = document.getElementById('toasts');
+        if (box) while (box.children.length >= 4) box.removeChild(box.firstChild);
+      } catch (e) {}
+      return base.apply(this, arguments);
+    };
+    wrapped.__avLim = true;
+    try { toast = wrapped; } catch (e) {}
+    try { window.toast = wrapped; } catch (e) {}
+  }
+
+  /* ══════════════════ 2. PSD / PSB — modern Photoshop ══════════════════ */
+
+  /* PackBits / RLE row decoder used by PSD & PSB image data */
+  function unpackRLE(src, off, dst, dOff, len) {
+    var i = off, d = dOff, end = dOff + len;
+    while (d < end && i < src.length) {
+      var h = src[i++];
+      if (h < 128) {
+        var n = h + 1;
+        for (var k = 0; k < n && d < end; k++) dst[d++] = src[i++];
+      } else if (h > 128) {
+        var n2 = 257 - h, v = src[i++];
+        for (var k2 = 0; k2 < n2 && d < end; k2++) dst[d++] = v;
+      }
+    }
+    return i;
+  }
+
+  function psdDecode(buf) {
+    var dv = new DataView(buf);
+    var u8 = new Uint8Array(buf);
+    var str4 = function (o) { return String.fromCharCode(u8[o], u8[o + 1], u8[o + 2], u8[o + 3]); };
+    if (str4(0) !== '8BPS') throw new Error('PSD signature nahi mila — ye PSD/PSB file nahi hai');
+    var ver = dv.getUint16(4);
+    if (ver !== 1 && ver !== 2) throw new Error('PSD version ' + ver + ' supported nahi');
+    var large = ver === 2;                       // PSB: 64-bit section lengths
+    var channels = dv.getUint16(12);
+    var H = dv.getUint32(14), W = dv.getUint32(18);
+    var depth = dv.getUint16(22), mode = dv.getUint16(24);
+    var MAXPX = large ? 300000 : 30000;
+    if (W > MAXPX || H > MAXPX) throw new Error('PSD/PSB dimensions ' + W + '×' + H + ' supported nahi');
+    if (W * H > 120e6) throw new Error('PSD/PSB bahut bada hai (max 120 MP)');
+    if (depth !== 8 && depth !== 16) throw new Error('Sirf 8-bit / 16-bit PSD supported (mila ' + depth + '-bit)');
+    if (mode !== 3 && mode !== 1 && mode !== 4) throw new Error('Sirf RGB / Grayscale / CMYK PSD supported');
+
+    var o = 26;
+    // colour-mode and image-resource lengths are 32-bit in both PSD and PSB;
+    // only the layer & mask section switches to a 64-bit length in PSB
+    var skip32 = function () { o += 4 + dv.getUint32(o, false); };
+    var skipLen = function () { o += (large ? 8 : 4) + (large ? Number(dv.getBigUint64(o, false)) : dv.getUint32(o, false)); };
+    skip32();        // colour mode data
+    skip32();        // image resources
+    skipLen();       // layer & mask info
+    var comp = dv.getUint16(o); o += 2;
+    var plane = W * H;
+    var bytesPerSample = depth === 16 ? 2 : 1;
+    var nCh = mode === 4 ? Math.min(channels, 5) : (mode === 1 ? Math.min(channels, 2) : Math.min(channels, 4));
+    var planes = [], c, i;
+
+    if (comp === 0) {
+      for (c = 0; c < nCh; c++) planes.push(u8.subarray(o + c * plane * bytesPerSample, o + (c + 1) * plane * bytesPerSample));
+    } else if (comp === 1) {
+      // RLE row counts are UInt16 in PSD and UInt32 in PSB
+      var cntSize = large ? 4 : 2;
+      var counts = new Uint32Array(nCh * H);
+      for (i = 0; i < nCh * H; i++) {
+        counts[i] = cntSize === 4 ? dv.getUint32(o + i * 4, false) : dv.getUint16(o + i * 2, false);
+      }
+      o += nCh * H * cntSize;
+      var rowBytes = W * bytesPerSample;
+      for (c = 0; c < nCh; c++) {
+        var pl = new Uint8Array(rowBytes * H);
+        for (var r = 0; r < H; r++) {
+          var len = counts[c * H + r];
+          unpackRLE(u8, o, pl, r * rowBytes, rowBytes);
+          o += len;
+        }
+        planes.push(pl);
+      }
+    } else {
+      throw new Error('PSD compression ' + comp + ' supported nahi — "Maximize Compatibility" on karke save karo');
+    }
+
+    var out = new Uint8ClampedArray(W * H * 4);
+    var sample = function (pl, idx) {
+      if (!pl) return 0;
+      if (depth === 16) return (pl[idx * 2] << 8) | pl[idx * 2 + 1];
+      return pl[idx];
+    };
+    var to8 = depth === 16 ? (v => v >> 8) : (v => v);
+    for (i = 0; i < plane; i++) {
+      var r8, g8, b8, a8 = 255;
+      if (mode === 1) {
+        r8 = g8 = b8 = to8(sample(planes[0], i));
+        a8 = planes[1] ? to8(sample(planes[1], i)) : 255;
+      } else if (mode === 4) {
+        var C = sample(planes[0], i) / (depth === 16 ? 65535 : 255);
+        var M = sample(planes[1], i) / (depth === 16 ? 65535 : 255);
+        var Y = sample(planes[2], i) / (depth === 16 ? 65535 : 255);
+        var K = sample(planes[3], i) / (depth === 16 ? 65535 : 255);
+        r8 = Math.round(255 * (1 - Math.min(1, C * (1 - K) + K)));
+        g8 = Math.round(255 * (1 - Math.min(1, M * (1 - K) + K)));
+        b8 = Math.round(255 * (1 - Math.min(1, Y * (1 - K) + K)));
+        a8 = planes[4] ? to8(sample(planes[4], i)) : 255;
+      } else {
+        r8 = to8(sample(planes[0], i));
+        g8 = to8(sample(planes[1], i));
+        b8 = planes[2] ? to8(sample(planes[2], i)) : 0;
+        a8 = planes[3] ? to8(sample(planes[3], i)) : 255;
+      }
+      out[i * 4] = r8; out[i * 4 + 1] = g8; out[i * 4 + 2] = b8; out[i * 4 + 3] = a8;
+    }
+    var modeName = mode === 1 ? 'Grayscale' : mode === 4 ? 'CMYK' : 'RGB';
+    return {
+      width: W, height: H, data: out,
+      info: W + '×' + H + ' · ' + modeName + ' · ' + depth + '-bit · ' + (comp === 1 ? 'RLE' : 'Raw') + (large ? ' · PSB' : '')
+    };
+  }
+
+  function installPSD() {
+    if (typeof window === 'undefined') return;
+    window.decodePSD = psdDecode;
+    window.__avPSD = psdDecode;
+    // route .psb through the same importer
+    if (typeof openFiles === 'function' && !openFiles.__avPSB) {
+      var base = openFiles;
+      var routed = function (files) {
+        try {
+          var list = Array.prototype.slice.call(files);
+          // Affinity (v2 .afdesign/.afphoto, v3 .af) is a closed container —
+          // explain the one-step export instead of failing silently
+          var af = list.filter(function (f) { return /\.(af|afdesign|afphoto)$/i.test(f.name || ''); });
+          if (af.length) {
+            toast('Affinity file (' + af[0].name + ') — Affinity me File ▸ Export ▸ SVG ya PSD karo, phir yahan kholo', 'err', 8000);
+            list = list.filter(function (f) { return af.indexOf(f) < 0; });
+            if (!list.length) return;
+            files = list;
+          }
+          var psb = list.filter(function (f) { return /\.psb$/i.test(f.name || ''); });
+          if (!psb.length) return base.apply(this, arguments);
+          var rest = list.filter(function (f) { return !/\.psb$/i.test(f.name || ''); });
+          psb.forEach(function (f) {
+            f.arrayBuffer().then(function (b) {
+              try { placePSD(b, f.name); } catch (err) { toast('PSB: ' + err.message, 'err', 6500); }
+            });
+          });
+          if (rest.length) return base.call(this, rest);
+          return;
+        } catch (e) { return base.apply(this, arguments); }
+      };
+      routed.__avPSB = true;
+      openFiles = routed;
+      window.openFiles = routed;
+    }
+  }
+
+  /* ══════════════════ 3. format-support dialog ══════════════════ */
+
+  var FORMAT_TABLE = [
+    ['📕', 'CorelDRAW Graphics Suite', '2026 (v27.2, Sep 2026) — also X3 → 2025, v3+', '.cdr .cdt', 'Native engine — geometry, text, fills, gradients, bitmaps'],
+    ['🅿️', 'Adobe Photoshop', '2026 (v27.11, Oct 2026) — PSD 8/16-bit, PSB large', '.psd .psb', 'Composite image, alpha, RGB / Grayscale / CMYK'],
+    ['🅰️', 'Adobe Illustrator', '2026 (v30.8.1, Sep 2026) — PDF-based AI', '.ai .pdf', 'Vector paths, groups, live text'],
+    ['🎯', 'Affinity by Canva', '3.3.1 (Oct 2026) — export route', '.svg .pdf', 'SVG / PDF / PSD export karo → editable vectors'],
+    ['🎨', 'Canva', 'Current web app (2026) — export route', '.svg .pdf .png', 'SVG / PDF export karo → vectors'],
+    ['🧩', 'Other', 'Inkscape · Figma · Sketch · Procreate · XD', '.svg .pdf .png .dxf', 'SVG / PDF seedha editable aata hai']
+  ];
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+
+  function formatDialog() {
+    var rows = FORMAT_TABLE.map(function (r) {
+      return '<tr>' +
+        '<td style="padding:7px 8px;font-size:15px">' + r[0] + '</td>' +
+        '<td style="padding:7px 8px"><b>' + esc(r[1]) + '</b><div style="font-size:11px;opacity:.72">' + esc(r[2]) + '</div></td>' +
+        '<td style="padding:7px 8px;font-family:ui-monospace,monospace;font-size:11.5px;color:#9db9ff">' + esc(r[3]) + '</td>' +
+        '<td style="padding:7px 8px;font-size:11.5px;opacity:.85">' + esc(r[4]) + '</td>' +
+        '</tr>';
+    }).join('');
+    var body =
+      '<p style="margin:0 0 10px;font-size:12.5px;line-height:1.55">Sabhi formats <b>browser me hi</b> parse hote hain — koi upload nahi. ' +
+      'Vector formats vector hi rehte hain (zoom karne par pixel nahi bante).</p>' +
+      '<div style="overflow:auto;border:1px solid rgba(255,255,255,.12);border-radius:10px">' +
+      '<table style="border-collapse:collapse;width:100%;min-width:520px">' +
+      '<thead><tr style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;opacity:.65;text-align:left">' +
+      '<th style="padding:7px 8px"> </th><th style="padding:7px 8px">App</th><th style="padding:7px 8px">Version</th><th style="padding:7px 8px">Import</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody></table></div>' +
+      '<p style="margin:12px 0 0;font-size:11.5px;opacity:.72;line-height:1.55">' +
+      '<b>Tip:</b> kisi bhi app se <b>File ▸ Export ▸ SVG</b> (ya PDF) karo — wo Studio me 100% editable nodes ban jata hai. ' +
+      'Affinity/Canva SVG export hi best route hai.</p>';
+    try { modal({ title: 'Supported apps & formats', body: body }); }
+    catch (e) { try { toast('Formats: CDR · PSD/PSB · AI · SVG · PDF', 'ok', 5000); } catch (e2) {} }
+  }
+
+  function installMenuEntries() {
+    try {
+      if (typeof MENUS !== 'object' || !MENUS) return;
+      var has = MENUS.Help.some(function (it) { return it && it.l === 'Supported apps & formats…'; });
+      if (!has) {
+        MENUS.Help.unshift({ l: 'Supported apps & formats… 🧩', a: formatDialog });
+        MENUS.Help.unshift('-');
+      }
+      if (MENUS.File && !MENUS.File.some(function (it) { return it && it.l === 'Import Photoshop PSB…'; })) {
+        var idx = 2;
+        MENUS.File.splice(idx, 0, { l: 'Open / Import… (PSB · AI · Affinity · Canva export)', a: function () { $('#fileInput').click(); } });
+      }
+      // rebuild the menu bar so the new entries show up immediately
+      if (typeof buildMenus === 'function') {
+        var nav = document.getElementById('menus');
+        if (nav) nav.innerHTML = '';
+        buildMenus();
+      }
+    } catch (e) {}
+  }
+
+  /* ══════════════════ install ══════════════════ */
+  function install() {
+    if (window.__avVectorFix) return;
+    window.__avVectorFix = true;
+    installPointerGuards();
+    installToastLimiter();
+    installActivityTracking();
+    installCrispRender();
+    installPSD();
+    installMenuEntries();
+    try { window.avFormatDialog = formatDialog; } catch (e) {}
+    try { if (typeof needRender !== 'undefined') needRender = true; } catch (e) {}
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(install, 0); });

@@ -10,6 +10,39 @@
 
 ArtViSiON Studio combines a vector/bitmap design editor with an integrated Pro Converter and the searchable **Vector Portfolio mockup library**. The portfolio integration includes 174 original SVG scenes across 23 categories. The editor's unrelated tools and the Converter integration remain included.
 
+## ✨ v10.3 — True-vector zoom + 2026 app support
+
+**Zoomed artwork no longer pixelates.** The viewport used to blit the document-resolution composite and scale it up, so every zoom > 100 % showed stair-stepped edges. v10.3 paints the document from its real vector model at *device* resolution:
+
+| Case | Renderer | Why |
+| --- | --- | --- |
+| zoom < 1.25× | cached composite blit | identical pixels, cheapest path |
+| zoom ≥ 1.25×, ≤ 600 shapes | direct vector paint to the screen | always sharp, no cache |
+| zoom ≥ 1.25×, heavy art | off-screen **tile** rendered at `zoom × DPR` | sharp **and** fast |
+| mid-gesture (pan / pinch) | tile blit at 1:1, else composite | no frame drops |
+| after the gesture settles (≈180 ms) | full-resolution repaint | sharp again |
+
+**Layer FX and groups are rendered at zoom resolution too.** Shadow, glow and outline used to rasterise the layer into a document-resolution canvas, so an FX layer went blurry at 200 %+ even when everything else was sharp. They now render into a device-resolution buffer limited to the layer's own bounds, and group layers render their children the same way.
+
+The tile carries a 30 % margin, so panning re-blits it 1:1 — no resampling, no repaint. Off-screen shapes are culled with cached bounding boxes; the tile is rebuilt only when the view leaves it or the document changes. Gradients, strokes, text, layer FX and bitmaps all go through the normal layer pipeline, so nothing is flattened.
+
+### Supported apps — current releases (verified 20 Oct 2026)
+
+| App | Current version | Import route | Notes |
+| --- | --- | --- | --- |
+| **CorelDRAW Graphics Suite** | **2026 (v27.2)** | `.cdr` `.cdt` | native engine; also X3 → 2025, v3+ |
+| **Adobe Photoshop** | **2026 (v27.11)** | `.psd` `.psb` | 8/16-bit, RGB / Grayscale / CMYK, Raw + RLE, PSB 64-bit sections |
+| **Adobe Illustrator** | **2026 (v30.8.1)** | `.ai` `.pdf` | PDF-based AI → real vector paths, groups, live text |
+| **Affinity by Canva** | **3.3.1** | `.svg` `.pdf` (`.af` detected) | `.af` is a closed container — app tells you to export SVG/PSD |
+| **Canva** | current web app | `.svg` `.pdf` `.png` | Export ▸ SVG gives fully editable nodes |
+
+### Stability fixes in this build
+
+- `setPointerCapture` is guarded — a stale/cancelled pointer can no longer abort a stroke mid-draw.
+- Toasts are capped at 4 on screen (holding Ctrl+Z on an empty history used to stack them over the canvas).
+
+The same matrix is in-app: **Help ▸ Supported apps & formats… 🧩**, and the file picker accepts `.psd .psb .af .afdesign .afphoto .ai .pdf .svg .cdr .cdt`.
+
 ## 🟠 v10.0 — Real CorelDRAW engine
 
 `.cdr` and `.cdt` files now open as **editable artwork**, not a preview picture. The parser reads CorelDRAW's own file format directly in the browser:
