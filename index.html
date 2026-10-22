@@ -16435,7 +16435,7 @@ window.CDR = CDR;
       <button class="mitem" data-act="brand">${svg('palette', 15)} Brand &amp; palette</button>
       <button class="mitem" data-act="home">${svg('sparkle', 15)} Studio home — click se shuru</button>
       <button class="mitem" data-act="mockups">${svg('mockup', 15)} Mockup library — 174 scenes</button>
-      <button class="mitem" data-act="new">${svg('check', 15)} Naya kya hai — v22 update</button>
+      <button class="mitem" data-act="new">${svg('check', 15)} Naya kya hai — v24 update</button>
       <button class="mitem" data-act="start">${svg('question', 15)} Start guide (4 steps)</button>
       <button class="mitem" data-act="help">${svg('question', 15)} Shortcuts &amp; help</button>
       <button class="mitem" data-act="pro">${svg('sparkle', 15)} ${simple ? 'Pro mode (all panels)' : 'Studio mode'}</button>`;
@@ -17077,7 +17077,7 @@ window.CDR = CDR;
     }, 900);
     patchTools();
     window.AV12 = {
-      version: '22.0',
+      version: '24.0',
       bgRemove: bgRemoveV12,
       openBgDialog,
       cutoutData,
@@ -17533,9 +17533,21 @@ window.CDR = CDR;
     if (!ov) {
       ov = document.createElement('div'); ov.id = 'av19new';
       ov.innerHTML = `<div class="box">
-        <div class="hd"><span class="v">v22</span><h3>Naya kya hai</h3><button class="x" title="Close">${svg('x', 14)}</button></div>
-        <p class="sub">Simple easy look wapas default — aur saare updates usi ke andar.</p>
-        <div class="it"><i>1</i><span><b>Selection ab poora kaam karta hai</b>
+        <div class="hd"><span class="v">v24</span><h3>Naya kya hai</h3><button class="x" title="Close">${svg('x', 14)}</button></div>
+        <p class="sub">Design + QR + CMYK print + multi-copy sheet — sab ek jagah, offline.</p>
+        <div class="it"><i>1</i><span><b>QR Code generator (v24)</b>
+          <small>Website, WhatsApp, UPI, phone ka asli QR — PNG aur vector SVG, design me ek click me add. Sab offline.</small></span></div>
+        <div class="it"><i>2</i><span><b>CMYK PDF + multi-copy sheet (v24)</b>
+          <small>Press ke liye CMYK PDF (300% ink limit) aur A4/A3 sheet par N copies + crop marks — card/sticker printing ke liye.</small></span></div>
+        <div class="it"><i>3</i><span><b>Batch export (v24)</b>
+          <small>Saare artboards ek ZIP me (PNG + index). Multi-page project turant bhejne layak.</small></span></div>
+        <div class="it"><i>4</i><span><b>Quick Design — 3 click me ready design</b>
+          <small>Neeche bar me "Design" button. 16 size (IG post, poster, visiting card, sticker, banner, certificate…) + 8 style. Naam likho → design ready.</small></span></div>
+        <div class="it"><i>2</i><span><b>Print &amp; Cut Pack (ek ZIP)</b>
+          <small>300dpi PDF (bleed + crop marks), PNG, cutting ke liye red cut-line SVG/PNG, social JPG + specs.txt — sab ek saath download.</small></span></div>
+        <div class="it"><i>3</i><span><b>60+ assets + 18 templates</b>
+          <small>Assets Library (arrow, badge, social icon, frame, barcode, cut mark) aur Design Templates — ek click me canvas par.</small></span></div>
+        <div class="it"><i>4</i><span><b>Selection ab poora kaam karta hai</b>
           <small>Delete (pixels + layer), Copy/Cut/Paste (Ctrl+C/X/V), Fill, Feather, Grow/Shrink, Invert, naya layer — sab selection bar me.</small></span></div>
         <div class="it"><i>2</i><span><b>Default look = Simple &amp; easy</b>
           <small>Wahi pehla halka UI — safed panel, bade click cards, 5 steps. Dark Studio look ☰ Menu → mode se.</small></span></div>
@@ -18145,5 +18157,2657 @@ window.CDR = CDR;
 
 
 </script>
+<script id="av23-upgrade">
+
+/* ============================================================
+   ArtViSiON Studio · v23 — DESIGN PACK
+   ------------------------------------------------------------
+   Click-click designing: Quick Design wizard (14 purposes ×
+   8 styles), ready template gallery, 80+ vector assets,
+   Print & Cut pack (bleed + crop marks + DPI PDF/PNG,
+   cut-line SVG/PNG for cutting machines, one ZIP download).
+   Host ka purana code chhua nahi gaya — sirf upar se layer.
+   ============================================================ */
+(function () {
+  'use strict';
+  if (window.__av23loaded) return;
+  window.__av23loaded = true;
+
+  /* ============================================================
+     0. helpers
+     ============================================================ */
+  const MM = 25.4;
+  const mm2px = (mm, dpi) => mm * dpi / MM;
+  const px2mm = (px, dpi) => px / dpi * MM;
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const $ = s => document.querySelector(s);
+  const uid = () => 's23' + Math.random().toString(36).slice(2, 9);
+  const toast23 = (m, c, ms) => { try { toast(m, c, ms); } catch (e) { } };
+  const brand = () => { try { return (typeof primary !== 'undefined' && primary) || '#F54927'; } catch (e) { return '#F54927'; } };
+
+  /* ---------- inline SVG icons (emoji par depend nahi) ---------- */
+  const I23 = {
+    sparkle: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M18.5 15l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/>',
+    tpl: '<rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5"/>',
+    palette: '<path d="M12 3a9 9 0 1 0 0 18c1.4 0 1.9-1 1.4-1.9-.6-1.1.2-2.3 1.6-2.3H17a4 4 0 0 0 4-4c0-5.3-4-9.8-9-9.8z"/><circle cx="7.6" cy="11" r="1.15" fill="currentColor" stroke="none"/><circle cx="10.4" cy="7.3" r="1.15" fill="currentColor" stroke="none"/><circle cx="15" cy="7.6" r="1.15" fill="currentColor" stroke="none"/>',
+    print: '<path d="M7 8V3h10v5"/><rect x="3" y="8" width="18" height="8" rx="2"/><path d="M7 16h10v5H7z"/>',
+    zip: '<path d="M6 3h12v18l-6-3-6 3z"/><path d="M12 6v4M12 12v.01"/>',
+    cut: '<circle cx="6" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/><path d="M8 7.5L20 18M8 16.5L20 6"/>',
+    photo: '<rect x="3" y="4" width="18" height="16" rx="2.2"/><circle cx="8.6" cy="9.4" r="1.7"/><path d="M4 17l5-4.4 4 3.4 3-2.4 4 3.4"/>',
+    screen: '<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>',
+    phone: '<rect x="6.5" y="2.5" width="11" height="19" rx="2.4"/><path d="M10.5 18.6h3"/>',
+    play: '<rect x="2.5" y="5" width="19" height="14" rx="3.5"/><path d="M10 9l6 3-6 3z"/>',
+    chat: '<path d="M4 5h16v11H10l-6 4z"/>',
+    page: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M9 12h6M9 16h4"/>',
+    flag: '<path d="M5 21V4h9l-1.4 3.4L14 11H5"/><path d="M5 11h9"/>',
+    person: '<circle cx="12" cy="8" r="3.4"/><path d="M5 21c0-4 3.2-6.4 7-6.4s7 2.4 7 6.4"/>',
+    award: '<circle cx="12" cy="9" r="6"/><path d="M8.4 14.4L7 22l5-2.6L17 22l-1.4-7.6"/>',
+    mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.6 6.4L12 13l8.4-6.6"/>',
+    tshirt: '<path d="M8 3l4 2 4-2 4 3-2.4 3.2L16 8.4V21H8V8.4L6.4 9.2 4 6z"/>',
+    tag: '<path d="M3 12l9-9h8v8l-9 9z"/><circle cx="16.5" cy="7.5" r="1.4"/>',
+    card: '<rect x="2.5" y="6" width="19" height="12" rx="2.2"/><path d="M2.5 10.5h19"/><path d="M6 15h4"/>',
+    sticker: '<circle cx="12" cy="12" r="9" stroke-dasharray="3.4 3.2"/><circle cx="12" cy="12" r="4.4"/>',
+    grid: '<rect x="3" y="3" width="18" height="18" rx="2.4"/><path d="M3 9h18M3 15h18M9 3v18"/>',
+    gear: '<circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.6M12 18.6v2.6M4.9 7.2l2.2 1.3M16.9 15.5l2.2 1.3M4.9 16.8l2.2-1.3M16.9 8.5l2.2-1.3"/>'
+  };
+  const ic23 = (k, s) => '<svg viewBox="0 0 24 24" width="' + (s || 16) + '" height="' + (s || 16) + '" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-3px">' + (I23[k] || I23.gear) + '</svg>';
+
+  let _mc = null;
+  function measureText(txt, size, bold, font) {
+    if (!_mc) _mc = document.createElement('canvas').getContext('2d');
+    _mc.font = (bold ? '700 ' : '400 ') + size + 'px "' + (font || 'Arial') + '"';
+    return _mc.measureText(String(txt)).width;
+  }
+
+  /* ---------- spec primitives (doc-coordinate shapes) ---------- */
+  const solid = c => ({ type: 'solid', color: c });
+  function R(x, y, w, h, fill, r) {
+    return { type: 'rect', x, y, w, h, r: r || 0, fill: fill ? solid(fill) : null, stroke: null, t: null, _dirty: true };
+  }
+  function E(cx, cy, rx, ry, fill) {
+    return { type: 'ellipse', cx, cy, rx, ry, fill: fill ? solid(fill) : null, stroke: null, t: null, _dirty: true };
+  }
+  function ST(s, col, w, dash) {
+    if (!s) return s;
+    s.stroke = { color: col, width: w, dashArr: dash || null };
+    return s;
+  }
+  function pathFromPts(pts, closed) {
+    return [{ nodes: pts.map(p => ({ p: { x: p[0], y: p[1] }, in: null, out: null })), closed: closed !== false }];
+  }
+  function P(pts, fill, oh) {
+    const s = { type: 'path', subpaths: pathFromPts(pts, true), evenodd: false, fill: fill ? solid(fill) : null, stroke: null, t: null, _dirty: true };
+    if (oh && oh.stroke) ST(s, oh.stroke, oh.width || 2, oh.dash);
+    if (oh && oh.open) s.subpaths = pathFromPts(pts, false);
+    return s;
+  }
+  function D(d, fill, oh) {
+    let subs = [];
+    try { subs = parsePathD(d) || []; } catch (e) { subs = []; }
+    const s = { type: 'path', subpaths: subs, evenodd: false, fill: fill ? solid(fill) : null, stroke: null, t: null, _dirty: true };
+    if (oh && oh.stroke) ST(s, oh.stroke, oh.width || 2, oh.dash);
+    return s;
+  }
+  function T(str, x, y, size, color, o) {
+    o = o || {};
+    const font = o.font || 'Arial', bold = !!o.bold;
+    let xx = x;
+    if (o.align === 'center' || o.align === 'right') {
+      const w = measureText(str, size, bold, font);
+      xx = o.align === 'center' ? x - w / 2 : x - w;
+    }
+    const s = {
+      type: 'text', x: xx, y, text: String(str), font, size,
+      bold, italic: !!o.italic, ls: o.ls || 0, lh: o.lh || 1.2,
+      fill: solid(color), stroke: null, t: null, _dirty: true
+    };
+    if (o.strokeCol) s.stroke = { color: o.strokeCol, width: o.strokeW || Math.max(1, size * 0.04) };
+    return s;
+  }
+  function line23(x1, y1, x2, y2, col, w) {
+    return { type: 'line', x1, y1, x2, y2, fill: null, stroke: { color: col, width: w }, t: null, _dirty: true };
+  }
+
+  /* ============================================================
+     1. themes + sizes
+     ============================================================ */
+  const THEMES23 = [
+    { id: 'modern', name: 'Modern Blue', bg: '#0B1220', bg2: '#16233B', ink: '#FFFFFF', sub: '#9FB0C9', acc: '#2DA8FF', acc2: '#7C6BFF' },
+    { id: 'sunrise', name: 'Sunrise Orange', bg: '#FFF8F1', bg2: '#FFE7D2', ink: '#3B1508', sub: '#8A4B2A', acc: '#F54927', acc2: '#FF9A3D' },
+    { id: 'minimal', name: 'Minimal White', bg: '#FFFFFF', bg2: '#F2F4F8', ink: '#101828', sub: '#667085', acc: '#101828', acc2: '#C7CDD9' },
+    { id: 'festival', name: 'Festival Magenta', bg: '#3B0B3E', bg2: '#7A1B6D', ink: '#FFF3F8', sub: '#F7BEE1', acc: '#FFD230', acc2: '#FF5D8F' },
+    { id: 'nature', name: 'Nature Green', bg: '#04251F', bg2: '#0B4A3A', ink: '#EAFFF8', sub: '#9BE7CD', acc: '#2FD98A', acc2: '#B6E13A' },
+    { id: 'royal', name: 'Royal Gold', bg: '#141033', bg2: '#2A2166', ink: '#F3F1FF', sub: '#C6BEF5', acc: '#F5B226', acc2: '#FFE08A' },
+    { id: 'bold', name: 'Bold Black', bg: '#0A0A0A', bg2: '#1B1B1B', ink: '#FFFFFF', sub: '#BDBDBD', acc: '#FFD400', acc2: '#FF3B30' },
+    { id: 'candy', name: 'Candy Pink', bg: '#FFF3F7', bg2: '#FFE0EC', ink: '#4A0E2C', sub: '#A23B6B', acc: '#FF3D8B', acc2: '#8B5CF6' }
+  ];
+  const themeById = id => THEMES23.find(t => t.id === id) || THEMES23[1];
+
+  const SIZES23 = {
+    igpost: { name: 'Instagram Post', w: 1080, h: 1080, screen: true, cat: 'Social' },
+    igstory: { name: 'Instagram Story / Reel', w: 1080, h: 1920, screen: true, cat: 'Social' },
+    fbcov: { name: 'Facebook Cover', w: 1640, h: 664, screen: true, cat: 'Social' },
+    ytthumb: { name: 'YouTube Thumbnail', w: 1280, h: 720, screen: true, cat: 'Social' },
+    logo: { name: 'Logo Board', w: 1000, h: 1000, screen: true, cat: 'Brand' },
+    posterA4: { name: 'Poster A4', wmm: 210, hmm: 297, cat: 'Print' },
+    posterA3: { name: 'Poster A3', wmm: 297, hmm: 420, cat: 'Print' },
+    flyerA5: { name: 'Flyer / Pamphlet A5', wmm: 148, hmm: 210, cat: 'Print' },
+    card: { name: 'Visiting Card', wmm: 90, hmm: 54, cat: 'Print' },
+    sticker: { name: 'Sticker (round)', wmm: 90, hmm: 90, cut: 'circle', cat: 'Cut' },
+    banner: { name: 'Flex Banner 3×1 ft', wmm: 914, hmm: 305, cat: 'Print' },
+    standee: { name: 'Standee 2×3 ft', wmm: 610, hmm: 915, cat: 'Print' },
+    cert: { name: 'Certificate A4', wmm: 297, hmm: 210, cat: 'Print' },
+    invite: { name: 'Invitation A5', wmm: 148, hmm: 210, cat: 'Print' },
+    tshirt: { name: 'T-shirt Print A4', wmm: 210, hmm: 297, cat: 'Print' },
+    label: { name: 'Product Label', wmm: 100, hmm: 70, cat: 'Print' }
+  };
+
+  function sizeOf(key, dpi) {
+    const s = SIZES23[key] || SIZES23.igpost;
+    const d = s.screen ? 96 : (dpi || 300);
+    return {
+      key, ref: s, dpi: d,
+      W: s.wmm ? Math.round(mm2px(s.wmm, d)) : s.w,
+      H: s.hmm ? Math.round(mm2px(s.hmm, d)) : s.h,
+      wmm: s.wmm || null, hmm: s.hmm || null, cut: s.cut || null,
+      label: s.name + (s.wmm ? ' · ' + s.wmm + '×' + s.hmm + 'mm' : ' · ' + s.w + '×' + s.h + 'px')
+    };
+  }
+
+  const DEFAULT_DATA = {
+    name: 'APNA BRAND', tagline: 'Design jo kaam kare', headline: 'AAJ HI SHURU KARO',
+    phone: '+91 90000 00000', web: 'www.apnabrand.in', addr: 'Indore · Madhya Pradesh', mail: 'hello@apnabrand.in'
+  };
+  /* har size ka apna sensible default text (wizard isse bhar deta hai) */
+  const SIZEDATA = {
+    igpost: { headline: 'AAJ HI\nSHURU KARO', tagline: 'Design jo kaam kare' },
+    igstory: { headline: 'NEW\nCOLLECTION', tagline: 'Swipe up · limited time' },
+    ytthumb: { headline: 'HOW TO\nDESIGN', tagline: '5 minute me seekho' },
+    fbcov: { headline: 'GROW\nFASTER', tagline: 'Digital marketing studio' },
+    posterA4: { headline: 'BIG\nSALE', tagline: 'Limited period offer' },
+    posterA3: { headline: 'GRAND\nOPENING', tagline: 'Aa jaiye, mithai pakki' },
+    flyerA5: { headline: 'FLAT\n30% OFF', tagline: 'Sabhi products par' },
+    card: { headline: 'VISITING CARD', tagline: 'Design · Print · Branding' },
+    sticker: { headline: 'HANDMADE', tagline: 'Handmade with love' },
+    banner: { headline: 'GRAND\nOPENING', tagline: 'Aaj se shuru — sabhi ka swagat' },
+    standee: { headline: 'SPECIAL\nOFFER', tagline: 'Yahan milega best price' },
+    cert: { headline: 'YOUR NAME', tagline: 'for outstanding performance in design training' },
+    invite: { headline: 'WEDDING\nINVITATION', tagline: 'Join us for the celebration' },
+    tshirt: { headline: 'YOUR BRAND', tagline: 'Est. 2026 · Indore' },
+    label: { headline: 'PREMIUM', tagline: 'Net Qty 1 · Made in India' },
+    logo: { headline: 'YOUR BRAND', tagline: 'Design · Print · Branding' }
+  };
+  const data23For = key => Object.assign({}, DEFAULT_DATA, SIZEDATA[key] || {});
+
+  const FONTS23 = { sans: 'Segoe UI', sans2: 'Trebuchet MS', serif: 'Georgia', impact: 'Impact', mono: 'Consolas' };
+
+  /* ============================================================
+     2. layouts — (W,H,TH,D) → shape array
+     ============================================================ */
+  const soft = (hex, a) => {
+    const h = String(hex).replace('#', '');
+    const n = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16);
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+  };
+
+  /* text ko artboard ke andar fit karo (auto-shrink) */
+  function fitSize(lines, size, maxW, font, bold, ls) {
+    let sz = size;
+    const arr = Array.isArray(lines) ? lines : [String(lines)];
+    for (let k = 0; k < 12; k++) {
+      let w = 0;
+      arr.forEach(l => { w = Math.max(w, measureText(l, sz, bold, font) + (ls || 0) * Math.max(0, String(l).length - 1)); });
+      if (w <= maxW || sz < 6) break;
+      sz = Math.max(6, sz * (maxW / w) * 0.985);
+    }
+    return sz;
+  }
+
+  function layoutHero(W, H, TH, D) {
+    const S = Math.min(W, H), cx = W / 2, e = [];
+    e.push(E(W * 0.92, H * 0.08, S * 0.42, S * 0.42, soft(TH.acc, .22)));
+    e.push(E(W * 0.06, H * 0.95, S * 0.30, S * 0.30, soft(TH.acc2, .20)));
+    // badge
+    const bw = S * 0.46, bh = S * 0.075;
+    e.push(R(cx - bw / 2, H * 0.09, bw, bh, soft(TH.ink, .12), bh / 2));
+    e.push(T(D.tagline.toUpperCase(), cx, H * 0.09 + bh * 0.68, S * 0.032, TH.ink, { align: 'center', bold: true, ls: S * 0.004 }));
+    // headline
+    const hl = String(D.headline || '').toUpperCase().split('\n');
+    const hs = Math.min(S * 0.115, fitSize(hl, S * 0.115, W * 0.86, FONTS23.sans, true));
+    hl.forEach((ln, i) => e.push(T(ln, cx, H * 0.40 + i * hs * 1.12, hs, TH.ink, { align: 'center', bold: true, font: FONTS23.sans })));
+    e.push(R(cx - S * 0.09, H * 0.40 + hl.length * hs * 1.12 + S * 0.02, S * 0.18, S * 0.012, TH.acc, S * 0.006));
+    // name
+    e.push(T(D.name, cx, H * 0.72, Math.min(S * 0.055, fitSize(D.name, S * 0.055, W * 0.8, FONTS23.sans, true)), TH.acc, { align: 'center', bold: true, ls: S * 0.003 }));
+    e.push(T(D.web, cx, H * 0.79, S * 0.034, TH.sub, { align: 'center' }));
+    // bottom strip
+    const sh = S * 0.13;
+    e.push(R(0, H - sh, W, sh, soft(TH.acc, .16)));
+    e.push(T(D.phone, W * 0.5, H - sh / 2 + S * 0.012, S * 0.040, TH.ink, { align: 'center', bold: true }));
+    return e;
+  }
+
+  function layoutPoster(W, H, TH, D) {
+    const S = Math.min(W, H), cx = W / 2, e = [];
+    const pad = W * 0.07;
+    // top band
+    e.push(R(0, 0, W, H * 0.16, TH.acc));
+    e.push(T(D.name, cx, H * 0.075, Math.min(S * 0.048, fitSize(D.name, S * 0.048, W * 0.8, FONTS23.sans, true)), TH.bg, { align: 'center', bold: true, ls: S * 0.004 }));
+    e.push(T(D.tagline, cx, H * 0.125, S * 0.026, soft(TH.bg, .8), { align: 'center' }));
+    // sale badge
+    const bx = W - pad * 0.55 - S * 0.115;
+    e.push(E(bx, H * 0.235, S * 0.115, S * 0.115, TH.acc2));
+    e.push(T('NEW', bx, H * 0.222, S * 0.045, TH.bg, { align: 'center', bold: true }));
+    e.push(T('LAUNCH', bx, H * 0.252, S * 0.022, soft(TH.bg, .85), { align: 'center', bold: true }));
+    // headline
+    const lines = String(D.headline || '').toUpperCase().split('\n');
+    const hs = Math.min(S * 0.115, fitSize(lines, S * 0.115, W * 0.80, FONTS23.impact, true));
+    lines.forEach((ln, i) => e.push(T(ln, cx, H * 0.36 + i * hs * 1.05, hs, TH.ink, { align: 'center', bold: true, font: FONTS23.impact })));
+    e.push(R(cx - W * 0.18, H * 0.36 + lines.length * hs * 1.05 - hs * 0.25, W * 0.36, S * 0.012, TH.acc2));
+    // bullets
+    const by = H * 0.60;
+    ['100% Original Design', 'Fast Delivery · Best Price', 'Custom Size Available'].forEach((t, i) => {
+      e.push(E(pad + S * 0.018, by + i * S * 0.072, S * 0.014, S * 0.014, TH.acc));
+      e.push(T(t, pad + S * 0.05, by + i * S * 0.072 + S * 0.012, S * 0.038, TH.sub, { bold: false }));
+    });
+    // qr block
+    const qs = S * 0.22, qx = W - pad - qs, qy = H * 0.60;
+    e.push(R(qx, qy, qs, qs, soft(TH.ink, .10), S * 0.012));
+    e.push(R(qx + qs * .18, qy + qs * .18, qs * .64, qs * .64, soft(TH.ink, .22), S * 0.006));
+    e.push(T('SCAN', qx + qs / 2, qy + qs + S * 0.045, S * 0.026, TH.sub, { align: 'center', bold: true }));
+    // bottom band
+    const bh = H * 0.13;
+    e.push(R(0, H - bh, W, bh, TH.acc));
+    e.push(T(D.phone + '   ·   ' + D.web, cx, H - bh / 2 + S * 0.014, S * 0.034, TH.bg, { align: 'center', bold: true }));
+    return e;
+  }
+
+  function layoutCard(W, H, TH, D) {
+    const S = Math.min(W, H), e = [];
+    const pad = W * 0.09;
+    e.push(R(0, 0, W * 0.035, H, TH.acc));
+    e.push(E(W - pad * 0.72, H * 0.26, S * 0.11, S * 0.11, soft(TH.acc, .18)));
+    e.push(T((D.name || 'A').trim().charAt(0).toUpperCase(), W - pad * 0.72, H * 0.30, S * 0.13, TH.acc, { align: 'center', bold: true }));
+    e.push(T(D.name, pad, H * 0.35, Math.min(S * 0.135, fitSize(D.name, S * 0.135, W - pad * 3.5, FONTS23.sans, true)), TH.ink, { bold: true, ls: S * 0.004 }));
+    e.push(T(D.tagline, pad, H * 0.45, Math.min(S * 0.058, fitSize(D.tagline, S * 0.058, W - pad * 3.2, FONTS23.sans, false)), TH.sub, {}));
+    e.push(R(pad, H * 0.545, W - pad * 2.2, Math.max(1, S * 0.006), soft(TH.sub, .45)));
+    const rows = [D.phone, D.mail, D.web];
+    rows.forEach((t, i) => {
+      e.push(E(pad + S * 0.012, H * 0.635 + i * S * 0.078, S * 0.010, S * 0.010, TH.acc));
+      e.push(T(t, pad + S * 0.036, H * 0.64 + i * S * 0.078, Math.min(S * 0.050, fitSize(t, S * 0.050, W - pad * 2.6, FONTS23.sans, false)), TH.ink, {}));
+    });
+    e.push(T(D.addr, pad, H * 0.905, Math.min(S * 0.046, fitSize(D.addr, S * 0.046, W - pad * 2.4, FONTS23.sans, false)), TH.sub, {}));
+    return e;
+  }
+
+  function layoutCertificate(W, H, TH, D) {
+    const S = Math.min(W, H), cx = W / 2, e = [];
+    e.push(R(W * 0.035, H * 0.045, W * 0.93, H * 0.91, null));
+    ST(e[e.length - 1], TH.acc, S * 0.012);
+    e.push(R(W * 0.05, H * 0.062, W * 0.90, H * 0.876, null));
+    ST(e[e.length - 1], soft(TH.acc, .55), Math.max(1, S * 0.004));
+    // corners
+    [[W * .05, H * .062, 1, 1], [W * .95, H * .062, -1, 1], [W * .05, H * .938, 1, -1], [W * .95, H * .938, -1, -1]].forEach(c => {
+      e.push(P([[c[0], c[1]], [c[0] + c[2] * S * .09, c[1]], [c[0] + c[2] * S * .09, c[1] + c[3] * S * .012], [c[0], c[1] + c[3] * S * .012]], TH.acc));
+    });
+    e.push(T('CERTIFICATE', cx, H * 0.21, S * 0.055, TH.acc, { align: 'center', bold: true, ls: S * 0.012 }));
+    e.push(T('OF APPRECIATION', cx, H * 0.255, S * 0.028, TH.sub, { align: 'center', bold: true, ls: S * 0.006 }));
+    e.push(T('This certificate is proudly presented to', cx, H * 0.37, S * 0.030, TH.sub, { align: 'center' }));
+    e.push(T(String(D.headline || 'YOUR NAME').split('\n')[0], cx, H * 0.50, Math.min(S * 0.085, fitSize(String(D.headline || 'YOUR NAME').split('\n')[0], S * 0.085, W * 0.55, FONTS23.serif, true)), TH.ink, { align: 'center', bold: true, font: FONTS23.serif }));
+    e.push(R(cx - W * 0.24, H * 0.525, W * 0.48, Math.max(1, S * 0.005), soft(TH.sub, .6)));
+    e.push(T(D.tagline || 'for outstanding performance in design training', cx, H * 0.635, Math.min(S * 0.028, fitSize(D.tagline || 'for outstanding performance in design training', S * 0.028, W * 0.72, FONTS23.sans, false)), TH.sub, { align: 'center' }));
+    e.push(T(D.name, cx, H * 0.735, Math.min(S * 0.034, fitSize(D.name, S * 0.034, W * 0.6, FONTS23.sans, true)), TH.acc, { align: 'center', bold: true, ls: S * 0.004 }));
+    // signatures
+    [[W * 0.28, 'DATE'], [W * 0.72, 'SIGNATURE']].forEach(s => {
+      e.push(R(s[0] - W * 0.10, H * 0.84, W * 0.20, Math.max(1, S * 0.004), soft(TH.sub, .7)));
+      e.push(T(s[1], s[0], H * 0.885, S * 0.024, TH.sub, { align: 'center', bold: true, ls: S * 0.004 }));
+    });
+    return e;
+  }
+
+  function layoutBanner(W, H, TH, D) {
+    const S = Math.min(W, H), e = [];
+    // left brand band
+    const bandW = Math.max(W * 0.055, S * 0.12);
+    e.push(R(0, 0, bandW, H, TH.acc));
+    { const bw1 = D.name.split(' ')[0];
+      const bsz = Math.min(bandW * 0.42, S * 0.10);
+      const bt = T(bw1, 0, bsz * 0.35, bsz, TH.bg, { bold: true, ls: bsz * 0.05 });
+      bt.t = [0, 1, -1, 0, bandW / 2 + bsz * 0.35, H * 0.70];
+      e.push(bt); }
+    // headline block
+    const x0 = bandW + W * 0.045;
+    const lines = String(D.headline).toUpperCase().split('\n');
+    const hs = Math.min(S * 0.26, fitSize(lines, S * 0.26, W * 0.50, FONTS23.impact, true));
+    const top = H * 0.30;
+    lines.forEach((ln, i) => e.push(T(ln, x0, top + i * hs * 1.02, hs, TH.ink, { bold: true, font: FONTS23.impact })));
+    const after = top + (lines.length - 1) * hs * 1.02;
+    const ts = Math.min(S * 0.10, fitSize(D.tagline, S * 0.10, W * 0.50, FONTS23.sans, false));
+    e.push(T(D.tagline, x0 + S * 0.006, Math.min(after + S * 0.16, H * 0.86), ts, TH.sub, {}));
+    // right CTA
+    const pw = W * 0.20, ph = Math.min(H * 0.26, S * 0.28), px = W - pw - W * 0.045, py = H * 0.22;
+    e.push(R(px, py, pw, ph, TH.acc2, ph / 2));
+    e.push(T('CALL NOW', px + pw / 2, py + ph * 0.60, Math.min(S * 0.095, fitSize('CALL NOW', S * 0.095, pw * 0.78, FONTS23.sans, true)), TH.bg, { align: 'center', bold: true }));
+    e.push(T(D.phone, px + pw / 2, py + ph + S * 0.135, Math.min(S * 0.105, fitSize(D.phone, S * 0.105, pw * 1.16, FONTS23.sans, true)), TH.ink, { align: 'center', bold: true }));
+    e.push(T(D.web, px + pw / 2, py + ph + S * 0.235, Math.min(S * 0.075, fitSize(D.web, S * 0.075, pw * 1.16, FONTS23.sans, false)), TH.sub, { align: 'center' }));
+    return e;
+  }
+
+  function layoutSticker(W, H, TH, D) {
+    const S = Math.min(W, H), cx = W / 2, cy = H / 2, e = [];
+    e.push(E(cx, cy, S * 0.47, S * 0.47, TH.acc));
+    e.push(E(cx, cy, S * 0.41, S * 0.41, TH.bg));
+    // stars around
+    for (let i = 0; i < 12; i++) {
+      const a = -Math.PI / 2 + i * Math.PI / 6;
+      e.push(E(cx + Math.cos(a) * S * 0.44, cy + Math.sin(a) * S * 0.44, S * 0.014, S * 0.014, soft(TH.acc2, .9)));
+    }
+    e.push(T(D.name, cx, cy - S * 0.20, S * 0.070, TH.acc, { align: 'center', bold: true, ls: S * 0.004 }));
+    { const ssz = Math.min(S * 0.115, fitSize(String(D.headline).toUpperCase().split('\n'), S * 0.115, S * 0.66, FONTS23.impact, true));
+      String(D.headline).toUpperCase().split('\n').forEach((ln, i) => e.push(T(ln, cx, cy - S * 0.02 + i * ssz * 1.1, ssz, TH.ink, { align: 'center', bold: true, font: FONTS23.impact }))); }
+    e.push(R(cx - S * 0.12, cy + S * 0.02, S * 0.24, S * 0.012, TH.acc2));
+    e.push(T(D.tagline, cx, cy + S * 0.11, S * 0.045, TH.sub, { align: 'center' }));
+    e.push(T(D.phone, cx, cy + S * 0.30, S * 0.050, TH.acc, { align: 'center', bold: true }));
+    return e;
+  }
+
+  function layoutLogo(W, H, TH, D) {
+    const S = Math.min(W, H), cx = W / 2, e = [];
+    const cy = H * 0.44;
+    e.push(E(cx, cy, S * 0.24, S * 0.24, TH.acc));
+    e.push(E(cx, cy, S * 0.205, S * 0.205, TH.bg));
+    e.push(T((D.name || 'A').trim().charAt(0).toUpperCase(), cx, cy + S * 0.075, S * 0.24, TH.ink, { align: 'center', bold: true, font: FONTS23.sans }));
+    e.push(R(cx + S * 0.13, cy - S * 0.30, S * 0.075, S * 0.075, TH.acc2, S * 0.02));
+    e.push(T(D.name, cx, H * 0.79, Math.min(S * 0.085, fitSize(D.name, S * 0.085, W * 0.82, FONTS23.sans, true)), TH.ink, { align: 'center', bold: true, ls: S * 0.006 }));
+    e.push(T(D.tagline, cx, H * 0.855, S * 0.036, TH.sub, { align: 'center', ls: S * 0.004 }));
+    return e;
+  }
+
+  function layoutThumb(W, H, TH, D) {
+    const S = Math.min(W, H), e = [];
+    e.push(P([[0, 0], [W * 0.62, 0], [W * 0.52, H], [0, H]], soft(TH.acc, .22)));
+    e.push(R(W * 0.055, H * 0.16, W * 0.035, H * 0.07, TH.acc2));
+    e.push(T('NEW', W * 0.0725 + W * 0.035, H * 0.213, S * 0.075, TH.bg, { align: 'center', bold: true }));
+    const tlines = String(D.headline).toUpperCase().split('\n');
+    const hs = Math.min(S * 0.19, fitSize(tlines, S * 0.19, W * 0.50, FONTS23.impact, true));
+    tlines.forEach((ln, i) =>
+      e.push(T(ln, W * 0.055, H * 0.48 + i * hs, hs, TH.ink, { bold: true, font: FONTS23.impact })));
+    e.push(T(D.tagline, W * 0.058, H * 0.86, S * 0.065, TH.sub, {}));
+    // play badge right
+    e.push(E(W * 0.80, H * 0.5, S * 0.20, S * 0.20, TH.acc));
+    e.push(P([[W * 0.755, H * 0.38], [W * 0.90, H * 0.5], [W * 0.755, H * 0.62]], TH.bg));
+    return e;
+  }
+
+  function layoutInvite(W, H, TH, D) {
+    const S = Math.min(W, H), cx = W / 2, e = [];
+    e.push(R(W * 0.06, H * 0.05, W * 0.88, H * 0.90, null));
+    ST(e[e.length - 1], soft(TH.acc, .8), Math.max(1, S * 0.006));
+    e.push(T('YOU ARE INVITED', cx, H * 0.17, S * 0.032, TH.sub, { align: 'center', bold: true, ls: S * 0.008 }));
+    e.push(T(D.name, cx, H * 0.26, S * 0.062, TH.acc, { align: 'center', bold: true, ls: S * 0.006 }));
+    e.push(R(cx - S * 0.10, H * 0.295, S * 0.20, Math.max(1, S * 0.004), soft(TH.acc, .8)));
+    { const iv = String(D.headline).toUpperCase().split('\n');
+      const isz = Math.min(S * 0.105, fitSize(iv, S * 0.105, W * 0.78, FONTS23.serif, true));
+      iv.forEach((ln, i) => e.push(T(ln, cx, H * 0.46 + i * isz * 1.15, isz, TH.ink, { align: 'center', bold: true, font: FONTS23.serif }))); }
+    e.push(T(D.tagline, cx, H * 0.53, S * 0.038, TH.sub, { align: 'center', italic: true, font: FONTS23.serif }));
+    e.push(T('Saturday · 7:00 PM', cx, H * 0.63, S * 0.036, TH.ink, { align: 'center', bold: true }));
+    e.push(T(D.addr, cx, H * 0.68, S * 0.032, TH.sub, { align: 'center' }));
+    e.push(E(cx, H * 0.77, S * 0.05, S * 0.05, soft(TH.acc, .18)));
+    e.push(T('★', cx, H * 0.785, S * 0.05, TH.acc, { align: 'center', bold: true }));
+    e.push(T(D.phone + ' · ' + D.web, cx, H * 0.90, S * 0.028, TH.sub, { align: 'center' }));
+    return e;
+  }
+
+  function layoutFlyer(W, H, TH, D) {
+    const S = Math.min(W, H), cx = W / 2, e = [];
+    e.push(R(0, 0, W, H * 0.30, TH.acc));
+    e.push(P([[0, H * 0.30], [W, H * 0.30], [W, H * 0.26], [0, H * 0.34]], soft(TH.bg2, .5)));
+    e.push(T(D.name, cx, H * 0.11, S * 0.055, TH.bg, { align: 'center', bold: true, ls: S * 0.006 }));
+    e.push(T('SPECIAL OFFER', cx, H * 0.20, S * 0.075, soft(TH.bg, .9), { align: 'center', bold: true }));
+    const lines = String(D.headline).toUpperCase().split('\n');
+    const fs = Math.min(S * 0.13, fitSize(lines, S * 0.13, W * 0.84, FONTS23.impact, true));
+    lines.forEach((ln, i) => e.push(T(ln, cx, H * 0.47 + i * fs * 1.05, fs, TH.ink, { align: 'center', bold: true, font: FONTS23.impact })));
+    e.push(T(D.tagline, cx, H * 0.63, S * 0.036, TH.sub, { align: 'center' }));
+    const bw = W * 0.56, bh = H * 0.075;
+    e.push(R(cx - bw / 2, H * 0.70, bw, bh, TH.acc2, bh / 2));
+    e.push(T('ORDER NOW · ' + D.phone, cx, H * 0.70 + bh * 0.68, S * 0.036, TH.bg, { align: 'center', bold: true }));
+    e.push(T(D.web + '   |   ' + D.addr, cx, H * 0.88, S * 0.028, TH.sub, { align: 'center' }));
+    return e;
+  }
+
+  function layoutLabel(W, H, TH, D) {
+    const S = Math.min(W, H), e = [];
+    e.push(R(W * 0.04, H * 0.06, W * 0.92, H * 0.88, soft(TH.ink, .05), S * 0.02));
+    e.push(R(W * 0.04, H * 0.06, W * 0.92, H * 0.16, TH.acc, S * 0.02));
+    e.push(T(D.name, W / 2, H * 0.165, S * 0.10, TH.bg, { align: 'center', bold: true, ls: S * 0.004 }));
+    const lhead = String(D.headline).toUpperCase().split('\n');
+    const lsz = Math.min(S * 0.13, fitSize(lhead, S * 0.13, W * 0.82, FONTS23.impact, true));
+    lhead.forEach((ln, i) => e.push(T(ln, W / 2, H * 0.40 + i * lsz * 1.1, lsz, TH.ink, { align: 'center', bold: true, font: FONTS23.impact })));
+    const tagY = H * 0.40 + (lhead.length - 1) * lsz * 1.1 + lsz * 0.95;
+    e.push(T(D.tagline, W / 2, tagY, Math.min(S * 0.06, fitSize(D.tagline, S * 0.06, W * 0.84, FONTS23.sans, false)), TH.sub, { align: 'center' }));
+    e.push(R(W * 0.12, tagY + S * 0.06, W * 0.76, Math.max(1, S * 0.006), soft(TH.sub, .5)));
+    e.push(T('NET QTY 1  ·  MRP 999', W / 2, tagY + S * 0.16, Math.min(S * 0.055, fitSize('NET QTY 1  ·  MRP 999', S * 0.055, W * 0.82, FONTS23.sans, true)), TH.ink, { align: 'center', bold: true }));
+    e.push(T(D.web + '  ·  ' + D.phone, W / 2, tagY + S * 0.26, Math.min(S * 0.045, fitSize(D.web + '  ·  ' + D.phone, S * 0.045, W * 0.86, FONTS23.sans, false)), TH.sub, { align: 'center' }));
+    return e;
+  }
+
+  const LAYOUTS = {
+    hero: layoutHero, poster: layoutPoster, card: layoutCard, cert: layoutCertificate,
+    banner: layoutBanner, sticker: layoutSticker, logo: layoutLogo, thumb: layoutThumb,
+    invite: layoutInvite, flyer: layoutFlyer, label: layoutLabel
+  };
+
+  const PURPOSE23 = [
+    { size: 'igpost', layout: 'hero', icon: 'screen', title: 'Instagram Post', sub: '1080×1080' },
+    { size: 'igstory', layout: 'hero', icon: 'phone', title: 'Story / Reel', sub: '1080×1920' },
+    { size: 'ytthumb', layout: 'thumb', icon: 'play', title: 'YouTube Thumb', sub: '1280×720' },
+    { size: 'fbcov', layout: 'banner', icon: 'chat', title: 'FB Cover', sub: '1640×664' },
+    { size: 'posterA4', layout: 'poster', icon: 'photo', title: 'Poster A4', sub: '210×297 mm' },
+    { size: 'posterA3', layout: 'poster', icon: 'page', title: 'Poster A3', sub: '297×420 mm' },
+    { size: 'flyerA5', layout: 'flyer', icon: 'page', title: 'Flyer A5', sub: '148×210 mm' },
+    { size: 'card', layout: 'card', icon: 'card', title: 'Visiting Card', sub: '90×54 mm' },
+    { size: 'sticker', layout: 'sticker', icon: 'sticker', title: 'Sticker / Cut', sub: '90 mm round' },
+    { size: 'banner', layout: 'banner', icon: 'flag', title: 'Flex Banner', sub: '3×1 ft' },
+    { size: 'standee', layout: 'poster', icon: 'person', title: 'Standee', sub: '2×3 ft' },
+    { size: 'cert', layout: 'cert', icon: 'award', title: 'Certificate', sub: 'A4 landscape' },
+    { size: 'invite', layout: 'invite', icon: 'mail', title: 'Invitation', sub: 'A5' },
+    { size: 'tshirt', layout: 'logo', icon: 'tshirt', title: 'T-shirt Print', sub: 'A4' },
+    { size: 'label', layout: 'label', icon: 'tag', title: 'Product Label', sub: '100×70 mm' },
+    { size: 'logo', layout: 'logo', icon: 'sparkle', title: 'Logo Board', sub: '1000×1000' }
+  ];
+
+  /* ============================================================
+     3. design builder
+     ============================================================ */
+  function paintBG(L, TH, W, H) {
+    const g = L.canvas.getContext('2d');
+    const gr = g.createLinearGradient(0, 0, W, H);
+    gr.addColorStop(0, TH.bg); gr.addColorStop(1, TH.bg2 || TH.bg);
+    g.fillStyle = gr; g.fillRect(0, 0, W, H);
+    // subtle accent corner glow
+    const rg = g.createRadialGradient(W * 0.85, H * 0.1, 0, W * 0.85, H * 0.1, Math.max(W, H) * 0.7);
+    rg.addColorStop(0, soft(TH.acc, .10)); rg.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = rg; g.fillRect(0, 0, W, H);
+  }
+
+  function cutShapeFor(size, W, H, TH) {
+    if (!size.cut) return null;
+    const pw = Math.max(2, Math.round(Math.min(W, H) * 0.006));
+    if (size.cut === 'circle') {
+      return ST(E(W / 2, H / 2, W / 2 - pw, H / 2 - pw, null), '#E11D48', pw, [pw * 4, pw * 3]);
+    }
+    return ST(R(pw, pw, W - pw * 2, H - pw * 2, null, Math.min(W, H) * 0.03), '#E11D48', pw, [pw * 4, pw * 3]);
+  }
+
+  function buildDesign(opts) {
+    const { sizeKey, themeId, layout, data, dpi, bleed, safe, name } = opts;
+    const sz = sizeOf(sizeKey, dpi);
+    const TH = themeById(themeId);
+    const fn = LAYOUTS[layout] || layoutHero;
+    const W = sz.W, H = sz.H;
+    const els = fn(W, H, TH, data);
+
+    boardCreate(name || (data.name + ' · ' + sz.ref.name), W, H, null);
+    doc.__av23 = { size: sizeKey, dpi: sz.dpi, wmm: sz.wmm, hmm: sz.hmm, theme: TH.id, bleed: bleed == null ? 3 : bleed, safe: safe == null ? 5 : safe, layout, cut: sz.cut || null };
+    try { window.__av23last = doc.__av23; } catch (e) { }
+
+    /* boardCreate apna safed Background layer bana deta hai — usi ko gradient se paint karo */
+    let bg = (doc.layers || []).find(l => l.type === 'raster' && /background/i.test(l.name || ''));
+    if (!bg) {
+      bg = newRasterLayer('Background');
+      bg.name = 'Background';
+      doc.layers.unshift(bg);
+    }
+    paintBG(bg, TH, W, H);
+
+    const deco = newVectorLayer('Decoration');
+    const txt = newVectorLayer('Text');
+    els.forEach(e => (e.type === 'text' ? txt : deco).shapes.push(Object.assign({ id: uid() }, e)));
+
+    doc.layers.push(deco, txt);
+
+    const cs = cutShapeFor(sz.ref, W, H, TH);
+    if (cs) {
+      cs.id = uid(); cs.cut = true;
+      const cl = newVectorLayer('Cut line');
+      cl.shapes.push(cs);
+      cl.locked = true;
+      doc.layers.push(cl);
+    }
+
+    // first text ko select karo (turant edit ke liye)
+    try { selShapes = txt.shapes.length ? [txt.shapes[0]] : []; } catch (e) { }
+    doc.activeId = txt.id;
+    layerVerBump(bg); layerVerBump(deco); layerVerBump(txt);
+    docDirty = true; needRender = true;
+    try { uiLayers(); uiLayersRefresh(); uiProps(); fitView(); } catch (e) { }
+    try { if (typeof renderComposite === 'function') renderComposite(); } catch (e) { }
+    toast23(sz.ref.name + ' ready — ' + sz.W + '×' + sz.H + 'px' + (sz.wmm ? ' · ' + sz.wmm + '×' + sz.hmm + 'mm' : ''), 'ok', 3000);
+    return sz;
+  }
+
+  /* ---------- re-theme (ek click me poori design ka colour) ---------- */
+  function retheme(newThemeId) {
+    if (!doc) return false;
+    const meta = doc.__av23 || {};
+    const oldTH = themeById(meta.theme), newTH = themeById(newThemeId);
+    const map = new Map();
+    const pairs = [];
+    const rgbOf = h => {
+      let x = String(h).replace('#', '');
+      if (x.length === 3) x = x.split('').map(c => c + c).join('');
+      if (x.length !== 6) return null;
+      const n = parseInt(x, 16);
+      return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+    };
+    ['bg', 'bg2', 'ink', 'sub', 'acc', 'acc2'].forEach(k => {
+      if (oldTH[k] && newTH[k]) { map.set(String(oldTH[k]).toLowerCase(), newTH[k]); pairs.push([oldTH[k], newTH[k]]); }
+    });
+    map.set(String(brand()).toLowerCase(), newTH.acc);
+    /* rgba(...) variants — soft() se bane blobs bhi recolour hon */
+    const mapCol = c => {
+      if (!c) return null;
+      const lc = String(c).toLowerCase();
+      if (map.has(lc)) return map.get(lc);
+      for (const pr of pairs) {
+        const o = rgbOf(pr[0]), n = rgbOf(pr[1]);
+        if (!o || !n) continue;
+        const pre = 'rgba(' + o.r + ',' + o.g + ',' + o.b + ',';
+        if (lc.indexOf(pre) === 0) return 'rgba(' + n.r + ',' + n.g + ',' + n.b + ',' + lc.slice(pre.length);
+      }
+      return null;
+    };
+    let n = 0;
+    (doc.layers || []).forEach(L => {
+      if (L.type === 'vector' && Array.isArray(L.shapes)) {
+        L.shapes.forEach(s => {
+          if (s.fill && s.fill.color && s.fill.type !== 'gradient') {
+            const c = mapCol(s.fill.color);
+            if (c) { s.fill.color = c; n++; }
+          }
+          if (s.stroke && s.stroke.color) {
+            const c = mapCol(s.stroke.color);
+            if (c && !s.cut) { s.stroke.color = c; n++; }
+          }
+        });
+        layerVerBump(L);
+      } else if (L.type === 'raster' && /background/i.test(L.name || '')) {
+        const c = L.canvas;
+        // same pixels, naya gradient — alpha preserve
+        const g = c.getContext('2d');
+        const gr = g.createLinearGradient(0, 0, doc.w, doc.h);
+        gr.addColorStop(0, newTH.bg); gr.addColorStop(1, newTH.bg2 || newTH.bg);
+        g.save(); g.globalCompositeOperation = 'source-in'; g.fillStyle = gr; g.fillRect(0, 0, doc.w, doc.h); g.restore();
+        layerVerBump(L); n++;
+      }
+    });
+    if (meta.theme) { meta.theme = newTH.id; doc.__av23 = meta; }
+    docDirty = true; needRender = true;
+    try { uiLayersRefresh(); } catch (e) { }
+    toast23('Theme: ' + newTH.name, 'ok', 1800);
+    return n;
+  }
+
+  /* ============================================================
+     4. asset library (60+ vector assets, 24×24 grid)
+     ============================================================ */
+  const rr2 = v => Math.round(v * 100) / 100;
+  const polyD = pts => 'M' + pts.map(p => rr2(p[0]) + ' ' + rr2(p[1])).join('L') + 'Z';
+  function circleD(cx, cy, r) {
+    return 'M' + rr2(cx - r) + ' ' + rr2(cy) + 'a' + rr2(r) + ' ' + rr2(r) + ' 0 1 0 ' + rr2(2 * r) + ' 0a' + rr2(r) + ' ' + rr2(r) + ' 0 1 0 ' + rr2(-2 * r) + ' 0Z';
+  }
+  function starD(cx, cy, R, r, n, ph) {
+    const pts = [];
+    for (let i = 0; i < n * 2; i++) {
+      const a = (ph == null ? -Math.PI / 2 : ph) + i * Math.PI / n;
+      const rr = i % 2 ? r : R;
+      pts.push([cx + Math.cos(a) * rr, cy + Math.sin(a) * rr]);
+    }
+    return polyD(pts);
+  }
+  function rrectD(x, y, w, h, r) {
+    r = Math.min(r, w / 2, h / 2);
+    return 'M' + rr2(x + r) + ' ' + y + 'H' + rr2(x + w - r) + 'a' + r + ' ' + r + ' 0 0 1 ' + r + ' ' + r +
+      'V' + rr2(y + h - r) + 'a' + r + ' ' + r + ' 0 0 1 ' + (-r) + ' ' + r +
+      'H' + rr2(x + r) + 'a' + r + ' ' + r + ' 0 0 1 ' + (-r) + ' ' + (-r) +
+      'V' + rr2(y + r) + 'a' + r + ' ' + r + ' 0 0 1 ' + r + ' ' + (-r) + 'Z';
+  }
+  const rectsD = arr => arr.map(a => rrectD(a[0], a[1], a[2], a[3], a[4] || 0)).join('');
+
+  const A23 = (n, t, d, o) => Object.assign({ n, t, d }, o || {});
+  const ASSETS23 = {
+    'Arrows': [
+      A23('Arrow right', 'arrow direction', polyD([[3, 10], [14, 10], [14, 6], [21, 12], [14, 18], [14, 14], [3, 14]])),
+      A23('Arrow left', 'arrow', polyD([[21, 10], [10, 10], [10, 6], [3, 12], [10, 18], [10, 14], [21, 14]])),
+      A23('Arrow up', 'arrow', polyD([[10, 21], [10, 10], [6, 10], [12, 3], [18, 10], [14, 10], [14, 21]])),
+      A23('Arrow down', 'arrow', polyD([[10, 3], [10, 14], [6, 14], [12, 21], [18, 14], [14, 14], [14, 3]])),
+      A23('Chevron', 'arrow thin', 'M8 4L16 12L8 20', { stroke: true }),
+      A23('Double chevron', 'arrow next', 'M4 5L10 12L4 19M12 5L18 12L12 19', { stroke: true }),
+      A23('Curved arrow', 'arrow curve', 'M3 19C9 19 14 15 16 6M12 7L16.5 5L18 9.5', { stroke: true }),
+      A23('Pointer', 'arrow cursor', polyD([[5, 3], [19, 12], [12.5, 13.5], [16, 20], [13, 21.5], [9.5, 15], [5, 3]]))
+    ],
+    'Badges': [
+      A23('Starburst', 'badge sale offer', starD(12, 12, 11, 8.6, 12)),
+      A23('Seal', 'badge stamp quality', starD(12, 12, 11, 9.4, 22)),
+      A23('Hexagon', 'badge shape', polyD([[12, 2], [20.7, 7], [20.7, 17], [12, 22], [3.3, 17], [3.3, 7]])),
+      A23('Shield', 'badge secure', 'M12 2L20 5V12C20 17 16 20.5 12 22C8 20.5 4 17 4 12V5Z'),
+      A23('Tag', 'badge price label', 'M3 12L12 3H20V11L11 20Z' + circleD(16.5, 7.5, 1.4), { eo: true }),
+      A23('Ribbon', 'badge banner', 'M3 5H21V12L12 17L3 12Z'),
+      A23('Medal', 'badge award', circleD(12, 9, 7) + starD(12, 9, 4.6, 2, 5), { eo: true }),
+      A23('Crown', 'badge king premium', polyD([[3, 18], [4.5, 6], [9.5, 12], [12, 4], [14.5, 12], [19.5, 6], [21, 18]]))
+    ],
+    'Social': [
+      A23('Instagram', 'social ig', 'M7.5 3h9A4.5 4.5 0 0 1 21 7.5v9A4.5 4.5 0 0 1 16.5 21h-9A4.5 4.5 0 0 1 3 16.5v-9A4.5 4.5 0 0 1 7.5 3Zm4.5 5.2A3.8 3.8 0 1 0 12 15.8 3.8 3.8 0 0 0 12 8.2Zm5-1.6a1 1 0 1 1 0 2 1 1 0 0 1 0-2Z', { stroke: true }),
+      A23('Facebook', 'social fb', 'M13.6 22v-8h2.7l.4-3.1h-3.1V8.9c0-.9.25-1.5 1.55-1.5H17V4.6c-.3-.05-1.3-.1-2.4-.1-2.4 0-4 1.45-4 4.1v2.3H8v3.1h2.6V22Z'),
+      A23('WhatsApp', 'social wa chat', circleD(12, 12, 9.5) + 'M8.6 7.4c.6 2.9 2.4 4.7 5.3 5.3l1.5-1.5 2.3 1.4-.8 1.8c-4.1.8-8.6-3.5-9.4-7.6l1.8-.8Z', { eo: true }),
+      A23('YouTube', 'social yt video', rrectD(2, 5, 20, 14, 4) + 'M10 9L16.2 12L10 15Z', { eo: true }),
+      A23('X / Twitter', 'social x', polyD([[3, 3], [9.4, 3], [12.4, 7.6], [16.2, 3], [21, 3], [14.8, 10.9], [21, 21], [14.6, 21], [11.1, 15.6], [6.7, 21], [3, 21], [9.6, 13.2]])),
+      A23('LinkedIn', 'social in job', circleD(6.4, 6.4, 1.9) + rectsD([[4.8, 9.4, 3.2, 9.8]]) + 'M11 9.4h3v1.4c.7-1 1.8-1.7 3.3-1.7 2.4 0 3.7 1.5 3.7 4.4v5.7h-3.2v-5.2c0-1.3-.5-2-1.6-2s-1.9.8-1.9 2.2v5h-3.3Z'),
+      A23('Telegram', 'social tg send', 'M21 4L2.6 11.4l4.6 1.5L9 20l3.2-3.6 4.3 3.1Z'),
+      A23('Globe', 'social web world', circleD(12, 12, 9.5), { stroke: true })
+    ],
+    'Business': [
+      A23('Phone', 'contact call', 'M6.6 3h3l1.5 4.2-2 1.4c.9 2.3 2.6 4 4.9 4.9l1.4-2 4.2 1.5v3c0 1.2-1 2.1-2.2 2-7.2-.6-12.8-6.2-13.4-13.4C4.5 4 5.4 3 6.6 3Z'),
+      A23('Mail', 'contact email', rrectD(2.5, 5, 19, 14, 2) + 'M3.4 6.2L12 12.4L20.6 6.2Z', { eo: true }),
+      A23('Location', 'contact map pin', 'M12 2A7 7 0 0 1 19 9c0 5-7 13-7 13S5 14 5 9a7 7 0 0 1 7-7Zm0 4.4A2.6 2.6 0 1 0 12 11.6 2.6 2.6 0 0 0 12 6.4Z', { eo: true }),
+      A23('Clock', 'time hours', circleD(12, 12, 9.5) + 'M11 6h2v6.4l4 2.3-1 1.7-5-2.9Z', { eo: true }),
+      A23('Cart', 'shop buy', 'M2.5 4h3l2.6 11h9.3l2.4-8H6.1', { stroke: true }),
+      A23('Rupee', 'money price inr', 'M7 4h10M7 8h10M15.5 4c0 4.2-3.1 5.4-6 5.4H7l8.5 10.6', { stroke: true }),
+      A23('Percent', 'discount sale off', circleD(7, 7, 2.7) + circleD(17, 17, 2.7) + 'M19 4.5L5 19.5', { stroke: true }),
+      A23('Truck', 'delivery shipping', 'M2 6h11v9H2Zm11 3h4l3 3v3h-7Z M6 18a1.8 1.8 0 1 0 0 .1Z', { stroke: true }),
+      A23('Star', 'rating favourite', starD(12, 12, 10, 4.3, 5)),
+      A23('Check', 'done tick ok', 'M4 13l5 5L20 6', { stroke: true })
+    ],
+    'Frames': [
+      A23('Frame rect', 'border outline', rrectD(3, 3, 18, 18, 2), { stroke: true }),
+      A23('Frame circle', 'border round', circleD(12, 12, 9.5), { stroke: true }),
+      A23('Arch', 'border arch', 'M4 21V11a8 8 0 0 1 16 0v10', { stroke: true }),
+      A23('Corners', 'border crop', 'M3 8V3h5M16 3h5v5M21 16v5h-5M8 21H3v-5', { stroke: true }),
+      A23('Polaroid', 'photo frame', 'M3 3h18v13H3ZM3 19h18v2H3Z', { stroke: true }),
+      A23('Ticket', 'coupon entry', 'M3 8a2 2 0 0 1 0 4v4h18v-4a2 2 0 0 1 0-4V4H3Z', { stroke: true })
+    ],
+    'Dividers': [
+      A23('Wave', 'divider line', 'M2 12c2.5-4.5 5-4.5 7.5 0s5 4.5 7.5 0 3-2 5 0', { stroke: true }),
+      A23('Dashes', 'divider line', 'M2 12h4M9 12h4M16 12h4M21 12h1', { stroke: true }),
+      A23('Dots', 'divider', circleD(4, 12, 1.4) + circleD(9, 12, 1.4) + circleD(14, 12, 1.4) + circleD(19, 12, 1.4)),
+      A23('Zigzag', 'divider', 'M2 15l3-6 3 6 3-6 3 6 3-6 3 6', { stroke: true }),
+      A23('Flourish', 'divider elegant', 'M2 12c4 0 6-6 10-6s6 6 10 6', { stroke: true }),
+      A23('Double rule', 'divider', 'M2 10h20M2 14h20', { stroke: true })
+    ],
+    'Shapes': [
+      A23('Star 5', 'shape star', starD(12, 12, 10.5, 4.4, 5)),
+      A23('Star 6', 'shape star', starD(12, 12, 10.5, 5.2, 6)),
+      A23('Burst', 'shape explosion', starD(12, 12, 11, 6.5, 10)),
+      A23('Heart', 'shape love', 'M12 21s-8-4.6-8-10a4.6 4.6 0 0 1 8-2.8A4.6 4.6 0 0 1 20 11c0 5.4-8 10-8 10Z'),
+      A23('Blob', 'shape organic', 'M12 2c5 0 9 3 9 7s-3 5-4 8-2 5-6 5-5-2-6-5-3-4-3-8 5-7 10-7Z'),
+      A23('Cloud', 'shape weather', 'M7 19a5 5 0 0 1-.6-10A6 6 0 0 1 18 9.5 4.7 4.7 0 0 1 17.5 19Z'),
+      A23('Speech', 'shape bubble chat', 'M3 5h18v11H12l-5 4v-4H3Z'),
+      A23('Hexagon', 'shape polygon', polyD([[12, 2], [20.7, 7], [20.7, 17], [12, 22], [3.3, 17], [3.3, 7]]))
+    ],
+    'Cut & Print': [
+      A23('Crop marks', 'print cutting registration', 'M12 1v7M12 16v7M1 12h7M16 12h7', { stroke: true }),
+      A23('Scissors', 'cut cutting', 'M6 4l12 13M18 4L9 12 M4.5 19a2.5 2.5 0 1 0 0-.1ZM19.5 19a2.5 2.5 0 1 0 0-.1Z', { stroke: true }),
+      A23('Barcode', 'print label scan', rectsD([[2, 6, 1.6, 12], [5, 6, 1, 12], [7.4, 6, 2.2, 12], [11, 6, 1, 12], [13.2, 6, 1.6, 12], [16, 6, 1, 12], [18, 6, 2.4, 12], [21, 6, 1, 12]])),
+      A23('QR block', 'print scan qr', rectsD([[3, 3, 7, 7], [14, 3, 7, 7], [3, 14, 7, 7], [14, 14, 3, 3], [18, 14, 3, 3], [14, 18, 3, 3], [18, 18, 3, 3]])),
+      A23('Registration', 'print align target', circleD(12, 12, 8), { stroke: true }),
+      A23('Cut circle', 'dieline sticker', circleD(12, 12, 9.5), { stroke: true })
+    ]
+  };
+
+  function insertAsset(a) {
+    if (!doc) { toast23('Pehle canvas kholo', 'err'); return null; }
+    let subs = [];
+    try { subs = parsePathD(a.d) || []; } catch (e) { subs = []; }
+    if (!subs.length) { toast23('Asset load nahi hui', 'err'); return null; }
+    const size = Math.min(doc.w, doc.h) * 0.30;
+    const s = size / 24, cx = doc.w / 2, cy = doc.h / 2;
+    const tp = p => p ? { x: cx + (p.x - 12) * s, y: cy + (p.y - 12) * s } : null;
+    const subs2 = subs.map(sub => ({
+      closed: sub.closed,
+      nodes: sub.nodes.map(n => ({ p: tp(n.p), in: tp(n.in), out: tp(n.out) }))
+    }));
+    const col = brand();
+    const shape = {
+      id: uid(), type: 'path', subpaths: subs2, evenodd: !!a.eo,
+      fill: a.stroke ? null : solid(col),
+      stroke: a.stroke ? { color: col, width: Math.max(1, size * 0.055) } : null,
+      t: null, _dirty: true
+    };
+    try { pushUndo(); } catch (e) { }
+    let L = null;
+    try { L = activeLayer(); } catch (e) { L = null; }
+    if (!L || L.type !== 'vector' || L.locked) {
+      L = newVectorLayer('Assets');
+      insertLayer(L, doc.layers[doc.layers.length - 1] || null);
+    }
+    L.shapes.push(shape);
+    try { selShapes = [shape]; } catch (e) { }
+    layerVerBump(L); docDirty = true; needRender = true;
+    try { uiLayers(); uiLayersRefresh(); uiProps(); } catch (e) { }
+    toast23(a.n + ' add hua — Move (V) se drag / corner se resize', 'ok', 2200);
+    return shape;
+  }
+
+  /* ============================================================
+     5. print + cut engine
+     ============================================================ */
+  function docMeta() {
+    let m = (doc && doc.__av23) || null;
+    if (!m && window.__av23last) m = window.__av23last;
+    m = m || {};
+    const srcDpi = m.dpi || 96;
+    return {
+      srcDpi,
+      wmm: m.wmm || Math.round(px2mm(doc ? doc.w : 0, srcDpi) * 10) / 10,
+      hmm: m.hmm || Math.round(px2mm(doc ? doc.h : 0, srcDpi) * 10) / 10,
+      cut: m.cut || null
+    };
+  }
+
+  function printOpts() {
+    const g = id => document.getElementById(id);
+    const dpi = +(g('p23dpi') ? g('p23dpi').value : 300) || 300;
+    const bleed = +(g('p23bleed') ? g('p23bleed').value : 3) || 0;
+    const safe = +(g('p23safe') ? g('p23safe').value : 5) || 0;
+    const marks = g('p23marks') ? !!g('p23marks').checked : true;
+    const white = g('p23white') ? !!g('p23white').checked : true;
+    const cutOff = +(g('p23cutoff') ? g('p23cutoff').value : 2) || 0;
+    const m = docMeta();
+    return { dpi, bleed, safe, marks, white, cutOff, srcDpi: m.srcDpi, wmm: m.wmm, hmm: m.hmm };
+  }
+
+  function withHiddenCut(fn) {
+    const hid = [];
+    try {
+      (doc.layers || []).forEach(L => {
+        if (L.visible && Array.isArray(L.shapes) && L.shapes.some(s => s && s.cut)) { L.visible = false; hid.push(L); }
+      });
+    } catch (e) { }
+    try { return fn(); }
+    finally {
+      hid.forEach(L => { L.visible = true; });
+      docDirty = true; needRender = true;
+      try { uiLayersRefresh(); } catch (e) { }
+    }
+  }
+
+  function drawCropMarks(g, x, y, w, h, m) {
+    g.save();
+    g.strokeStyle = '#000000'; g.lineWidth = Math.max(1, Math.round(m * 0.035));
+    const len = m * 0.62, gap = m * 0.14;
+    [[x, y, -1, -1], [x + w, y, 1, -1], [x, y + h, -1, 1], [x + w, y + h, 1, 1]].forEach(c => {
+      const cx = c[0], cy = c[1], sx = c[2], sy = c[3];
+      g.beginPath(); g.moveTo(cx + sx * gap, cy); g.lineTo(cx + sx * (gap + len), cy); g.stroke();
+      g.beginPath(); g.moveTo(cx, cy + sy * gap); g.lineTo(cx, cy + sy * (gap + len)); g.stroke();
+    });
+    g.restore();
+  }
+
+  /* poora print canvas: bleed + crop marks, cut-line layer hidden */
+  function renderPrintCanvas(o) {
+    o = o || printOpts();
+    return withHiddenCut(() => {
+      const scale = Math.max(0.05, o.dpi / (o.srcDpi || 96));
+      const base = flattenToCanvas(scale, o.white ? '#ffffff' : null);
+      const bpx = Math.round(mm2px(o.bleed, o.dpi));
+      const mpx = o.marks ? Math.round(mm2px(3, o.dpi)) : 0;
+      const pad = bpx + mpx;
+      const c = mkCanvas(base.width + pad * 2, base.height + pad * 2);
+      const g = c.getContext('2d');
+      if (o.white) { g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, c.height); }
+      if (bpx > 0) {
+        const bw = base.width, bh = base.height;
+        g.drawImage(base, 0, 0, bw, 1, pad, pad - bpx, bw, bpx);
+        g.drawImage(base, 0, bh - 1, bw, 1, pad, pad + bh, bw, bpx);
+        g.drawImage(base, 0, 0, 1, bh, pad - bpx, pad, bpx, bh);
+        g.drawImage(base, bw - 1, 0, 1, bh, pad + bw, pad, bpx, bh);
+        g.drawImage(base, 0, 0, 1, 1, pad - bpx, pad - bpx, bpx, bpx);
+        g.drawImage(base, bw - 1, 0, 1, 1, pad + bw, pad - bpx, bpx, bpx);
+        g.drawImage(base, 0, bh - 1, 1, 1, pad - bpx, pad + bh, bpx, bpx);
+        g.drawImage(base, bw - 1, bh - 1, 1, 1, pad + bw, pad + bh, bpx, bpx);
+      }
+      g.drawImage(base, pad, pad);
+      if (mpx > 0) drawCropMarks(g, pad, pad, base.width, base.height, mpx);
+      return { canvas: c, pad, bpx, mpx, base };
+    });
+  }
+
+  function canvasJPEG(c, q) {
+    const url = c.toDataURL('image/jpeg', q || 0.95);
+    const b64 = url.split(',')[1];
+    const bin = atob(b64);
+    const u = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    return u;
+  }
+  const fmt = v => (Math.round(v * 1000) / 1000);
+
+  function buildPDF(canvas, box) {
+    // box: {wPt,hPt,padPt,bleedPt}
+    const jpeg = canvasJPEG(canvas, 0.95);
+    const enc = new TextEncoder();
+    const parts = []; let off = 0; const offs = [];
+    const push = x => { const b = typeof x === 'string' ? enc.encode(x) : x; parts.push(b); off += b.length; };
+    const obj = (n, s) => { offs[n] = off; push(n + ' 0 obj\n' + s + '\nendobj\n'); };
+    push('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+    obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+    obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+    const W = fmt(box.wPt), H = fmt(box.hPt), p = fmt(box.padPt || 0);
+    const tw = fmt(box.wPt - 2 * (box.padPt || 0)), th = fmt(box.hPt - 2 * (box.padPt || 0));
+    obj(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + W + ' ' + H + ']' +
+      ' /TrimBox [' + p + ' ' + p + ' ' + fmt((box.padPt || 0) + tw) + ' ' + fmt((box.padPt || 0) + th) + ']' +
+      ' /BleedBox [' + fmt((box.padPt || 0) - (box.bleedPt || 0)) + ' ' + fmt((box.padPt || 0) - (box.bleedPt || 0)) + ' ' +
+      fmt((box.padPt || 0) + tw + (box.bleedPt || 0)) + ' ' + fmt((box.padPt || 0) + th + (box.bleedPt || 0)) + ']' +
+      ' /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>');
+    offs[4] = off;
+    push('4 0 obj\n<< /Type /XObject /Subtype /Image /Width ' + canvas.width + ' /Height ' + canvas.height +
+      ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ' + jpeg.length + ' >>\nstream\n');
+    push(jpeg); push('\nendstream\nendobj\n');
+    const content = 'q\n' + W + ' 0 0 ' + H + ' 0 0 cm\n/Im0 Do\nQ\n';
+    obj(5, '<< /Length ' + content.length + ' >>\nstream\n' + content + 'endstream');
+    const xref = off;
+    push('xref\n0 6\n0000000000 65535 f \n');
+    for (let i = 1; i <= 5; i++) push(String(offs[i] || 0).padStart(10, '0') + ' 00000 n \n');
+    push('trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n' + xref + '\n%%EOF\n');
+    const total = parts.reduce((a, b) => a + b.length, 0);
+    const out = new Uint8Array(total); let pos = 0;
+    for (const b of parts) { out.set(b, pos); pos += b.length; }
+    return out;
+  }
+
+  /* ---------- cut geometry ---------- */
+  function findCutShape() {
+    let found = null;
+    try {
+      (doc.layers || []).forEach(L => {
+        (L.shapes || []).forEach(s => { if (!found && s && s.cut) found = s; });
+      });
+    } catch (e) { }
+    return found;
+  }
+  function cutGeometry(o) {
+    o = o || printOpts();
+    const m = docMeta();
+    const pxPerMm = (m.srcDpi || 96) / MM;
+    const off = (o.cutOff || 0) * pxPerMm;
+    const cs = findCutShape();
+    let d = '', note = '', bb = { x: 0, y: 0, w: doc.w, h: doc.h };
+    if (cs && cs.type === 'ellipse') {
+      const r = Math.abs(cs.rx) + off;
+      d = circleD(cs.cx, cs.cy, r);
+      bb = { x: cs.cx - r, y: cs.cy - r, w: r * 2, h: r * 2 };
+      note = 'circle cut · r=' + (r / pxPerMm).toFixed(1) + 'mm';
+    } else if (cs && cs.type === 'rect') {
+      d = rrectD(cs.x - off, cs.y - off, cs.w + off * 2, cs.h + off * 2, Math.min(cs.w, cs.h) * 0.04);
+      bb = { x: cs.x - off, y: cs.y - off, w: cs.w + off * 2, h: cs.h + off * 2 };
+      note = 'rect cut · offset ' + (o.cutOff || 0) + 'mm';
+    } else if (cs && (cs.type === 'path' || cs.type === 'poly')) {
+      try { d = pathToD(cs.type === 'path' ? cs.subpaths : pathFromPts([[0, 0]])); } catch (e) { d = ''; }
+      note = 'custom cut path (offset manual)';
+      try { const b = shapeLocalBBox(cs); bb = { x: b.x, y: b.y, w: b.x2 - b.x, h: b.y2 - b.y }; } catch (e) { }
+    } else {
+      const pad = off;
+      d = rrectD(-pad, -pad, doc.w + pad * 2, doc.h + pad * 2, Math.min(doc.w, doc.h) * 0.02);
+      bb = { x: -pad, y: -pad, w: doc.w + pad * 2, h: doc.h + pad * 2 };
+      note = 'design outline + ' + (o.cutOff || 0) + 'mm offset';
+    }
+    const wmm = px2mm(bb.w, m.srcDpi), hmm = px2mm(bb.h, m.srcDpi);
+    return { d, note, bb, wmm, hmm, pxPerMm };
+  }
+
+  function buildCutSVG(o) {
+    o = o || printOpts();
+    const m = docMeta();
+    const cut = cutGeometry(o);
+    const strokePx = Math.max(0.5, (m.srcDpi || 96) * 0.25 / MM); // 0.25mm
+    const W = m.wmm, H = m.hmm;
+    const vb = [cut.bb.x, cut.bb.y, cut.bb.w, cut.bb.h].map(v => Math.round(v * 100) / 100).join(' ');
+    const svg = '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<!-- ArtViSiON Studio v23 · cut / dieline -->\n' +
+      '<!-- design: ' + esc(doc.name) + ' · ' + W + 'x' + H + 'mm · ' + cut.note + ' -->\n' +
+      '<svg xmlns="http://www.w3.org/2000/svg" width="' + fmt(cut.wmm) + 'mm" height="' + fmt(cut.hmm) + 'mm" viewBox="' + vb + '">\n' +
+      '  <g id="CUT" fill="none" stroke="#FF0000" stroke-width="' + fmt(strokePx) + '" stroke-linejoin="round">\n' +
+      '    <path d="' + cut.d + '"/>\n' +
+      '  </g>\n' +
+      '</svg>\n';
+    return svg;
+  }
+
+  function renderCutPNG(o) {
+    o = o || printOpts();
+    const m = docMeta();
+    const cut = cutGeometry(o);
+    const scale = Math.max(0.05, o.dpi / (m.srcDpi || 96));
+    const c = mkCanvas(Math.round(cut.bb.w * scale) + 8, Math.round(cut.bb.h * scale) + 8);
+    const g = c.getContext('2d');
+    g.translate(4 - cut.bb.x * scale, 4 - cut.bb.y * scale);
+    g.scale(scale, scale);
+    const p = new Path2D(cut.d);
+    g.lineWidth = (0.25 * (m.srcDpi || 96) / MM);
+    g.strokeStyle = '#FF0000';
+    g.stroke(p);
+    return c;
+  }
+
+  /* ---------- zip (store, no deps) ---------- */
+  const CRC_T = (() => {
+    const t = new Uint32Array(256);
+    for (let i = 0; i < 256; i++) {
+      let c = i;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+      t[i] = c >>> 0;
+    }
+    return t;
+  })();
+  function crc32(u8) {
+    let c = 0xFFFFFFFF;
+    for (let i = 0; i < u8.length; i++) c = CRC_T[(c ^ u8[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+  function zipMake(files) {
+    const enc = new TextEncoder();
+    const u16 = v => [v & 255, (v >>> 8) & 255];
+    const u32 = v => [v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255];
+    const chunks = [], central = [];
+    let offset = 0;
+    const dt = ((2026 - 1980) << 9) | (1 << 5) | 1, tm = 0;
+    files.forEach(f => {
+      const name = enc.encode(f.name);
+      const data = f.bytes instanceof Uint8Array ? f.bytes : new Uint8Array(f.bytes);
+      const crc = crc32(data);
+      const local = new Uint8Array([].concat(
+        u32(0x04034b50), u16(20), u16(0), u16(0), u16(tm), u16(dt),
+        u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0)
+      ));
+      chunks.push(local, name, data);
+      central.push({ name, crc, size: data.length, offset });
+      offset += local.length + name.length + data.length;
+    });
+    const cdStart = offset;
+    let cdSize = 0;
+    central.forEach(e => {
+      const h = new Uint8Array([].concat(
+        u32(0x02014b50), u16(20), u16(20), u16(0), u16(0), u16(tm), u16(dt),
+        u32(e.crc), u32(e.size), u32(e.size), u16(e.name.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(e.offset)
+      ));
+      chunks.push(h, e.name);
+      cdSize += h.length + e.name.length;
+    });
+    const eocd = new Uint8Array([].concat(
+      u32(0x06054b50), u16(0), u16(0), u16(central.length), u16(central.length),
+      u32(cdSize), u32(cdStart), u16(0)
+    ));
+    chunks.push(eocd);
+    const total = chunks.reduce((a, b) => a + b.length, 0);
+    const out = new Uint8Array(total);
+    let p = 0;
+    chunks.forEach(c => { out.set(c, p); p += c.length; });
+    return out;
+  }
+
+  const safe23 = s => String(s || 'design').replace(/[^\w\-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'design';
+
+  function fileBase() {
+    const m = docMeta();
+    return safe23(doc.name) + '-' + Math.round(m.wmm) + 'x' + Math.round(m.hmm) + 'mm';
+  }
+
+  function specsTxt(o) {
+    const m = docMeta();
+    const th = themeById((doc.__av23 || {}).theme || 'sunrise');
+    const fonts = new Set();
+    (doc.layers || []).forEach(L => (L.shapes || []).forEach(s => { if (s.type === 'text') fonts.add(s.font + ' ' + Math.round(s.size)); }));
+    return [
+      'ArtViSiON Studio v23 — print / cut pack',
+      '======================================',
+      'Design      : ' + (doc.name || 'untitled'),
+      'Artboard    : ' + doc.w + ' x ' + doc.h + ' px',
+      'Print size  : ' + m.wmm + ' x ' + m.hmm + ' mm',
+      'DPI         : ' + o.dpi + ' (source ' + m.srcDpi + ' dpi)',
+      'Bleed       : ' + o.bleed + ' mm each side',
+      'Safe margin : ' + o.safe + ' mm',
+      'Crop marks  : ' + (o.marks ? 'yes (3 mm margin)' : 'no'),
+      'Colour mode : RGB (sRGB) — press CMYK ke liye printer se convert karayein',
+      'Theme       : ' + th.name,
+      '',
+      'Files:',
+      '  *-print-<dpi>dpi.pdf  — press-ready PDF, TrimBox + BleedBox set, crop marks ke saath',
+      '  *-print-<dpi>dpi.png  — flat PNG (bleed + marks included)',
+      '  *-cut.svg             — cutting machine / plotter ke liye vector dieline (red line)',
+      '  *-cut.png             — transparent cut line (vinyl / sticker cutter)',
+      '  *-social.jpg          — social media / WhatsApp share ke liye sRGB JPG',
+      '',
+      'Fonts used: ' + (Array.from(fonts).join(', ') || '—'),
+      '',
+      'Tip: agar printer "bleed chahiye" bole to 3mm rakhein; sticker / die-cut me',
+      'cut offset 2mm default hai (sticker ke kinare se bahar).'
+    ].join('\n');
+  }
+
+  function makePack(o, which) {
+    o = o || printOpts();
+    const m = docMeta();
+    const base = fileBase();
+    const out = [];
+    const pr = renderPrintCanvas(o);
+    const trimWpt = m.wmm * 72 / MM, trimHpt = m.hmm * 72 / MM;
+    const padMm = o.bleed + (o.marks ? 3 : 0);
+    const padPt = padMm * 72 / MM;
+    const wPt = trimWpt + padPt * 2, hPt = trimHpt + padPt * 2;
+
+    if (!which || which.indexOf('pdf') >= 0) {
+      out.push({ name: base + '-print-' + o.dpi + 'dpi.pdf', bytes: buildPDF(pr.canvas, { wPt, hPt, padPt, bleedPt: o.bleed * 72 / MM }) });
+    }
+    if (!which || which.indexOf('png') >= 0) {
+      out.push({ name: base + '-print-' + o.dpi + 'dpi.png', bytes: dataURLBytes(pr.canvas.toDataURL('image/png')) });
+    }
+    if (!which || which.indexOf('cutsvg') >= 0) {
+      out.push({ name: base + '-cut.svg', bytes: new TextEncoder().encode(buildCutSVG(o)) });
+    }
+    if (!which || which.indexOf('cutpng') >= 0) {
+      out.push({ name: base + '-cut.png', bytes: dataURLBytes(renderCutPNG(o).toDataURL('image/png')) });
+    }
+    if (!which || which.indexOf('social') >= 0) {
+      out.push({ name: base + '-social.jpg', bytes: dataURLBytes(flattenToCanvas(1, '#ffffff').toDataURL('image/jpeg', 0.92)) });
+    }
+    if (!which || which.indexOf('specs') >= 0) {
+      out.push({ name: base + '-specs.txt', bytes: new TextEncoder().encode(specsTxt(o)) });
+    }
+    return out;
+  }
+  function dataURLBytes(url) {
+    const b64 = url.split(',')[1];
+    const bin = atob(b64);
+    const u = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    return u;
+  }
+
+  function doExport(what) {
+    try {
+      const o = printOpts();
+      const m = docMeta();
+      const base = fileBase();
+      if (what === 'zip') {
+        const files = makePack(o);
+        const z = zipMake(files);
+        download(base + '-print-pack.zip', new Blob([z], { type: 'application/zip' }));
+        toast23('Pack ready — ' + files.length + ' files (' + Math.round(z.length / 1024) + ' KB)', 'ok', 3200);
+        return true;
+      }
+      if (what === 'pdf') {
+        const pr = renderPrintCanvas(o);
+        const trimWpt = m.wmm * 72 / MM, trimHpt = m.hmm * 72 / MM;
+        const padMm = o.bleed + (o.marks ? 3 : 0), padPt = padMm * 72 / MM;
+        const bytes = buildPDF(pr.canvas, { wPt: trimWpt + padPt * 2, hPt: trimHpt + padPt * 2, padPt, bleedPt: o.bleed * 72 / MM });
+        download(base + '-print-' + o.dpi + 'dpi.pdf', new Blob([bytes], { type: 'application/pdf' }));
+        toast23('PDF ready · ' + m.wmm + '×' + m.hmm + 'mm · ' + o.dpi + 'dpi · bleed ' + o.bleed + 'mm', 'ok', 3000);
+        return true;
+      }
+      if (what === 'png') {
+        const pr = renderPrintCanvas(o);
+        pr.canvas.toBlob(b => download(base + '-print-' + o.dpi + 'dpi.png', b), 'image/png');
+        toast23('PNG ready · ' + (pr.canvas.width) + '×' + (pr.canvas.height) + 'px @ ' + o.dpi + 'dpi', 'ok', 2600);
+        return true;
+      }
+      if (what === 'cutsvg') {
+        download(base + '-cut.svg', new Blob([buildCutSVG(o)], { type: 'image/svg+xml' }));
+        toast23('Cut SVG ready — red line cutting machine ke liye', 'ok', 2600);
+        return true;
+      }
+      if (what === 'cutpng') {
+        renderCutPNG(o).toBlob(b => download(base + '-cut.png', b), 'image/png');
+        toast23('Cut PNG ready (transparent)', 'ok', 2200);
+        return true;
+      }
+      if (what === 'social') {
+        flattenToCanvas(1, '#ffffff').toBlob(b => download(base + '-social.jpg', b), 'image/jpeg', 0.92);
+        toast23('Social JPG ready', 'ok', 2000);
+        return true;
+      }
+    } catch (e) {
+      toast23('Export fail: ' + e.message, 'err', 3000);
+      return false;
+    }
+  }
+
+  /* ---------- print guides overlay ---------- */
+  const G23 = { on: false, el: null, raf: 0 };
+  function guidesLoop() {
+    if (!G23.on) return;
+    drawGuides();
+    G23.raf = requestAnimationFrame(guidesLoop);
+  }
+  function drawGuides() {
+    let el = G23.el;
+    if (!el) {
+      el = document.createElement('canvas');
+      el.id = 'av23guides';
+      el.style.cssText = 'position:fixed;pointer-events:none;z-index:9990;left:0;top:0';
+      document.body.appendChild(el);
+      G23.el = el;
+    }
+    const cvEl = document.getElementById('cv');
+    if (!cvEl || !doc) { el.style.display = 'none'; return; }
+    const r = cvEl.getBoundingClientRect();
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    if (el.width !== Math.round(r.width * dpr) || el.height !== Math.round(r.height * dpr)) {
+      el.width = Math.max(1, Math.round(r.width * dpr));
+      el.height = Math.max(1, Math.round(r.height * dpr));
+    }
+    el.style.display = 'block';
+    el.style.left = r.left + 'px'; el.style.top = r.top + 'px';
+    el.style.width = r.width + 'px'; el.style.height = r.height + 'px';
+    const g = el.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, r.width, r.height);
+    const o = printOpts(), m = docMeta();
+    const toS = p => { try { return docToScreen(p); } catch (e) { return { x: 0, y: 0 }; } };
+    const a = toS({ x: 0, y: 0 }), b = toS({ x: doc.w, y: doc.h });
+    const bleedPx = mm2px(o.bleed, m.srcDpi);
+    const safePx = mm2px(o.safe, m.srcDpi);
+    // bleed
+    if (o.bleed > 0) {
+      const p1 = toS({ x: -bleedPx, y: -bleedPx }), p2 = toS({ x: doc.w + bleedPx, y: doc.h + bleedPx });
+      g.save(); g.strokeStyle = 'rgba(225,29,72,.95)'; g.lineWidth = 1.5; g.setLineDash([7, 5]);
+      g.strokeRect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y); g.restore();
+    }
+    // trim
+    g.save(); g.strokeStyle = 'rgba(16,24,40,.9)'; g.lineWidth = 1.5;
+    g.strokeRect(a.x, a.y, b.x - a.x, b.y - a.y); g.restore();
+    // safe
+    if (o.safe > 0) {
+      const s1 = toS({ x: safePx, y: safePx }), s2 = toS({ x: doc.w - safePx, y: doc.h - safePx });
+      g.save(); g.strokeStyle = 'rgba(45,168,255,.95)'; g.lineWidth = 1.4; g.setLineDash([5, 5]);
+      g.strokeRect(s1.x, s1.y, s2.x - s1.x, s2.y - s1.y); g.restore();
+    }
+    // label
+    const lbl = m.wmm + '×' + m.hmm + 'mm · ' + o.dpi + 'dpi · bleed ' + o.bleed + 'mm';
+    g.save();
+    g.font = '600 11px system-ui,sans-serif';
+    const tw = g.measureText(lbl).width + 14;
+    g.fillStyle = 'rgba(16,24,40,.86)';
+    const ly = Math.max(4, a.y - 24);
+    g.fillRect(a.x, ly, tw, 20);
+    g.fillStyle = '#fff'; g.fillText(lbl, a.x + 7, ly + 14);
+    g.restore();
+  }
+  function toggleGuides(on) {
+    G23.on = on == null ? !G23.on : !!on;
+    try { localStorage.setItem('av23.guides', G23.on ? '1' : '0'); } catch (e) { }
+    if (G23.on) { cancelAnimationFrame(G23.raf); guidesLoop(); }
+    else { cancelAnimationFrame(G23.raf); if (G23.el) { G23.el.remove(); G23.el = null; } }
+    const btn = document.getElementById('p23guideBtn');
+    if (btn) { btn.classList.toggle('on', G23.on); btn.innerHTML = ic23('grid', 15) + (G23.on ? ' Guides ON' : ' Guides'); }
+    return G23.on;
+  }
+
+  /* ============================================================
+     6. UI — CSS
+     ============================================================ */
+  const CSS23 = `
+  .av23ov{position:fixed;inset:0;z-index:99940;display:none;align-items:center;justify-content:center;padding:18px;
+    background:rgba(15,20,32,.55);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+  .av23ov.on{display:flex}
+  .av23box{width:min(1020px,100%);max-height:calc(100dvh - 36px);display:flex;flex-direction:column;background:#fff;
+    border-radius:20px;box-shadow:0 30px 80px rgba(10,16,30,.35);overflow:hidden;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;color:#101828}
+  .av23head{display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid #EDEFF4;background:linear-gradient(180deg,#fff,#FAFBFD)}
+  .av23head b{display:block;font-size:17px;letter-spacing:-.2px}
+  .av23head small{display:block;color:#667085;font-size:12px;margin-top:2px}
+  .av23head .sp{flex:1}
+  .av23x{width:34px;height:34px;border-radius:10px;border:1px solid #E4E7EC;background:#fff;color:#475467;font-size:15px;cursor:pointer;line-height:1}
+  .av23x:hover{border-color:#F54927;color:#F54927}
+  .av23body{padding:18px 20px;overflow:auto}
+  .av23foot{display:flex;gap:10px;align-items:center;padding:14px 20px;border-top:1px solid #EDEFF4;background:#FAFBFD}
+  .av23foot .sp{flex:1}
+  .av23btn{height:42px;padding:0 18px;border-radius:12px;border:1px solid #DCE0E8;background:#fff;color:#101828;
+    font:800 13.5px/1 inherit;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+  .av23btn:hover{border-color:#101828}
+  .av23btn.pri{background:linear-gradient(135deg,#F54927,#FF8A3D);border-color:transparent;color:#fff;box-shadow:0 10px 24px rgba(245,73,39,.28)}
+  .av23btn.pri:hover{filter:brightness(1.04)}
+  .av23btn.ghost{border-color:transparent;background:transparent;color:#667085}
+  .av23btn:disabled{opacity:.45;cursor:not-allowed}
+  /* steps */
+  .av23steps{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+  .av23steps span{padding:7px 13px;border-radius:999px;background:#F2F4F8;color:#667085;font-size:11.5px;font-weight:800;letter-spacing:.02em}
+  .av23steps span.on{background:linear-gradient(135deg,#F54927,#FF8A3D);color:#fff}
+  .av23pane{display:none}.av23pane.on{display:block}
+  /* purpose / theme cards */
+  .av23grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+  .pcard{position:relative;display:flex;flex-direction:column;gap:4px;padding:14px;border-radius:14px;border:1.5px solid #E4E7EC;background:#fff;
+    cursor:pointer;text-align:left;font:inherit;transition:.14s}
+  .pcard:hover{border-color:#F54927;transform:translateY(-1px);box-shadow:0 10px 22px rgba(245,73,39,.12)}
+  .pcard.on{border-color:#F54927;background:#FFF6F3;box-shadow:0 0 0 3px rgba(245,73,39,.12)}
+  .pcard .ic{font-size:22px;line-height:1}
+  .pcard b{font-size:13px;color:#101828}
+  .pcard small{font-size:11px;color:#667085}
+  .pcard .tick{position:absolute;right:10px;top:10px;width:18px;height:18px;border-radius:50%;background:#F54927;color:#fff;
+    font-size:11px;display:none;align-items:center;justify-content:center}
+  .pcard.on .tick{display:flex}
+  /* theme swatch */
+  .tcard{padding:0;border-radius:14px;border:1.5px solid #E4E7EC;overflow:hidden;cursor:pointer;background:#fff;font:inherit;text-align:left}
+  .tcard.on{border-color:#F54927;box-shadow:0 0 0 3px rgba(245,73,39,.12)}
+  .tcard .sw{height:64px;display:flex}
+  .tcard .sw i{flex:1}
+  .tcard .nm{padding:9px 11px;font-size:12px;font-weight:800;color:#101828;display:flex;justify-content:space-between;align-items:center}
+  .tcard .nm em{font-style:normal;font-size:10px;color:#98A2B3;font-weight:700}
+  /* form */
+  .av23form{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .av23fld{display:flex;flex-direction:column;gap:5px}
+  .av23fld label{font-size:11px;font-weight:800;color:#667085;letter-spacing:.03em;text-transform:uppercase}
+  .av23fld input,.av23fld select{height:40px;border-radius:11px;border:1px solid #DCE0E8;padding:0 12px;font:inherit;background:#fff;color:#101828}
+  .av23fld input:focus,.av23fld select:focus{outline:2px solid rgba(245,73,39,.35);border-color:#F54927}
+  .av23hint{font-size:12px;color:#667085;margin-top:10px;background:#F7F9FC;border:1px solid #EDEFF4;border-radius:12px;padding:10px 12px}
+  /* templates */
+  .tplgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+  .tpl{border:1.5px solid #E4E7EC;border-radius:14px;overflow:hidden;background:#fff;cursor:pointer;font:inherit;text-align:left;transition:.14s}
+  .tpl:hover{border-color:#F54927;transform:translateY(-2px);box-shadow:0 12px 26px rgba(16,24,40,.10)}
+  .tpl canvas{display:block;width:100%;height:150px;background:#EEF1F6}
+  .tpl .cap{padding:9px 11px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .tpl .cap b{font-size:12.5px}
+  .tpl .cap em{font-style:normal;font-size:10px;font-weight:800;color:#F54927;background:#FFF1EC;padding:2px 7px;border-radius:999px}
+  /* assets */
+  .av23tabs{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px}
+  .av23tabs button{padding:7px 12px;border-radius:999px;border:1px solid #E4E7EC;background:#fff;font:800 11.5px/1 inherit;color:#475467;cursor:pointer}
+  .av23tabs button.on{background:#101828;color:#fff;border-color:#101828}
+  .av23search{flex:1;min-width:160px;height:36px;border-radius:10px;border:1px solid #DCE0E8;padding:0 12px;font:inherit}
+  .asgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:9px}
+  .asbtn{border:1.5px solid #E4E7EC;border-radius:12px;background:#fff;padding:9px 6px 7px;cursor:pointer;display:flex;flex-direction:column;
+    align-items:center;gap:6px;font:inherit;transition:.12s}
+  .asbtn:hover{border-color:#F54927;background:#FFF8F5}
+  .asbtn svg{width:34px;height:34px;display:block}
+  .asbtn span{font-size:10px;font-weight:700;color:#667085;text-align:center;line-height:1.15}
+  /* print */
+  .p23grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+  .p23chk{display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin:14px 0;font-size:12.5px;font-weight:700;color:#344054}
+  .p23chk label{display:flex;gap:7px;align-items:center;cursor:pointer}
+  .p23chk input{width:17px;height:17px;accent-color:#F54927}
+  .p23info{background:#F7F9FC;border:1px solid #EDEFF4;border-radius:12px;padding:10px 12px;font-size:12.5px;color:#475467;margin-bottom:14px}
+  .p23info b{color:#101828}
+  .p23acts{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+  .p23acts button{height:52px;border-radius:13px;border:1.5px solid #E4E7EC;background:#fff;font:800 13px/1.2 inherit;color:#101828;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;gap:8px;text-align:center}
+  .p23acts button:hover{border-color:#101828}
+  .p23acts button.hot{grid-column:1/-1;background:linear-gradient(135deg,#F54927,#FF8A3D);color:#fff;border-color:transparent;
+    box-shadow:0 12px 28px rgba(245,73,39,.26);height:56px;font-size:14.5px}
+  #p23guideBtn{height:34px;padding:0 13px;border-radius:10px;border:1.5px solid #E4E7EC;background:#fff;font:800 12px/1 inherit;cursor:pointer;color:#344054}
+  #p23guideBtn.on{background:#101828;color:#fff;border-color:#101828}
+  /* hub */
+  .hubgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .hubcard{display:flex;gap:14px;align-items:flex-start;padding:18px;border-radius:16px;border:1.5px solid #E4E7EC;background:#fff;cursor:pointer;
+    font:inherit;text-align:left;transition:.14s}
+  .hubcard:hover{border-color:#F54927;transform:translateY(-2px);box-shadow:0 14px 30px rgba(16,24,40,.10)}
+  .hubcard .ic{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;font-size:20px;
+    background:linear-gradient(135deg,#F54927,#FF8A3D);color:#fff;flex:none}
+  .hubcard b{display:block;font-size:14.5px;color:#101828}
+  .hubcard small{display:block;font-size:12px;color:#667085;margin-top:3px;line-height:1.45}
+  /* bar button + side card */
+  #av12bar button[data-a="design23"]{background:linear-gradient(135deg,#F54927,#FF8A3D);color:#fff;border-color:transparent;
+    box-shadow:0 6px 16px rgba(245,73,39,.32)}
+  #av12bar button[data-a="design23"]:hover{filter:brightness(1.05)}
+  #av17quick button[data-q="design23"]{background:linear-gradient(135deg,#FFF3EE,#FFE7DC);border-color:#FFC9B4}
+  #av17quick button[data-q="design23"] i{background:linear-gradient(135deg,#F54927,#FF8A3D);color:#fff}
+  @media(max-width:700px){
+    .av23ov{padding:8px}
+    .av23box{max-height:calc(100dvh - 16px);border-radius:16px}
+    .av23body{padding:14px}
+    .av23form{grid-template-columns:1fr}
+    .hubgrid{grid-template-columns:1fr}
+    .av23head b{font-size:15px}
+    .tpl canvas{height:120px}
+    .p23acts button{height:48px}
+  }`;
+
+  function injectCSS23() {
+    if (document.getElementById('av23-style')) return;
+    const st = document.createElement('style');
+    st.id = 'av23-style'; st.textContent = CSS23;
+    document.head.appendChild(st);
+  }
+
+  /* ============================================================
+     7. overlay shell
+     ============================================================ */
+  function close23(ov) {
+    ov = ov || document.querySelector('.av23ov.on');
+    if (!ov) return;
+    ov.classList.remove('on');
+    setTimeout(() => { if (!ov.classList.contains('on') && ov.parentNode) ov.remove(); }, 180);
+  }
+  function shell(id, title, sub, body, foot) {
+    injectCSS23();
+    let ov = document.getElementById(id);
+    if (ov) ov.remove();
+    ov = document.createElement('div');
+    ov.id = id; ov.className = 'av23ov';
+    ov.innerHTML = '<div class="av23box" role="dialog" aria-modal="true">' +
+      '<div class="av23head"><div><b>' + title + '</b><small>' + sub + '</small></div><div class="sp"></div>' +
+      '<button class="av23x" title="Band karo (Esc)">✕</button></div>' +
+      '<div class="av23body">' + body + '</div>' +
+      (foot ? '<div class="av23foot">' + foot + '</div>' : '') + '</div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('mousedown', e => { if (e.target === ov) close23(ov); });
+    ov.querySelector('.av23x').onclick = () => close23(ov);
+    requestAnimationFrame(() => ov.classList.add('on'));
+    return ov;
+  }
+
+  /* ============================================================
+     8. hub
+     ============================================================ */
+  function openHub() {
+    const body = '<div class="hubgrid">' +
+      '<button class="hubcard" data-h="wiz"><span class="ic">' + ic23('sparkle', 20) + '</span><span><b>Quick Design — click click</b>' +
+      '<small>16 sizes (poster, IG post, card, sticker, banner…) · 8 styles · naam likho aur design ready.</small></span></button>' +
+      '<button class="hubcard" data-h="tpl"><span class="ic">' + ic23('tpl', 20) + '</span><span><b>Design Templates</b>' +
+      '<small>18 ready designs — ek click me artboard par, phir text/colour badlo.</small></span></button>' +
+      '<button class="hubcard" data-h="assets"><span class="ic">' + ic23('palette', 20) + '</span><span><b>Assets Library</b>' +
+      '<small>60+ vector assets — arrow, badge, social icon, frame, shape, barcode, cut mark.</small></span></button>' +
+      '<button class="hubcard" data-h="print"><span class="ic">' + ic23('print', 20) + '</span><span><b>Print &amp; Cut Pack</b>' +
+      '<small>Bleed + crop marks + 300dpi PDF/PNG, cut-line SVG/PNG, aur ek ZIP me saari files.</small></span></button>' +
+      '</div>' +
+      '<div class="av23hint"><b>Tip:</b> design banane ke baad neeche <b>Print &amp; Cut</b> kholo → <b>Print Pack (.zip)</b> dabao — print, cutting aur WhatsApp sab ke liye files ek saath mil jaati hain.</div>';
+    const ov = shell('av23hub', ic23('sparkle', 18) + ' Design Hub', 'Click-click designing — koi hidden menu nahi', body, '');
+    ov.querySelectorAll('[data-h]').forEach(b => b.onclick = () => {
+      const h = b.dataset.h;
+      close23(ov);
+      setTimeout(() => {
+        if (h === 'wiz') openWizard();
+        else if (h === 'tpl') openTemplates();
+        else if (h === 'assets') openAssets();
+        else openPrint();
+      }, 120);
+    });
+    return ov;
+  }
+
+  /* ============================================================
+     9. Quick Design wizard
+     ============================================================ */
+  const WIZ = { step: 1, size: 'igpost', theme: 'sunrise', dpi: 300, bleed: 3, safe: 5, data: Object.assign({}, DEFAULT_DATA) };
+
+  function openWizard() {
+    injectCSS23();
+    WIZ.step = 1;
+    const purpose = PURPOSE23.map((p, i) =>
+      '<button class="pcard' + (p.size === WIZ.size ? ' on' : '') + '" data-p="' + p.size + '" data-l="' + p.layout + '">' +
+      '<span class="tick">✓</span><span class="ic">' + ic23(p.icon, 22) + '</span><b>' + p.title + '</b><small>' + p.sub + '</small></button>').join('');
+    const themes = THEMES23.map(t =>
+      '<button class="tcard' + (t.id === WIZ.theme ? ' on' : '') + '" data-t="' + t.id + '">' +
+      '<div class="sw"><i style="background:' + t.bg + '"></i><i style="background:' + t.acc + '"></i>' +
+      '<i style="background:' + t.acc2 + '"></i><i style="background:' + t.ink + '"></i></div>' +
+      '<div class="nm">' + t.name + '<em>' + (t.id === WIZ.theme ? 'SELECTED' : '') + '</em></div></button>').join('');
+    const d = WIZ.data;
+    const body =
+      '<div class="av23steps"><span data-s="1" class="on">1 · Kya banega</span><span data-s="2">2 · Style</span><span data-s="3">3 · Details &amp; size</span></div>' +
+      '<div class="av23pane on" id="wz1"><div class="av23grid">' + purpose + '</div></div>' +
+      '<div class="av23pane" id="wz2"><div class="av23grid" style="grid-template-columns:repeat(auto-fill,minmax(160px,1fr))">' + themes + '</div></div>' +
+      '<div class="av23pane" id="wz3">' +
+      '<div class="av23form">' +
+      '<div class="av23fld"><label>Business / Brand name</label><input id="wzName" value="' + esc(d.name) + '" maxlength="28"></div>' +
+      '<div class="av23fld"><label>Tagline</label><input id="wzTag" value="' + esc(d.tagline) + '" maxlength="46"></div>' +
+      '<div class="av23fld" style="grid-column:1/-1"><label>Bada headline (2 line ke liye Enter dabao)</label><textarea id="wzHead" rows="2" style="border-radius:11px;border:1px solid #DCE0E8;padding:9px 12px;font:inherit;resize:vertical">' + esc(d.headline) + '</textarea></div>' +
+      '<div class="av23fld"><label>Phone / WhatsApp</label><input id="wzPhone" value="' + esc(d.phone) + '"></div>' +
+      '<div class="av23fld"><label>Website</label><input id="wzWeb" value="' + esc(d.web) + '"></div>' +
+      '<div class="av23fld"><label>Email</label><input id="wzMail" value="' + esc(d.mail) + '"></div>' +
+      '<div class="av23fld"><label>Address / City</label><input id="wzAddr" value="' + esc(d.addr) + '"></div>' +
+      '<div class="av23fld"><label>Print DPI (print sizes ke liye)</label><select id="wzDpi"><option value="150">150 dpi (fast)</option><option value="300" selected>300 dpi (standard press)</option><option value="600">600 dpi (heavy)</option></select></div>' +
+      '<div class="av23fld"><label>Bleed (mm)</label><select id="wzBleed"><option value="0">0 mm</option><option value="2">2 mm</option><option value="3" selected>3 mm (recommended)</option><option value="5">5 mm</option></select></div>' +
+      '</div>' +
+      '<div class="av23hint" id="wzSummary"></div></div>';
+    const foot = '<button class="av23btn ghost" id="wzBack">← Back</button>' +
+      '<div class="sp"></div><button class="av23btn ghost" id="wzTpl">' + ic23('tpl', 15) + ' Templates</button>' +
+      '<button class="av23btn pri" id="wzNext">Next →</button>';
+    const ov = shell('av23wiz', ic23('sparkle', 18) + ' Quick Design', '3 click me ready design — badalna ho to baad me sab editable hai', body, foot);
+
+    const setStep = n => {
+      WIZ.step = n;
+      ov.querySelectorAll('.av23steps span').forEach(s => s.classList.toggle('on', +s.dataset.s === n));
+      [1, 2, 3].forEach(i => { const p = ov.querySelector('#wz' + i); if (p) p.classList.toggle('on', i === n); });
+      ov.querySelector('#wzBack').disabled = n === 1;
+      ov.querySelector('#wzNext').textContent = n === 3 ? '✓ Design banao' : 'Next →';
+      if (n === 3) summary();
+    };
+    const summary = () => {
+      const el = ov.querySelector('#wzSummary'); if (!el) return;
+      const sz = sizeOf(WIZ.size, WIZ.dpi);
+      el.innerHTML = '<b>' + sz.ref.name + '</b> · ' + (sz.wmm ? sz.wmm + '×' + sz.hmm + 'mm @ ' + sz.dpi + 'dpi' : sz.W + '×' + sz.H + 'px') +
+        ' · theme <b>' + themeById(WIZ.theme).name + '</b>' + (sz.cut ? ' · <b>cut line</b> included' : '');
+    };
+    ov.querySelectorAll('[data-p]').forEach(b => b.onclick = () => {
+      ov.querySelectorAll('[data-p]').forEach(x => x.classList.remove('on'));
+      b.classList.add('on');
+      WIZ.size = b.dataset.p; WIZ.layout = b.dataset.l;
+      const sd = data23For(WIZ.size);
+      WIZ.data.headline = sd.headline; WIZ.data.tagline = sd.tagline;
+      const hEl = ov.querySelector('#wzHead'), tEl = ov.querySelector('#wzTag');
+      if (hEl) hEl.value = sd.headline;
+      if (tEl) tEl.value = sd.tagline;
+      setTimeout(() => setStep(2), 120);
+    });
+    ov.querySelectorAll('[data-t]').forEach(b => b.onclick = () => {
+      ov.querySelectorAll('[data-t]').forEach(x => { x.classList.remove('on'); const em = x.querySelector('em'); if (em) em.textContent = ''; });
+      b.classList.add('on');
+      const em = b.querySelector('em'); if (em) em.textContent = 'SELECTED';
+      WIZ.theme = b.dataset.t;
+      setTimeout(() => setStep(3), 140);
+    });
+    const grab = () => {
+      const g = id => { const e = ov.querySelector('#' + id); return e ? e.value : ''; };
+      WIZ.data = {
+        name: g('wzName') || 'APNA BRAND', tagline: g('wzTag'), headline: g('wzHead') || 'AAJ HI SHURU KARO',
+        phone: g('wzPhone'), web: g('wzWeb'), mail: g('wzMail'), addr: g('wzAddr')
+      };
+      WIZ.dpi = +(g('wzDpi') || 300);
+      WIZ.bleed = +(g('wzBleed') || 3);
+    };
+    ov.querySelector('#wzBack').onclick = () => setStep(Math.max(1, WIZ.step - 1));
+    ov.querySelector('#wzNext').onclick = () => {
+      if (WIZ.step < 3) { if (WIZ.step === 3) { } setStep(WIZ.step + 1); return; }
+      grab();
+      close23(ov);
+      setTimeout(() => {
+        buildDesign({
+          sizeKey: WIZ.size, themeId: WIZ.theme, layout: WIZ.layout || 'hero',
+          data: WIZ.data, dpi: WIZ.dpi, bleed: WIZ.bleed, safe: WIZ.safe
+        });
+        showTip();
+      }, 160);
+    };
+    ov.querySelector('#wzTpl').onclick = () => { close23(ov); setTimeout(openTemplates, 130); };
+    setStep(1);
+    return ov;
+  }
+
+  /* design banne ke baad chhota action strip */
+  function showTip() {
+    let t = document.getElementById('av23tip');
+    if (t) t.remove();
+    t = document.createElement('div');
+    t.id = 'av23tip';
+    t.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:186px;z-index:9989;display:flex;gap:8px;align-items:center;' +
+      'background:rgba(16,24,40,.94);color:#fff;padding:8px 10px 8px 14px;border-radius:14px;box-shadow:0 14px 34px rgba(0,0,0,.28);' +
+      'font:700 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;flex-wrap:wrap;max-width:min(760px,94vw)';
+    t.innerHTML = '<span style="opacity:.8">Design ready ✓</span>' +
+      '<button data-t="text" style="background:#fff;color:#101828;border:0;border-radius:9px;padding:7px 10px;font:800 11.5px/1 inherit;cursor:pointer">Text badlo</button>' +
+      '<button data-t="theme" style="background:#FF8A3D;color:#3B1508;border:0;border-radius:9px;padding:7px 10px;font:800 11.5px/1 inherit;cursor:pointer">Colour</button>' +
+      '<button data-t="photo" style="background:#2DA8FF;color:#04223A;border:0;border-radius:9px;padding:7px 10px;font:800 11.5px/1 inherit;cursor:pointer">Photo</button>' +
+      '<button data-t="asset" style="background:#2FD98A;color:#04251F;border:0;border-radius:9px;padding:7px 10px;font:800 11.5px/1 inherit;cursor:pointer">Assets</button>' +
+      '<button data-t="print" style="background:#fff;color:#101828;border:0;border-radius:9px;padding:7px 10px;font:800 11.5px/1 inherit;cursor:pointer">Print</button>' +
+      '<button data-t="x" style="background:transparent;color:#98A2B3;border:0;font:800 13px/1 inherit;cursor:pointer;padding:4px 6px">✕</button>';
+    document.body.appendChild(t);
+    t.addEventListener('click', e => {
+      const b = e.target.closest('[data-t]'); if (!b) return;
+      const k = b.dataset.t;
+      if (k === 'x') { t.remove(); return; }
+      if (k === 'text') { try { setTool('text'); toast23('Canvas par click karke text likho — ya Text layer me double-click', '', 2600); } catch (er) { } }
+      if (k === 'theme') openThemePicker();
+      if (k === 'photo') { try { document.getElementById('fileInput').click(); } catch (er) { } }
+      if (k === 'asset') { t.remove(); openAssets(); }
+      if (k === 'print') { t.remove(); openPrint(); }
+    });
+    setTimeout(() => { if (document.body.contains(t)) t.remove(); }, 26000);
+  }
+
+  function openThemePicker() {
+    const body = '<div class="av23grid" style="grid-template-columns:repeat(auto-fill,minmax(160px,1fr))">' +
+      THEMES23.map(t => '<button class="tcard" data-rt="' + t.id + '"><div class="sw">' +
+        '<i style="background:' + t.bg + '"></i><i style="background:' + t.acc + '"></i><i style="background:' + t.acc2 + '"></i><i style="background:' + t.ink + '"></i></div>' +
+        '<div class="nm">' + t.name + '</div></button>').join('') + '</div>' +
+      '<div class="av23hint">Ek click me poori design ka colour badal jaata hai — text, shapes aur background sab.</div>';
+    const ov = shell('av23theme', ic23('palette', 18) + ' Colour theme', 'Ek click me poora design recolour', body, '');
+    ov.querySelectorAll('[data-rt]').forEach(b => b.onclick = () => { retheme(b.dataset.rt); close23(ov); });
+    return ov;
+  }
+
+  /* ============================================================
+     10. templates gallery
+     ============================================================ */
+  const TPLS23 = [
+    { n: 'Instagram Post · Sale', size: 'igpost', theme: 'sunrise', layout: 'hero', tag: 'Social', d: { headline: 'MEGA SALE\n50% OFF' } },
+    { n: 'Instagram Post · Modern', size: 'igpost', theme: 'modern', layout: 'hero', tag: 'Social', d: { headline: 'NEW\nCOLLECTION' } },
+    { n: 'Story / Reel · Launch', size: 'igstory', theme: 'festival', layout: 'hero', tag: 'Social', d: { headline: 'LAUNCH\nTODAY' } },
+    { n: 'YouTube Thumb · Bold', size: 'ytthumb', theme: 'bold', layout: 'thumb', tag: 'Social', d: { headline: 'HOW TO\nDESIGN' } },
+    { n: 'Facebook Cover', size: 'fbcov', theme: 'nature', layout: 'banner', tag: 'Social', d: { headline: 'GROW\nFASTER' } },
+    { n: 'Poster A4 · Offer', size: 'posterA4', theme: 'sunrise', layout: 'poster', tag: 'Print', d: { headline: 'BIG\nSALE' } },
+    { n: 'Poster A4 · Modern', size: 'posterA4', theme: 'modern', layout: 'poster', tag: 'Print', d: { headline: 'OPENING\nOFFER' } },
+    { n: 'Flyer A5 · Offer', size: 'flyerA5', theme: 'candy', layout: 'flyer', tag: 'Print', d: { headline: 'FLAT\n30% OFF' } },
+    { n: 'Visiting Card · Light', size: 'card', theme: 'minimal', layout: 'card', tag: 'Print' },
+    { n: 'Visiting Card · Dark', size: 'card', theme: 'modern', layout: 'card', tag: 'Print' },
+    { n: 'Sticker · Round', size: 'sticker', theme: 'sunrise', layout: 'sticker', tag: 'Cut', d: { headline: 'HANDMADE' } },
+    { n: 'Flex Banner 3×1 ft', size: 'banner', theme: 'bold', layout: 'banner', tag: 'Print', d: { headline: 'GRAND\nOPENING' } },
+    { n: 'Standee 2×3 ft', size: 'standee', theme: 'royal', layout: 'poster', tag: 'Print', d: { headline: 'SPECIAL\nOFFER' } },
+    { n: 'Certificate A4', size: 'cert', theme: 'minimal', layout: 'cert', tag: 'Print', d: { headline: 'YOUR NAME', tagline: 'for outstanding performance in design training' } },
+    { n: 'Invitation A5', size: 'invite', theme: 'royal', layout: 'invite', tag: 'Print', d: { headline: 'WEDDING\nINVITATION' } },
+    { n: 'T-shirt Print', size: 'tshirt', theme: 'nature', layout: 'logo', tag: 'Merch' },
+    { n: 'Product Label', size: 'label', theme: 'festival', layout: 'label', tag: 'Print', d: { headline: 'PREMIUM' } },
+    { n: 'Logo Board', size: 'logo', theme: 'modern', layout: 'logo', tag: 'Brand' }
+  ];
+
+  function drawElem23(g, e) {
+    if (e.type === 'rect') {
+      const x = Math.min(e.x, e.x + e.w), y = Math.min(e.y, e.y + e.h);
+      const w = Math.abs(e.w), h = Math.abs(e.h), r = Math.min(e.r || 0, w / 2, h / 2);
+      g.beginPath();
+      if (r > 0) { g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+      else g.rect(x, y, w, h);
+      if (e.fill) { g.fillStyle = e.fill.color; g.fill(); }
+      if (e.stroke) { g.lineWidth = e.stroke.width; g.strokeStyle = e.stroke.color; if (e.stroke.dashArr) g.setLineDash(e.stroke.dashArr); g.stroke(); g.setLineDash([]); }
+    } else if (e.type === 'ellipse') {
+      g.beginPath(); g.ellipse(e.cx, e.cy, Math.abs(e.rx), Math.abs(e.ry), 0, 0, Math.PI * 2);
+      if (e.fill) { g.fillStyle = e.fill.color; g.fill(); }
+      if (e.stroke) { g.lineWidth = e.stroke.width; g.strokeStyle = e.stroke.color; if (e.stroke.dashArr) g.setLineDash(e.stroke.dashArr); g.stroke(); g.setLineDash([]); }
+    } else if (e.type === 'line') {
+      g.beginPath(); g.moveTo(e.x1, e.y1); g.lineTo(e.x2, e.y2);
+      g.lineWidth = (e.stroke && e.stroke.width) || 1; g.strokeStyle = (e.stroke && e.stroke.color) || '#000'; g.stroke();
+    } else if (e.type === 'path') {
+      try {
+        const p = new Path2D();
+        (e.subpaths || []).forEach(sub => {
+          const nd = sub.nodes || []; if (!nd.length) return;
+          p.moveTo(nd[0].p.x, nd[0].p.y);
+          for (let i = 1; i < nd.length; i++) {
+            const a = nd[i - 1], b = nd[i];
+            const c1 = a.out || a.p, c2 = b.in || b.p;
+            p.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, b.p.x, b.p.y);
+          }
+          if (sub.closed) p.closePath();
+        });
+        if (e.fill) { g.fillStyle = e.fill.color; g.fill(p, e.evenodd ? 'evenodd' : 'nonzero'); }
+        if (e.stroke) { g.lineWidth = e.stroke.width; g.strokeStyle = e.stroke.color; g.stroke(p); }
+      } catch (er) { }
+    } else if (e.type === 'text') {
+      g.font = (e.italic ? 'italic ' : '') + (e.bold ? '700 ' : '400 ') + e.size + 'px "' + e.font + '"';
+      g.textBaseline = 'alphabetic';
+      g.fillStyle = (e.fill && e.fill.color) || '#000';
+      (e.text || '').split('\n').forEach((ln, i) => g.fillText(ln, e.x, e.y + i * e.size * (e.lh || 1.25)));
+    }
+  }
+  function drawSpecInto(cv, W, H, els, TH) {
+    const g = cv.getContext('2d');
+    const s = Math.min(cv.width / W, cv.height / H);
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, cv.width, cv.height);
+    g.fillStyle = '#EEF1F6'; g.fillRect(0, 0, cv.width, cv.height);
+    const ox = (cv.width - W * s) / 2, oy = (cv.height - H * s) / 2;
+    g.save(); g.translate(ox, oy); g.scale(s, s);
+    const gr = g.createLinearGradient(0, 0, W, H);
+    gr.addColorStop(0, TH.bg); gr.addColorStop(1, TH.bg2 || TH.bg);
+    g.fillStyle = gr; g.fillRect(0, 0, W, H);
+    els.forEach(e => { try { drawElem23(g, e); } catch (er) { } });
+    g.restore();
+  }
+
+  function openTemplates() {
+    const cards = TPLS23.map((t, i) => {
+      const sz = sizeOf(t.size, 300);
+      return '<button class="tpl" data-i="' + i + '"><canvas width="420" height="300" data-c="' + i + '"></canvas>' +
+        '<div class="cap"><b>' + esc(t.n) + '</b><em>' + esc(t.tag) + '</em></div></button>';
+    }).join('');
+    const ov = shell('av23tpl', ic23('tpl', 18) + ' Design Templates', TPLS23.length + ' ready designs — click karo, artboard ban jayega', '<div class="tplgrid">' + cards + '</div>', '');
+    // thumbnails
+    TPLS23.forEach((t, i) => {
+      const cv = ov.querySelector('[data-c="' + i + '"]');
+      if (!cv) return;
+      try {
+        const sz = sizeOf(t.size, 300);
+        const TH = themeById(t.theme);
+        const data = Object.assign(data23For(t.size), t.d || {});
+        const els = (LAYOUTS[t.layout] || layoutHero)(sz.W, sz.H, TH, data);
+        drawSpecInto(cv, sz.W, sz.H, els, TH);
+      } catch (e) { }
+    });
+    ov.querySelectorAll('[data-i]').forEach(b => b.onclick = () => {
+      const t = TPLS23[+b.dataset.i];
+      close23(ov);
+      setTimeout(() => {
+        buildDesign({
+          sizeKey: t.size, themeId: t.theme, layout: t.layout,
+          data: Object.assign(data23For(t.size), t.d || {}), dpi: 300, bleed: 3, safe: 5, name: t.n
+        });
+        showTip();
+      }, 140);
+    });
+    return ov;
+  }
+
+  /* ============================================================
+     11. assets panel
+     ============================================================ */
+  let AS_TAB = 'Arrows';
+  function openAssets(tab) {
+    AS_TAB = tab || AS_TAB;
+    const cats = Object.keys(ASSETS23);
+    const body = '<div class="av23tabs">' + cats.map(c => '<button data-c="' + esc(c) + '" class="' + (c === AS_TAB ? 'on' : '') + '">' + esc(c) + '</button>').join('') +
+      '<input class="av23search" id="asSearch" placeholder="Search: arrow, badge, phone, qr…"></div>' +
+      '<div class="asgrid" id="asGrid"></div>' +
+      '<div class="av23hint">Click = asset canvas ke centre par vector shape ban jayega. Phir <b>V</b> se move, corner handle se resize, colour palette se colour.</div>';
+    const ov = shell('av23assets', ic23('palette', 18) + ' Assets Library', '60+ vector assets — search karo, click karo, ho gaya', body, '');
+    const grid = ov.querySelector('#asGrid');
+    const render = q => {
+      const query = (q || '').toLowerCase().trim();
+      let items = Object.keys(ASSETS23).reduce((a, k) => a.concat(ASSETS23[k].map(x => Object.assign({ cat: k }, x))), []);
+      if (query) items = items.filter(x => (x.n + ' ' + x.t).toLowerCase().indexOf(query) >= 0);
+      else items = items.filter(x => x.cat === AS_TAB);
+      grid.innerHTML = items.map((x, i) =>
+        '<button class="asbtn" data-a="' + esc(x.n) + '|' + x.cat + '|' + items.indexOf(x) + '" data-idx="' + i + '">' +
+        '<svg viewBox="0 0 24 24"><path d="' + x.d + '" fill="' + (x.stroke ? 'none' : '#101828') + '" stroke="' + (x.stroke ? '#101828' : 'none') + '" stroke-width="1.6" fill-rule="' + (x.eo ? 'evenodd' : 'nonzero') + '" stroke-linejoin="round" stroke-linecap="round"/></svg>' +
+        '<span>' + esc(x.n) + '</span></button>').join('') || '<div style="color:#667085;font-size:13px">Kuch nahi mila — doosra word try karo.</div>';
+      grid.querySelectorAll('.asbtn').forEach((b, i) => b.onclick = () => { insertAsset(items[i]); });
+    };
+    ov.querySelectorAll('.av23tabs [data-c]').forEach(b => b.onclick = () => {
+      ov.querySelectorAll('.av23tabs [data-c]').forEach(x => x.classList.remove('on'));
+      b.classList.add('on'); AS_TAB = b.dataset.c;
+      const s = ov.querySelector('#asSearch'); if (s) s.value = '';
+      render('');
+    });
+    const inp = ov.querySelector('#asSearch');
+    if (inp) inp.oninput = () => render(inp.value);
+    render('');
+    return ov;
+  }
+
+  /* ============================================================
+     12. print & cut panel
+     ============================================================ */
+  function openPrint() {
+    if (!doc) { toast23('Pehle design kholo', 'err'); return; }
+    const m = docMeta();
+    const o = (function () {
+      const meta = doc.__av23 || window.__av23last || {};
+      return { dpi: m.srcDpi >= 300 ? 300 : 300, bleed: meta.bleed == null ? 3 : meta.bleed, safe: meta.safe == null ? 5 : meta.safe };
+    })();
+    const opt = (v, sel, label) => '<option value="' + v + '"' + (v === sel ? ' selected' : '') + '>' + label + '</option>';
+    const body =
+      '<div class="p23grid">' +
+      '<div class="av23fld"><label>DPI / quality</label><select id="p23dpi">' + opt(150, o.dpi, '150 dpi · fast') + opt(300, o.dpi, '300 dpi · press standard') + opt(600, o.dpi, '600 dpi · heavy') + '</select></div>' +
+      '<div class="av23fld"><label>Bleed (mm)</label><select id="p23bleed">' + opt(0, o.bleed, '0 mm') + opt(2, o.bleed, '2 mm') + opt(3, o.bleed, '3 mm · recommended') + opt(5, o.bleed, '5 mm') + '</select></div>' +
+      '<div class="av23fld"><label>Safe margin (mm)</label><select id="p23safe">' + opt(0, o.safe, '0 mm') + opt(3, o.safe, '3 mm') + opt(5, o.safe, '5 mm') + opt(10, o.safe, '10 mm') + '</select></div>' +
+      '<div class="av23fld"><label>Cut offset (mm)</label><select id="p23cutoff">' + opt(0, 2, '0 mm') + opt(1, 2, '1 mm') + opt(2, 2, '2 mm · sticker') + opt(3, 2, '3 mm') + opt(5, 2, '5 mm') + '</select></div>' +
+      '</div>' +
+      '<div class="p23chk"><label><input type="checkbox" id="p23marks" checked> Crop marks</label>' +
+      '<label><input type="checkbox" id="p23white" checked> White background</label>' +
+      '<button id="p23guideBtn">' + ic23('grid', 15) + ' Guides</button></div>' +
+      '<div class="p23info" id="p23info"></div>' +
+      '<div class="p23acts">' +
+      '<button data-x="zip" class="hot">' + ic23('zip', 17) + ' Print Pack (.zip) — saari files ek saath</button>' +
+      '<button data-x="pdf">' + ic23('print', 16) + ' Print PDF</button>' +
+      '<button data-x="png">' + ic23('photo', 16) + ' Print PNG</button>' +
+      '<button data-x="cutsvg">' + ic23('cut', 16) + ' Cut SVG</button>' +
+      '<button data-x="cutpng">' + ic23('cut', 16) + ' Cut PNG</button>' +
+      '<button data-x="social">' + ic23('screen', 16) + ' Social JPG</button>' +
+      '</div>' +
+      '<div class="av23hint"><b>Kya kya milta hai:</b> press-ready PDF (TrimBox + BleedBox + crop marks), PNG, cutting machine ke liye red cut-line SVG/PNG, aur WhatsApp/social ke liye JPG. Pack me <code>specs.txt</code> bhi hota hai jisme size, DPI, bleed, fonts likhe hote hain — printer ko wahi bhej dena.<br><b>Note:</b> output sRGB RGB hai; offset press CMYK chahe to printer se convert karayein (design sahi rehta hai).</div>';
+    const ov = shell('av23print', ic23('print', 18) + ' Print &amp; Cut Pack', 'Print, sticker cutting aur social — sab ek jagah', body, '');
+    const info = () => {
+      const p = printOpts();
+      const pw = Math.round(p.wmm + 2 * (p.bleed + (p.marks ? 3 : 0)));
+      const ph = Math.round(p.hmm + 2 * (p.bleed + (p.marks ? 3 : 0)));
+      const cut = cutGeometry(p);
+      const el = ov.querySelector('#p23info');
+      if (el) el.innerHTML = '<b>' + (doc.name || 'design') + '</b> · ' + p.wmm + '×' + p.hmm + ' mm · ' + doc.w + '×' + doc.h + ' px<br>' +
+        'File size: <b>' + pw + '×' + ph + ' mm</b> (bleed ' + p.bleed + 'mm' + (p.marks ? ' + 3mm marks' : '') + ') · output ' +
+        Math.round(mm2px(pw, p.dpi)) + '×' + Math.round(mm2px(ph, p.dpi)) + ' px<br>' +
+        'Cut line: <b>' + cut.note + '</b> · file ' + fmt(cut.wmm) + '×' + fmt(cut.hmm) + ' mm';
+    };
+    ['p23dpi', 'p23bleed', 'p23safe', 'p23marks', 'p23cutoff'].forEach(id => {
+      const el = ov.querySelector('#' + id); if (el) { el.onchange = info; el.oninput = info; }
+    });
+    ov.querySelector('#p23guideBtn').onclick = () => { toggleGuides(); };
+    ov.querySelectorAll('[data-x]').forEach(b => b.onclick = () => {
+      const old = b.textContent; b.disabled = true; b.textContent = '⏳ bana rahe hain…';
+      setTimeout(() => {
+        try { doExport(b.dataset.x); } finally { b.disabled = false; b.textContent = old; }
+      }, 30);
+    });
+    info();
+    return ov;
+  }
+
+  /* ============================================================
+     13. host me buttons + menus
+     ============================================================ */
+  function patchMenus23() {
+    try {
+      if (typeof MENUS === 'undefined' || !MENUS.File || MENUS.File.__av23) return;
+      const items = [
+        { l: 'Quick Design (click-click)…', a: () => openHub() },
+        { l: 'Design Templates…', a: () => openTemplates() },
+        { l: 'Assets Library…', a: () => openAssets() },
+        { l: 'Print & Cut Pack…', a: () => openPrint() },
+        '-'
+      ];
+      const arr = items.concat(MENUS.File);
+      arr.__av23 = true;
+      MENUS.File = arr;
+    } catch (e) { }
+  }
+
+  function installUI23() {
+    injectCSS23();
+    let done = 0;
+    try {
+      const bar = document.getElementById('av12bar');
+      if (bar && !bar.querySelector('[data-a="design23"]')) {
+        const b = document.createElement('button');
+        b.dataset.a = 'design23';
+        b.title = 'Quick Design — click-click (16 sizes, 8 styles)';
+        b.innerHTML = ic23('sparkle', 15) + '<span class="t">Design</span>';
+        b.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); openHub(); }, true);
+        bar.insertBefore(b, bar.firstChild);
+      }
+    } catch (e) { }
+    try {
+      const q = document.getElementById('av17quick');
+      if (q && !q.querySelector('[data-q="design23"]')) {
+        const c = document.createElement('button');
+        c.className = 'qa span2'; c.dataset.q = 'design23';
+        c.title = 'Quick Design — click-click';
+        c.innerHTML = '<i>' + ic23('sparkle', 15) + '</i><span class="tx"><b>Quick Design</b><small>click-click · 16 sizes · 8 styles</small></span>';
+        c.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); openHub(); }, true);
+        q.insertBefore(c, q.firstChild);
+      }
+    } catch (e) { }
+    try { patchMenus23(); } catch (e) { }
+    try {
+      if (!window.__av23keys) {
+        window.__av23keys = true;
+        window.addEventListener('keydown', e => {
+          if (e.key === 'Escape') {
+            const ov = document.querySelector('.av23ov.on');
+            if (ov) { close23(ov); e.stopImmediatePropagation(); }
+          }
+        }, true);
+      }
+    } catch (e) { }
+    try { if (localStorage.getItem('av23.guides') === '1') toggleGuides(true); } catch (e) { }
+  }
+
+  function initV23() {
+    try { installUI23(); } catch (e) { }
+    let n = 0;
+    const t = setInterval(() => {
+      n++;
+      try { installUI23(); } catch (e) { }
+      const ok = document.getElementById('av12bar') && document.querySelector('#av12bar [data-a="design23"]') &&
+        document.getElementById('av17quick') && document.querySelector('#av17quick [data-q="design23"]');
+      if (n >= 8 || ok && n > 2) clearInterval(t);
+    }, 900);
+  }
+
+  /* ============================================================
+     14. public API + boot
+     ============================================================ */
+  function assetByName(n) {
+    for (const k of Object.keys(ASSETS23)) {
+      const f = ASSETS23[k].find(a => a.n.toLowerCase() === String(n).toLowerCase());
+      if (f) return Object.assign({ cat: k }, f);
+    }
+    return null;
+  }
+
+  window.AV23 = {
+    version: '23.0',
+    hub: openHub, wizard: openWizard, templates: openTemplates, assets: openAssets,
+    print: openPrint, themePicker: openThemePicker,
+    build: buildDesign, retheme, insertAsset, insertAssetByName: n => { const a = assetByName(n); return a ? insertAsset(a) : null; },
+    sizeOf, docMeta, printOpts, renderPrintCanvas, buildPDF, buildCutSVG, cutGeometry,
+    renderCutPNG, makePack, zipMake, doExport, toggleGuides, drawGuides, showTip,
+    layouts: LAYOUTS, themes: THEMES23, sizes: SIZES23, purposes: PURPOSE23, tpls: TPLS23, assetLib: ASSETS23,
+    __shell: shell, fileBase, dataURLBytes, specsTxt, safe23, mm2px, px2mm,
+    close: () => close23()
+  };
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initV23);
+  else initV23();
+  setTimeout(initV23, 700);
+  setTimeout(initV23, 1800);
+
+})();
+
+</script>
+<script id="av24-upgrade">
+
+/* ============================================================
+   ArtViSiON Studio · v24 — PRO OUTPUT PACK
+   ------------------------------------------------------------
+   1. QR Code generator (asli QR, byte mode, EC L/M, v1–10,
+      encoder browser me — koi internet/API nahi)
+   2. CMYK PDF — press ke liye alag C/M/Y/K plate wala PDF
+      (DeviceCMYK + FlateDecode, TAC 300% limit)
+   3. N-up sheet PDF — ek A4/A3 sheet par N copies + crop marks
+      (visiting card, sticker, label printers ke liye)
+   4. Batch export — saare artboards ek ZIP me (PNG + specs)
+   Host ka purana code chhua nahi gaya — sirf upar se layer.
+   ============================================================ */
+(function () {
+  'use strict';
+  if (window.__av24loaded) return;
+  window.__av24loaded = true;
+
+  const $ = s => document.querySelector(s);
+  const MM = 25.4;
+  const fmt = v => (Math.round(v * 1000) / 1000);
+  const safe24 = s => String(s || 'design').replace(/[^\w\-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'design';
+  const t24 = (m, c, ms) => { try { toast(m, c, ms); } catch (e) { } };
+  const close24 = () => { try { AV23.close(); } catch (e) { } };
+
+  /* ============================================================
+     1. QR ENCODER
+     ============================================================ */
+  const QR = (function () {
+  const TBL = {
+    L: { 1: [7, 1, 19], 2: [10, 1, 34], 3: [15, 1, 55], 4: [20, 1, 80], 5: [26, 1, 108],
+         6: [18, 2, 68], 7: [20, 2, 78], 8: [24, 2, 97], 9: [30, 2, 116], 10: [18, 2, 68, 2, 69] },
+    M: { 1: [10, 1, 16], 2: [16, 1, 28], 3: [26, 1, 44], 4: [18, 2, 32], 5: [24, 2, 43],
+         6: [16, 4, 27], 7: [18, 4, 31], 8: [22, 2, 38, 2, 39], 9: [22, 3, 36, 2, 37], 10: [26, 4, 43, 1, 44] }
+  };
+  const ALIGN = { 1: [], 2: [6, 18], 3: [6, 22], 4: [6, 26], 5: [6, 30], 6: [6, 34],
+                  7: [6, 22, 38], 8: [6, 24, 42], 9: [6, 26, 46], 10: [6, 28, 50] };
+  const FMT = {
+    1: [0x77C4, 0x72F3, 0x7DAA, 0x789D, 0x662F, 0x6318, 0x6C41, 0x6976],
+    0: [0x5412, 0x5125, 0x5E7C, 0x5B4B, 0x45F9, 0x40CE, 0x4F97, 0x4AA0]
+  };
+  const VER_BITS = { 7: 0x07C94, 8: 0x085BC, 9: 0x09A99, 10: 0x0A4D3 };
+
+  const EXP = new Uint8Array(512), LOG = new Uint8Array(256);
+  (function () { let x = 1; for (let i = 0; i < 255; i++) { EXP[i] = x; LOG[x] = i; x <<= 1; if (x & 0x100) x ^= 0x11D; } for (let i = 255; i < 512; i++) EXP[i] = EXP[i - 255]; })();
+  const gmul = (a, b) => (a === 0 || b === 0) ? 0 : EXP[LOG[a] + LOG[b]];
+
+  function genPoly(n) {
+    let g = [1];
+    for (let i = 0; i < n; i++) {
+      const a = EXP[i], next = new Array(g.length + 1).fill(0);
+      for (let j = 0; j < g.length; j++) { next[j] ^= g[j]; next[j + 1] ^= gmul(g[j], a); }
+      g = next;
+    }
+    return g;
+  }
+  function rsEncode(data, ecLen) {
+    const gen = genPoly(ecLen);
+    const res = data.concat(new Array(ecLen).fill(0));
+    for (let i = 0; i < data.length; i++) {
+      const coef = res[i];
+      if (coef !== 0) for (let j = 0; j < gen.length; j++) res[i + j] ^= gmul(gen[j], coef);
+    }
+    return res.slice(data.length);
+  }
+
+  const MASKS = [
+    (r, c) => (r + c) % 2 === 0,
+    (r, c) => r % 2 === 0,
+    (r, c) => c % 3 === 0,
+    (r, c) => (r + c) % 3 === 0,
+    (r, c) => (Math.floor(r / 2) + Math.floor(c / 3)) % 2 === 0,
+    (r, c) => ((r * c) % 2) + ((r * c) % 3) === 0,
+    (r, c) => (((r * c) % 2) + ((r * c) % 3)) % 2 === 0,
+    (r, c) => (((r + c) % 2) + ((r * c) % 3)) % 2 === 0
+  ];
+
+  function dataCapacity(ver, ec) {
+    const tb = TBL[ec][ver];
+    let dc = 0;
+    for (let i = 1; i < tb.length; i += 2) dc += tb[i] * tb[i + 1];
+    return dc;
+  }
+
+  function encode(text, ecLevel) {
+    const ec = ecLevel === 'L' ? 'L' : 'M';
+    const bytes = new TextEncoder().encode(String(text));
+    let ver = 0;
+    for (let v = 1; v <= 10; v++) {
+      const headerBits = 4 + (v < 10 ? 8 : 16);
+      const cap = Math.floor((dataCapacity(v, ec) * 8 - headerBits) / 8);
+      if (bytes.length <= cap) { ver = v; break; }
+    }
+    if (!ver) {
+      const capL = Math.floor((dataCapacity(10, 'L') * 8 - 20) / 8), capM = Math.floor((dataCapacity(10, 'M') * 8 - 20) / 8);
+      throw new Error('QR: text bahut lamba — max ' + capM + ' chars (M) / ' + capL + ' (L). Chhota text ya short link use karo.');
+    }
+    const table = TBL[ec][ver], dataCw = dataCapacity(ver, ec), ecLen = table[0];
+
+    /* ---- bit stream ---- */
+    const bits = [];
+    const push = (val, len) => { for (let i = len - 1; i >= 0; i--) bits.push((val >>> i) & 1); };
+    push(4, 4);                              /* byte mode */
+    push(bytes.length, ver < 10 ? 8 : 16);   /* char count */
+    bytes.forEach(b => push(b, 8));
+    const capBits = dataCw * 8;
+    for (let i = 0; i < 4 && bits.length < capBits; i++) bits.push(0);
+    while (bits.length % 8) bits.push(0);
+    const dcw = [];
+    for (let i = 0; i < bits.length; i += 8) { let b = 0; for (let j = 0; j < 8; j++) b = (b << 1) | bits[i + j]; dcw.push(b); }
+    const pad = [0xEC, 0x11]; let pi = 0;
+    while (dcw.length < dataCw) dcw.push(pad[pi++ % 2]);
+
+    /* ---- blocks + interleave ---- */
+    const groups = [];
+    for (let i = 1; i < table.length; i += 2) groups.push({ n: table[i], d: table[i + 1] });
+    const blocks = []; let off = 0;
+    groups.forEach(g => { for (let k = 0; k < g.n; k++) { const d = dcw.slice(off, off + g.d); off += g.d; blocks.push({ d, e: rsEncode(d, ecLen) }); } });
+    const maxD = Math.max.apply(null, blocks.map(b => b.d.length));
+    const stream = [];
+    for (let i = 0; i < maxD; i++) blocks.forEach(b => { if (i < b.d.length) stream.push(b.d[i]); });
+    for (let i = 0; i < ecLen; i++) blocks.forEach(b => stream.push(b.e[i]));
+
+    /* ---- matrix ---- */
+    const size = 17 + 4 * ver;
+    const m = [], fn = [];
+    for (let r = 0; r < size; r++) { m.push(new Array(size).fill(0)); fn.push(new Array(size).fill(false)); }
+
+    function setF(r, c, v) { if (r < 0 || c < 0 || r >= size || c >= size) return; m[r][c] = v; fn[r][c] = true; }
+
+    /* finder patterns + separators */
+    [[0, 0], [0, size - 7], [size - 7, 0]].forEach(function (p) {
+      const r0 = p[0], c0 = p[1];
+      for (let dr = -1; dr <= 7; dr++) for (let dc = -1; dc <= 7; dc++) {
+        const r = r0 + dr, c = c0 + dc;
+        if (r < 0 || c < 0 || r >= size || c >= size) continue;
+        const inside = dr >= 0 && dr <= 6 && dc >= 0 && dc <= 6;
+        const ring = inside && (dr === 0 || dr === 6 || dc === 0 || dc === 6);
+        const core = inside && dr >= 2 && dr <= 4 && dc >= 2 && dc <= 4;
+        setF(r, c, (ring || core) ? 1 : 0);
+      }
+    });
+
+    /* timing patterns */
+    for (let i = 8; i <= size - 9; i++) { setF(6, i, i % 2 === 0 ? 1 : 0); setF(i, 6, i % 2 === 0 ? 1 : 0); }
+
+    /* alignment patterns (skip the three finder corners) */
+    const ax = ALIGN[ver] || [];
+    ax.forEach(function (r0) {
+      ax.forEach(function (c0) {
+        if ((r0 === 6 && c0 === 6) || (r0 === 6 && c0 === size - 7) || (r0 === size - 7 && c0 === 6)) return;
+        for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++) {
+          setF(r0 + dr, c0 + dc, Math.max(Math.abs(dr), Math.abs(dc)) !== 1 ? 1 : 0);
+        }
+      });
+    });
+
+    /* reserve format areas + dark module */
+    for (let i = 0; i <= 8; i++) { fn[8][i] = true; fn[i][8] = true; }
+    for (let i = 0; i < 8; i++) { fn[8][size - 1 - i] = true; fn[size - 1 - i][8] = true; }
+    m[size - 8][8] = 1; fn[size - 8][8] = true;
+
+    /* version info (v7+) */
+    if (ver >= 7) {
+      const vb = VER_BITS[ver] >>> 0;
+      for (let i = 0; i < 18; i++) {
+        const b = (vb >>> i) & 1, r = Math.floor(i / 3), c = i % 3;
+        setF(r, size - 11 + c, b);       /* top-right block */
+        setF(size - 11 + c, r, b);       /* bottom-left block */
+      }
+      for (let i = 0; i < 18; i++) {
+        const r = Math.floor(i / 3), c = i % 3;
+        fn[r][size - 11 + c] = true; fn[size - 11 + c][r] = true;
+      }
+    }
+
+    /* data placement */
+    let bitIdx = 0; const totalBits = stream.length * 8;
+    const nextBit = () => (bitIdx < totalBits) ? (stream[bitIdx >> 3] >> (7 - (bitIdx++ & 7))) & 1 : (bitIdx++, 0);
+    let up = true;
+    for (let col = size - 1; col > 0; col -= 2) {
+      if (col === 6) col--;
+      for (let i = 0; i < size; i++) {
+        const row = up ? size - 1 - i : i;
+        for (let k = 0; k < 2; k++) {
+          const c = col - k;
+          if (!fn[row][c]) m[row][c] = nextBit();
+        }
+      }
+      up = !up;
+    }
+
+    /* ---- mask + format ---- */
+    function applyFormat(mx, mask) {
+      const fb = FMT[ec === 'L' ? 1 : 0][mask] >>> 0;
+      for (let i = 0; i < 15; i++) {
+        const b = (fb >>> i) & 1;
+        if (i < 6) mx[i][8] = b; else if (i < 8) mx[i + 1][8] = b; else mx[size - 15 + i][8] = b;
+        if (i < 8) mx[8][size - 1 - i] = b; else if (i < 9) mx[8][7] = b; else mx[8][14 - i] = b;
+      }
+      mx[size - 8][8] = 1;
+    }
+    function penalty(mx) {
+      let p = 0;
+      for (let r = 0; r < size; r++) { let run = 1; for (let c = 1; c < size; c++) { if (mx[r][c] === mx[r][c - 1]) run++; else { if (run >= 5) p += run - 2; run = 1; } } if (run >= 5) p += run - 2; }
+      for (let c = 0; c < size; c++) { let run = 1; for (let r = 1; r < size; r++) { if (mx[r][c] === mx[r - 1][c]) run++; else { if (run >= 5) p += run - 2; run = 1; } } if (run >= 5) p += run - 2; }
+      for (let r = 0; r < size - 1; r++) for (let c = 0; c < size - 1; c++) { const v = mx[r][c]; if (v === mx[r][c + 1] && v === mx[r + 1][c] && v === mx[r + 1][c + 1]) p += 3; }
+      const pat = [1, 0, 1, 1, 1, 0, 1];
+      const chk = get => {
+        for (let i = 0; i + 7 <= size; i++) {
+          let ok = true;
+          for (let k = 0; k < 7; k++) if (get(i + k) !== pat[k]) { ok = false; break; }
+          if (!ok) continue;
+          let before = true, after = true;
+          for (let k = 1; k <= 4; k++) if (i - k >= 0 && get(i - k) !== 0) { before = false; break; }
+          for (let k = 0; k < 4; k++) if (i + 7 + k < size && get(i + 7 + k) !== 0) { after = false; break; }
+          if (before || after) p += 40;
+        }
+      };
+      for (let r = 0; r < size; r++) chk(i => mx[r][i]);
+      for (let c = 0; c < size; c++) chk(i => mx[i][c]);
+      let dark = 0;
+      for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) dark += mx[r][c];
+      p += Math.floor(Math.abs(dark * 100 / (size * size) - 50) / 5) * 10;
+      return p;
+    }
+
+    let best = null, bestP = Infinity, bestMask = 0;
+    for (let mk = 0; mk < 8; mk++) {
+      const mx = m.map(row => row.slice());
+      for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) if (!fn[r][c] && MASKS[mk](r, c)) mx[r][c] ^= 1;
+      applyFormat(mx, mk);
+      const pn = penalty(mx);
+      if (pn < bestP) { bestP = pn; best = mx; bestMask = mk; }
+    }
+    return { size, modules: best, version: ver, ec, mask: bestMask, text: String(text) };
+  }
+
+
+    /* render to canvas (with quiet zone) */
+    function toCanvas(qr, px, opts) {
+      opts = opts || {};
+      const quiet = opts.quiet == null ? 4 : +opts.quiet;
+      const dark = opts.dark || '#000000', light = opts.light || '#ffffff';
+      const total = qr.size + quiet * 2;
+      const scale = Math.max(1, Math.floor((px || 480) / total));
+      const c = document.createElement('canvas');
+      c.width = c.height = total * scale;
+      const g = c.getContext('2d');
+      if (light !== 'transparent') { g.fillStyle = light; g.fillRect(0, 0, c.width, c.height); }
+      g.fillStyle = dark;
+      for (let r = 0; r < qr.size; r++) for (let cc = 0; cc < qr.size; cc++) {
+        if (qr.modules[r][cc]) g.fillRect((cc + quiet) * scale, (r + quiet) * scale, scale, scale);
+      }
+      return c;
+    }
+    function toSVG(qr, opts) {
+      opts = opts || {};
+      const quiet = opts.quiet == null ? 4 : +opts.quiet;
+      const dark = opts.dark || '#000000', light = opts.light || '#ffffff';
+      const total = qr.size + quiet * 2;
+      let p = '';
+      for (let r = 0; r < qr.size; r++) for (let c = 0; c < qr.size; c++) if (qr.modules[r][c]) p += 'M' + (c + quiet) + ' ' + (r + quiet) + 'h1v1h-1z';
+      return '<?xml version="1.0" encoding="UTF-8"?>\n<!-- ArtViSiON Studio v24 QR · EC ' + qr.ec + ' · v' + qr.version + ' -->\n' +
+        '<svg xmlns="http://www.w3.org/2000/svg" width="' + total + '" height="' + total + '" viewBox="0 0 ' + total + ' ' + total + '" shape-rendering="crispEdges">\n' +
+        (light === 'transparent' ? '' : '<rect width="' + total + '" height="' + total + '" fill="' + light + '"/>\n') +
+        '<path d="' + p + '" fill="' + dark + '"/>\n</svg>\n';
+    }
+    return { encode: encode, toCanvas: toCanvas, toSVG: toSVG, TBL: TBL };
+  })();
+
+  /* ---------- QR insert into design ---------- */
+  function insertQR(textOrOpts) {
+    if (!doc) { t24('Pehle canvas kholo', 'err'); return null; }
+    const o = typeof textOrOpts === 'string' ? { text: textOrOpts } : (textOrOpts || {});
+    const text = o.text || 'https://rjsarkar83.github.io/ArtViSiON-STUDIO/';
+    let qr;
+    try { qr = QR.encode(text, o.ec || 'M'); } catch (e) { t24(e.message, 'err', 2600); return null; }
+    const edgePx = Math.round(Math.min(doc.w, doc.h) * (o.sizePct || 0.26));
+    const cv = QR.toCanvas(qr, edgePx, { dark: o.dark || '#000000', light: o.light || 'transparent' });
+    try { pushUndo(); } catch (e) { }
+    const L = newRasterLayer('QR code');
+    const g = L.canvas.getContext('2d');
+    const x = Math.round((doc.w - cv.width) / 2), y = Math.round((doc.h - cv.height) / 2);
+    g.drawImage(cv, x, y);
+    try { insertLayer(L, doc.layers[doc.layers.length - 1]); } catch (e) { doc.layers.push(L); doc.activeId = L.id; }
+    layerVerBump(L); docDirty = true; needRender = true;
+    try { uiLayers(); uiLayersRefresh(); uiProps(); } catch (e) { }
+    t24('QR add ho gaya (' + qr.size + '×' + qr.size + ' module, ' + qr.ec + ' v' + qr.version + ')', 'ok', 2400);
+    return qr;
+  }
+
+  /* ---------- QR panel ---------- */
+  const QRS = { text: 'https://rjsarkar83.github.io/ArtViSiON-STUDIO/', ec: 'M', dark: '#000000', light: '#ffffff', quiet: 4 };
+
+  function renderQRPreview() {
+    const box = document.getElementById('qr24prev');
+    if (!box) return;
+    try {
+      const qr = QR.encode(QRS.text || ' ', QRS.ec);
+      const cv = QR.toCanvas(qr, 300, { dark: QRS.dark, light: QRS.light, quiet: QRS.quiet });
+      box.innerHTML = '';
+      cv.style.cssText = 'width:100%;height:auto;display:block;border-radius:10px;background:#fff';
+      box.appendChild(cv);
+      const info = document.getElementById('qr24info');
+      if (info) info.innerHTML = 'Version <b>' + qr.version + '</b> · ' + qr.size + '×' + qr.size + ' modules · EC <b>' + qr.ec + '</b> · mask ' + qr.mask +
+        '<br>Print size: <b>30 mm par 30 mm</b> (300dpi me 354 px) — minimum 20 mm rakhein.';
+    } catch (e) {
+      box.innerHTML = '<div style="color:#B42318;font-size:12.5px;padding:14px">' + (e.message || 'QR fail') + '</div>';
+      const info = document.getElementById('qr24info'); if (info) info.textContent = '';
+    }
+  }
+
+  function openQR() {
+    if (typeof AV23 === 'undefined') { t24('AV23 load nahi hua', 'err'); return; }
+    const body =
+      '<div class="av24cols">' +
+      '<div>' +
+      '<div class="av23fld"><label>Link / text (URL, WhatsApp, UPI, vCard)</label>' +
+      '<textarea id="qr24text" rows="3" style="border-radius:11px;border:1px solid #DCE0E8;padding:9px 12px;font:inherit">' + String(QRS.text).replace(/</g, '&lt;') + '</textarea></div>' +
+      '<div class="av24row">' +
+      '<div class="av23fld"><label>Error correction</label><select id="qr24ec">' +
+      '<option value="L"' + (QRS.ec === 'L' ? ' selected' : '') + '>L · 7% (zyada data)</option>' +
+      '<option value="M"' + (QRS.ec === 'M' ? ' selected' : '') + '>M · 15% (recommended)</option></select></div>' +
+      '<div class="av23fld"><label>Quiet zone</label><select id="qr24quiet">' +
+      [2, 3, 4, 5].map(n => '<option value="' + n + '"' + (QRS.quiet === n ? ' selected' : '') + '>' + n + ' module</option>').join('') +
+      '</select></div></div>' +
+      '<div class="av24row">' +
+      '<div class="av23fld"><label>QR colour</label><input type="color" id="qr24dark" value="' + QRS.dark + '" style="height:40px;padding:3px"></div>' +
+      '<div class="av23fld"><label>Background</label><input type="color" id="qr24light" value="' + (QRS.light === 'transparent' ? '#ffffff' : QRS.light) + '" style="height:40px;padding:3px"></div>' +
+      '</div>' +
+      '<div class="av24quick">' +
+      '<button data-q="site">Website</button><button data-q="wa">WhatsApp</button><button data-q="upi">UPI pay</button><button data-q="tel">Phone</button>' +
+      '</div>' +
+      '<div class="av23hint" id="qr24info"></div>' +
+      '</div>' +
+      '<div><div id="qr24prev" style="border:1px solid #E7E9EF;border-radius:14px;padding:10px;background:#F7F9FC"></div>' +
+      '<div class="av23hint" style="margin-top:10px">Bot-generated QR asli hota hai — phone camera se turant scan hota hai. Print me kam se kam <b>20 mm</b> aur saaf contrast rakhein.</div>' +
+      '</div></div>';
+    const foot = '<button class="av23btn" id="qr24insert">Design me add karo</button>' +
+      '<button class="av23btn" id="qr24png">PNG download</button>' +
+      '<button class="av23btn" id="qr24svg">SVG (vector)</button>' +
+      '<div class="sp"></div><button class="av23btn pri" id="qr24pack">QR + Print Pack</button>';
+    const ov = AV23.__shell('av24qr', 'QR Code generator', 'Asli QR — offline, isi browser me banta hai', body, foot);
+    const sync = () => {
+      const g = id => { const e = ov.querySelector('#' + id); return e ? e.value : null; };
+      QRS.text = g('qr24text') != null ? g('qr24text') : QRS.text;
+      QRS.ec = g('qr24ec') || 'M';
+      QRS.quiet = +(g('qr24quiet') || 4);
+      QRS.dark = g('qr24dark') || '#000000';
+      QRS.light = g('qr24light') || '#ffffff';
+      renderQRPreview();
+    };
+    ['qr24text', 'qr24ec', 'qr24quiet', 'qr24dark', 'qr24light'].forEach(id => {
+      const el = ov.querySelector('#' + id);
+      if (el) { el.oninput = sync; el.onchange = sync; }
+    });
+    ov.querySelectorAll('[data-q]').forEach(b => b.onclick = () => {
+      const k = b.dataset.q, tel = '+919000000000';
+      QRS.text = k === 'site' ? 'https://rjsarkar83.github.io/ArtViSiON-STUDIO/'
+        : k === 'wa' ? 'https://wa.me/919000000000?text=Hi'
+          : k === 'upi' ? 'upi://pay?pa=apnabrand@upi&pn=Apna%20Brand&cu=INR'
+            : 'tel:' + tel;
+      const ta = ov.querySelector('#qr24text'); if (ta) ta.value = QRS.text;
+      renderQRPreview();
+    });
+    ov.querySelector('#qr24insert').onclick = () => { sync(); insertQR(Object.assign({}, QRS)); };
+    ov.querySelector('#qr24png').onclick = () => {
+      sync();
+      try {
+        const qr = QR.encode(QRS.text, QRS.ec);
+        const cv = QR.toCanvas(qr, 1200, { dark: QRS.dark, light: QRS.light, quiet: QRS.quiet });
+        cv.toBlob(b => { download(safe24('qr-' + qr.version) + '-' + qr.size + 'px.png', b); t24('QR PNG ready (1200px)', 'ok', 2000); }, 'image/png');
+      } catch (e) { t24(e.message, 'err'); }
+    };
+    ov.querySelector('#qr24svg').onclick = () => {
+      sync();
+      try {
+        const qr = QR.encode(QRS.text, QRS.ec);
+        const svg = QR.toSVG(qr, { dark: QRS.dark, light: QRS.light, quiet: QRS.quiet });
+        download(safe24('qr-' + qr.version) + '-vector.svg', new Blob([svg], { type: 'image/svg+xml' }));
+        t24('QR SVG ready — cutting/print ke liye vector', 'ok', 2000);
+      } catch (e) { t24(e.message, 'err'); }
+    };
+    ov.querySelector('#qr24pack').onclick = () => {
+      sync();
+      insertQR(Object.assign({}, QRS));
+      close24();
+      setTimeout(() => { try { AV23.print(); } catch (e) { } }, 350);
+    };
+    renderQRPreview();
+    return ov;
+  }
+
+  /* ============================================================
+     2. PDF builders (RGB jpeg + CMYK flate) — generic
+     ============================================================ */
+  function pdfBuild(opts) {
+    /* opts: { wPt,hPt,padPt,bleedPt, img:{w,h,dict,bytes}, content } */
+    const enc = new TextEncoder();
+    const parts = []; let off = 0; const offs = [];
+    const push = x => { const b = typeof x === 'string' ? enc.encode(x) : x; parts.push(b); off += b.length; };
+    const obj = (n, s) => { offs[n] = off; push(n + ' 0 obj\n' + s + '\nendobj\n'); };
+    push('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+    obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+    obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+    const pad = opts.padPt || 0;
+    const tw = opts.wPt - 2 * pad, th = opts.hPt - 2 * pad;
+    obj(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + fmt(opts.wPt) + ' ' + fmt(opts.hPt) + ']' +
+      ' /TrimBox [' + fmt(pad) + ' ' + fmt(pad) + ' ' + fmt(pad + tw) + ' ' + fmt(pad + th) + ']' +
+      ' /BleedBox [' + fmt(pad - (opts.bleedPt || 0)) + ' ' + fmt(pad - (opts.bleedPt || 0)) + ' ' +
+      fmt(pad + tw + (opts.bleedPt || 0)) + ' ' + fmt(pad + th + (opts.bleedPt || 0)) + ']' +
+      ' /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>');
+    offs[4] = off;
+    push('4 0 obj\n<< /Type /XObject /Subtype /Image /Width ' + opts.img.w + ' /Height ' + opts.img.h + ' ' + opts.img.dict +
+      ' /Length ' + opts.img.bytes.length + ' >>\nstream\n');
+    push(opts.img.bytes); push('\nendstream\nendobj\n');
+    const content = opts.content;
+    obj(5, '<< /Length ' + content.length + ' >>\nstream\n' + content + 'endstream');
+    const xref = off;
+    push('xref\n0 6\n0000000000 65535 f \n');
+    for (let i = 1; i <= 5; i++) push(String(offs[i] || 0).padStart(10, '0') + ' 00000 n \n');
+    push('trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n' + xref + '\n%%EOF\n');
+    const total = parts.reduce((a, b) => a + b.length, 0);
+    const out = new Uint8Array(total); let pos = 0;
+    for (const b of parts) { out.set(b, pos); pos += b.length; }
+    return out;
+  }
+
+  function jpegImageParts(canvas, q) {
+    const url = canvas.toDataURL('image/jpeg', q || 0.95);
+    return {
+      w: canvas.width, h: canvas.height,
+      dict: '/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode',
+      bytes: AV23.dataURLBytes(url)
+    };
+  }
+
+  /* ---------- CMYK conversion ---------- */
+  async function deflateBytes(u8) {
+    if (typeof CompressionStream === 'function') {
+      const cs = new CompressionStream('deflate');
+      const w = cs.writable.getWriter();
+      w.write(u8); w.close();
+      const buf = await new Response(cs.readable).arrayBuffer();
+      return new Uint8Array(buf);
+    }
+    return null;
+  }
+
+  function rgbToCmyk(rgba, w, h, tacLimit) {
+    const out = new Uint8Array(w * h * 4);
+    const tac = (tacLimit == null ? 3.0 : tacLimit) * 255;
+    for (let i = 0, j = 0; i < rgba.length; i += 4, j += 4) {
+      const a = rgba[i + 3] / 255;
+      const r = (rgba[i] * a + 255 * (1 - a)) / 255;
+      const g = (rgba[i + 1] * a + 255 * (1 - a)) / 255;
+      const b = (rgba[i + 2] * a + 255 * (1 - a)) / 255;
+      const k = 1 - Math.max(r, g, b);
+      let c, m, y;
+      if (k >= 0.999) { c = m = y = 0; }
+      else { c = (1 - r - k) / (1 - k); m = (1 - g - k) / (1 - k); y = (1 - b - k) / (1 - k); }
+      /* TAC clamp (ink limit) */
+      const total = (c + m + y + k) * 255;
+      if (total > tac && (c + m + y) > 0) {
+        const room = Math.max(0, tac / 255 - k);
+        const scale = room / (c + m + y);
+        c *= scale; m *= scale; y *= scale;
+      }
+      out[j] = Math.round(Math.min(1, Math.max(0, c)) * 255);
+      out[j + 1] = Math.round(Math.min(1, Math.max(0, m)) * 255);
+      out[j + 2] = Math.round(Math.min(1, Math.max(0, y)) * 255);
+      out[j + 3] = Math.round(Math.min(1, Math.max(0, k)) * 255);
+    }
+    return out;
+  }
+
+  /* ---------- CMYK PDF ---------- */
+  async function cmykPdf(o) {
+    o = o || AV23.printOpts();
+    const pr = AV23.renderPrintCanvas(o);
+    const c = pr.canvas;
+    const ctx = c.getContext('2d');
+    const rgba = ctx.getImageData(0, 0, c.width, c.height).data;
+    const cmyk = rgbToCmyk(rgba, c.width, c.height, 3.0);
+    const z = await deflateBytes(cmyk);
+    const img = z
+      ? { w: c.width, h: c.height, dict: '/ColorSpace /DeviceCMYK /BitsPerComponent 8 /Filter /FlateDecode', bytes: z }
+      : { w: c.width, h: c.height, dict: '/ColorSpace /DeviceCMYK /BitsPerComponent 8', bytes: cmyk };
+    const m = AV23.docMeta();
+    const trimW = m.wmm * 72 / MM, trimH = m.hmm * 72 / MM;
+    const padPt = (o.bleed + (o.marks ? 3 : 0)) * 72 / MM;
+    const wPt = trimW + padPt * 2, hPt = trimH + padPt * 2;
+    const content = 'q\n' + fmt(wPt) + ' 0 0 ' + fmt(hPt) + ' 0 0 cm\n/Im0 Do\nQ\n';
+    return pdfBuild({ wPt, hPt, padPt, bleedPt: o.bleed * 72 / MM, img, content });
+  }
+
+  /* ---------- N-up sheet PDF ---------- */
+  const PAGE_MM = { A4: [210, 297], A3: [297, 420], SRA4: [225, 320], Letter: [215.9, 279.4] };
+  /* grid math only (no rendering) — UI preview ke liye */
+  function nupPlan(cfg) {
+    cfg = cfg || {};
+    const m = AV23.docMeta();
+    const page = PAGE_MM[cfg.page || 'A4'] || PAGE_MM.A4;
+    const pageW = page[0] * 72 / MM, pageH = page[1] * 72 / MM;
+    const margin = (cfg.margin == null ? 8 : cfg.margin) * 72 / MM;
+    const gap = (cfg.gap == null ? 3 : cfg.gap) * 72 / MM;
+    const cw = m.wmm * 72 / MM, ch = m.hmm * 72 / MM;
+    const cols = Math.max(1, Math.floor((pageW - margin * 2 + gap) / (cw + gap)));
+    const rows = Math.max(1, Math.floor((pageH - margin * 2 + gap) / (ch + gap)));
+    const max = cols * rows;
+    const copies = Math.min(cfg.copies || max, max);
+    return { cols, rows, max, copies, page: cfg.page || 'A4', sheetMM: page };
+  }
+
+  function nupPdf(o, cfg) {
+    o = o || AV23.printOpts();
+    cfg = cfg || {};
+    const m = AV23.docMeta();
+    const page = PAGE_MM[cfg.page || 'A4'] || PAGE_MM.A4;
+    const pageW = page[0] * 72 / MM, pageH = page[1] * 72 / MM;
+    const margin = (cfg.margin == null ? 8 : cfg.margin) * 72 / MM;
+    const gap = (cfg.gap == null ? 3 : cfg.gap) * 72 / MM;
+    const cw = m.wmm * 72 / MM, ch = m.hmm * 72 / MM;
+    const cols = Math.max(1, Math.floor((pageW - margin * 2 + gap) / (cw + gap)));
+    const rows = Math.max(1, Math.floor((pageH - margin * 2 + gap) / (ch + gap)));
+    const copies = Math.min(cfg.copies || (cols * rows), cols * rows);
+    const gridW = cols * cw + (cols - 1) * gap;
+    const gridH = rows * ch + (rows - 1) * gap;
+    const ox = (pageW - gridW) / 2, oy = (pageH - gridH) / 2;
+    const pr = AV23.renderPrintCanvas(Object.assign({}, o, { marks: false }));
+    const img = jpegImageParts(pr.canvas, 0.92);
+    let content = 'q\n';
+    /* crop marks (hairline) per placed copy */
+    content += '0 0 0 RG 0.25 w\n';
+    let n = 0;
+    for (let r = 0; r < rows && n < copies; r++) {
+      for (let cc = 0; cc < cols && n < copies; cc++) {
+        const x = ox + cc * (cw + gap), y = oy + (rows - 1 - r) * (ch + gap);
+        content += 'q ' + fmt(cw) + ' 0 0 ' + fmt(ch) + ' ' + fmt(x) + ' ' + fmt(y) + ' cm /Im0 Do Q\n';
+        const len = 3 * 72 / MM, gp = 0.8 * 72 / MM;
+        [[x, y, -1, -1], [x + cw, y, 1, -1], [x, y + ch, -1, 1], [x + cw, y + ch, 1, 1]].forEach(p => {
+          content += 'M ' + fmt(p[0] + p[2] * gp) + ' ' + fmt(p[1]) + ' m ' + fmt(p[0] + p[2] * (gp + len)) + ' ' + fmt(p[1]) + ' l S\n';
+          content += 'M ' + fmt(p[0]) + ' ' + fmt(p[1] + p[3] * gp) + ' m ' + fmt(p[0]) + ' ' + fmt(p[1] + p[3] * (gp + len)) + ' l S\n';
+        });
+        n++;
+      }
+    }
+    content += 'Q\n';
+    return {
+      bytes: pdfBuild({ wPt: pageW, hPt: pageH, padPt: 0, bleedPt: 0, img, content }),
+      cols, rows, copies, page: cfg.page || 'A4', sheetMM: page
+    };
+  }
+
+  /* ============================================================
+     3. batch export — saare artboards
+     ============================================================ */
+  function eachBoard(fn) {
+    const out = [];
+    const cur = boardCur;
+    try {
+      for (let i = 0; i < boards.length; i++) {
+        try {
+          if (i !== boardCur) boardApply(i);
+          const c = flattenToCanvas(1, '#ffffff');
+          out.push(fn(c, boards[i], i));
+        } catch (e) { out.push(null); }
+      }
+    } finally {
+      try { if (cur !== boardCur) boardApply(cur); } catch (e) { }
+    }
+    return out;
+  }
+
+  function batchZip() {
+    if (!doc) { t24('Pehle design kholo', 'err'); return false; }
+    try {
+      const files = [];
+      eachBoard((c, b, i) => {
+        const nm = safe24(b.name || ('artboard-' + (i + 1))) + '-' + c.width + 'x' + c.height + '.png';
+        if (i < 40) files.push({ name: nm, bytes: AV23.dataURLBytes(c.toDataURL('image/png')) });
+      });
+      const list = boards.map((b, i) => (i + 1) + '. ' + (b.name || 'artboard') + ' — ' + (b.doc ? b.doc.w + '×' + b.doc.h + ' px' : '')).join('\n');
+      files.push({
+        name: 'artboards-index.txt',
+        bytes: new TextEncoder().encode('ArtViSiON Studio v24 — batch export\n' + new Date().toISOString() + '\n\n' + list + '\n')
+      });
+      const z = AV23.zipMake(files);
+      download(safe24(doc.name) + '-artboards.zip', new Blob([z], { type: 'application/zip' }));
+      t24('Batch ready — ' + boards.length + ' artboard (' + Math.round(z.length / 1024) + ' KB)', 'ok', 3000);
+      return true;
+    } catch (e) { t24('Batch fail: ' + e.message, 'err', 3000); return false; }
+  }
+
+  /* ============================================================
+     4. Pro output panel (prints ko replace nahi karta — extra)
+     ============================================================ */
+  function openPro() {
+    if (!doc) { t24('Pehle design kholo', 'err'); return; }
+    const m = AV23.docMeta();
+    const o = AV23.printOpts();
+    const opt = (v, sel, label) => '<option value="' + v + '"' + (String(v) === String(sel) ? ' selected' : '') + '>' + label + '</option>';
+    const body =
+      '<div class="av24grid3">' +
+      '<div class="av24tile"><b>CMYK PDF</b><small>Press ke liye CMYK (alag C/M/Y/K values), TAC 300% limit. Printer CMYK maange to yahi do.</small>' +
+      '<p class="av24cmyknote">PAGE: <b>' + m.wmm + '×' + m.hmm + ' mm</b> + bleed ' + o.bleed + ' mm + crop marks · ' + o.dpi + ' dpi · TAC 300%</p>' +
+      '<button class="av23btn pri" data-p="cmyk">CMYK PDF banao</button></div>' +
+      '<div class="av24tile"><b>Multi-copy sheet</b><small>A4 sheet par N copies + crop marks — card, sticker, label ke liye.</small>' +
+      '<div class="av24row" style="margin:8px 0">' +
+      '<select id="pro24page">' + opt('A4', 'A4', 'A4 sheet') + opt('A3', 'A4', 'A3 sheet') + opt('Letter', 'A4', 'Letter') + '</select>' +
+      '<select id="pro24copies">' + [0, 4, 6, 8, 10, 12, 16, 20, 24, 30].map(n => opt(n, 0, n ? n + ' copies' : 'Auto (max)')).join('') + '</select>' +
+      '</div><div class="av24mini" id="pro24grid"></div>' +
+      '<button class="av23btn" data-p="nup">Sheet PDF banao</button></div>' +
+      '<div class="av24tile"><b>All artboards</b><small>Saare artboards ek ZIP me — PNG + index.txt. Multi-page project ke liye.</small>' +
+      '<button class="av23btn" data-p="batch">Batch ZIP (' + boards.length + ' board)</button></div>' +
+      '</div>' +
+      '<div class="av23hint" id="pro24info">Design: <b>' + (doc.name || 'untitled') + '</b> · ' + m.wmm + '×' + m.hmm + ' mm · ' + o.dpi + ' dpi · bleed ' + o.bleed + ' mm' +
+      ' — settings badalne ke liye <b>Print &amp; Cut Pack</b> kholo.</div>' +
+      '<div class="av23hint"><b>CMYK note:</b> conversion browser me hoti hai (GCR + 300% ink limit). Exact press profile (e.g. ISO Coated v2) chahiye to printer se profile match karayein. ' +
+      'Screen/WhatsApp ke liye normal Print Pack (.zip) best hai.</div>';
+    const ov = AV23.__shell('av24pro', 'Pro output', 'CMYK · multi-copy sheet · batch — sab offline', body, '<button class="av23btn" data-p="print">Print &amp; Cut Pack kholo</button><div class="sp"></div><button class="av23btn" data-p="qr">QR Code</button>');
+    const updPlan = () => {
+      const pg = ov.querySelector('#pro24page'), cp = ov.querySelector('#pro24copies'), box = ov.querySelector('#pro24grid');
+      if (!box) return;
+      const pl = nupPlan({ page: pg ? pg.value : 'A4', copies: cp ? +cp.value : 0 });
+      let cells = '';
+      for (let i = 0; i < pl.copies; i++) cells += '<i></i>';
+      box.innerHTML = '<div class="av24minigrid" style="grid-template-columns:repeat(' + pl.cols + ',1fr)">' + cells + '</div>' +
+        '<small><b>' + pl.page + '</b> · grid <b>' + pl.cols + '×' + pl.rows + '</b> · <b>' + pl.copies + (pl.copies === 1 ? ' copy' : ' copies') + '</b> per sheet' +
+        (pl.copies < pl.max ? ' <em>(max ' + pl.max + ')</em>' : '') + '</small>';
+    };
+    ['#pro24page', '#pro24copies'].forEach(sel => { const el = ov.querySelector(sel); if (el) el.onchange = updPlan; });
+    updPlan();
+    ov.querySelectorAll('[data-p]').forEach(b => b.onclick = async () => {
+      const k = b.dataset.p;
+      if (k === 'print') { close24(); setTimeout(() => AV23.print(), 200); return; }
+      if (k === 'qr') { close24(); setTimeout(openQR, 200); return; }
+      if (k === 'batch') { batchZip(); return; }
+      const old = b.textContent; b.disabled = true; b.textContent = 'ban raha hai…';
+      try {
+        if (k === 'cmyk') {
+          const bytes = await cmykPdf(o);
+          download(AV23.fileBase() + '-CMYK-' + o.dpi + 'dpi.pdf', new Blob([bytes], { type: 'application/pdf' }));
+          t24('CMYK PDF ready · ' + Math.round(bytes.length / 1024) + ' KB', 'ok', 2600);
+        } else if (k === 'nup') {
+          const cfg = { page: (ov.querySelector('#pro24page') || {}).value || 'A4', copies: +((ov.querySelector('#pro24copies') || {}).value || 0) };
+          const res = nupPdf(o, cfg);
+          download(AV23.fileBase() + '-sheet-' + res.page + '-' + res.copies + 'up.pdf', new Blob([res.bytes], { type: 'application/pdf' }));
+          const inf = ov.querySelector('#pro24info');
+          if (inf) inf.innerHTML = 'Sheet: <b>' + res.page + '</b> ' + res.sheetMM[0] + '×' + res.sheetMM[1] + ' mm · grid <b>' + res.cols + '×' + res.rows + '</b> · <b>' + res.copies + ' copies</b> + crop marks.';
+          t24(res.copies + ' copies · ' + res.page + ' sheet ready', 'ok', 2600);
+        }
+      } catch (e) { t24('Fail: ' + e.message, 'err', 3000); }
+      finally { b.disabled = false; b.textContent = old; }
+    });
+    return ov;
+  }
+
+  /* ============================================================
+     5. CSS + UI hooks
+     ============================================================ */
+  const CSS24 = `
+  .av24cols{display:grid;grid-template-columns:1.15fr .85fr;gap:16px;align-items:start}
+  .av24row{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:end}
+  .av24mini{margin:2px 0 8px}
+  .av24minigrid{display:grid;gap:3px;padding:7px;border:1px dashed #D0D5DD;border-radius:8px;background:#FAFAFB}
+  .av24minigrid i{display:block;height:11px;background:#FDE7E1;border:1px solid #F5A48F;border-radius:2px}
+  .av24mini small{display:block;margin-top:6px;font:700 11px/1.5 inherit;color:#667085}
+  .av24mini em{color:#98A2B3;font-style:normal}
+  .av24quick{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0}
+  .av24quick button{padding:7px 11px;border-radius:999px;border:1px solid #E4E7EC;background:#fff;font:800 11.5px/1 inherit;color:#475467;cursor:pointer}
+  .av24quick button:hover{border-color:#F54927;color:#F54927;background:#FFF7F4}
+  .av24grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-bottom:14px}
+  .av24tile{border:1.5px solid #E4E7EC;border-radius:14px;padding:14px;background:#fff;display:flex;flex-direction:column;gap:8px}
+  .av24tile b{font-size:14px;color:#101828}
+  .av24tile small{font-size:12px;color:#667085;line-height:1.5;flex:1}
+  .av24tile select,.av24tile input{height:38px;border-radius:10px;border:1px solid #DCE0E8;padding:0 10px;font:inherit;background:#fff}
+  .av24badge{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#15803D;background:#EAF7EE;border:1px solid #C7EBD3;border-radius:999px;padding:2px 8px;margin-left:6px}
+  #av12bar button[data-a="qr24"]{background:#0E7490;color:#fff;border-color:transparent}
+  #av12bar button[data-a="qr24"]:hover{filter:brightness(1.08)}
+  #av12bar button[data-a="pro24"]{background:#101828;color:#fff;border-color:transparent}
+  .av24cmyknote{margin:6px 0 0;font:700 11.5px/1.55 inherit;color:#667085}
+  @media(max-width:860px){.av24cols{grid-template-columns:1fr}.av24row{grid-template-columns:1fr}}
+  @media(max-width:640px){
+    #av24qr .av23foot,#av24pro .av23foot{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:stretch}
+    #av24qr .av23foot .sp,#av24pro .av23foot .sp{display:none}
+    #av24qr .av23foot .av23btn,#av24pro .av23foot .av23btn{white-space:nowrap;font-size:11.5px;padding:10px 8px;min-width:0}
+    #av24pro .av23foot .av23btn.pri{grid-column:span 2}
+    .av24preview canvas{max-width:100%;height:auto}
+  }
+  `;
+
+  function injectCSS24() {
+    if (document.getElementById('av24-style')) return;
+    const st = document.createElement('style');
+    st.id = 'av24-style'; st.textContent = CSS24;
+    document.head.appendChild(st);
+  }
+
+  const IC = {
+    qr: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v2M14 20h2M19 19h2v2h-2"/>',
+    pro: '<path d="M4 7h16M4 12h16M4 17h10"/><circle cx="19" cy="17" r="2.4"/>'
+  };
+  const ic = (k, s) => '<svg viewBox="0 0 24 24" width="' + (s || 15) + '" height="' + (s || 15) + '" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-3px">' + (IC[k] || IC.qr) + '</svg>';
+
+  function patchMenus24() {
+    try {
+      if (typeof MENUS === 'undefined' || !MENUS.File || MENUS.File.__av24) return;
+      const extra = [
+        { l: 'QR Code generator…', a: openQR },
+        { l: 'Pro output (CMYK / sheet / batch)…', a: openPro },
+        '-'
+      ];
+      const arr = extra.concat(MENUS.File);
+      arr.__av24 = true;
+      MENUS.File = arr;
+    } catch (e) { }
+  }
+
+  function installUI24() {
+    injectCSS24();
+    try {
+      const bar = document.getElementById('av12bar');
+      if (bar && !bar.querySelector('[data-a="qr24"]')) {
+        const mk = (id, icon, label, title, fn) => {
+          const b = document.createElement('button');
+          b.dataset.a = id; b.title = title;
+          b.innerHTML = ic(icon, 15) + '<span class="t">' + label + '</span>';
+          b.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); fn(); }, true);
+          return b;
+        };
+        /* quick bar scroll karta hai — naye buttons pehle hi dikhne chahiye */
+        const first = bar.querySelector('[data-a="design23"]') || bar.firstElementChild;
+        const qb = mk('qr24', 'qr', 'QR', 'QR code banao (offline, asli QR)', openQR);
+        const pb = mk('pro24', 'pro', 'Pro', 'CMYK PDF · multi-copy sheet · batch export', openPro);
+        if (first && first.nextSibling) {
+          bar.insertBefore(qb, first.nextSibling);
+          bar.insertBefore(pb, qb.nextSibling);
+        } else { bar.appendChild(qb); bar.appendChild(pb); }
+      }
+    } catch (e) { }
+    try {
+      const q = document.getElementById('av17quick');
+      if (q && !q.querySelector('[data-q="qr24"]')) {
+        const c = document.createElement('button');
+        c.className = 'qa'; c.dataset.q = 'qr24'; c.title = 'QR code generator';
+        c.innerHTML = '<i>' + ic('qr', 15) + '</i><b>QR code</b><small>scan · print</small>';
+        c.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); openQR(); }, true);
+        const p2 = document.createElement('button');
+        p2.className = 'qa'; p2.dataset.q = 'pro24'; p2.title = 'CMYK PDF · sheet · batch';
+        p2.innerHTML = '<i>' + ic('pro', 15) + '</i><b>Pro output</b><small>CMYK · sheet</small>';
+        p2.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); openPro(); }, true);
+        const qFirst = q.firstElementChild;
+        if (qFirst && qFirst.nextSibling) { q.insertBefore(c, qFirst.nextSibling); q.insertBefore(p2, c.nextSibling); }
+        else { q.appendChild(c); q.appendChild(p2); }
+      }
+    } catch (e) { }
+    try { patchMenus24(); } catch (e) { }
+    try {
+      if (typeof AV23 !== 'undefined' && AV23 && !AV23.__hub24) {
+        AV23.__hub24 = true;
+      }
+    } catch (e) { }
+  }
+
+  /* hub me QR / Pro cards add karo */
+  function patchHub() {
+    try {
+      const ovs = document.querySelectorAll('#av23hub');
+      for (let i = 0; i < ovs.length; i++) {
+        const ov = ovs[i];
+        const grid = ov.querySelector('.hubgrid');
+        if (!grid || grid.querySelector('[data-h="qr24"]')) continue;
+        const add = (h, icon, title, sub) => {
+          const b = document.createElement('button');
+          b.className = 'hubcard'; b.dataset.h = h;
+          b.innerHTML = '<span class="ic" style="background:linear-gradient(135deg,#0E7490,#22A8C4)">' + ic(icon, 20) + '</span>' +
+            '<span><b>' + title + '</b><small>' + sub + '</small></span>';
+          b.addEventListener('click', ev => {
+            ev.preventDefault(); ev.stopPropagation();
+            close24();
+            setTimeout(() => { h === 'qr24' ? openQR() : openPro(); }, 140);
+          }, true);
+          grid.appendChild(b);
+        };
+        add('qr24', 'qr', 'QR Code generator', 'Asli QR — website, WhatsApp, UPI, phone. PNG + vector SVG.');
+        add('pro24', 'pro', 'Pro output', 'CMYK PDF, A4 sheet par multi-copy + crop marks, batch ZIP.');
+      }
+    } catch (e) { }
+  }
+
+  function initV24() {
+    try { installUI24(); } catch (e) { }
+    try {
+      /* hub is created on demand — wrap it so our cards are always there */
+      if (window.AV23 && typeof AV23.hub === 'function' && !AV23.__hub24) {
+        const origHub = AV23.hub;
+        AV23.hub = function () { const r = origHub.apply(this, arguments); setTimeout(patchHub, 40); setTimeout(patchHub, 400); return r; };
+        AV23.__hub24 = true;
+      }
+    } catch (e) { }
+    try {
+      /* hub overlay is rebuilt on every open — watch the DOM so our cards always land */
+      if (!window.__hubObs && window.MutationObserver) {
+        let t = null;
+        const mo = new MutationObserver(function () { clearTimeout(t); t = setTimeout(patchHub, 90); });
+        mo.observe(document.body, { childList: true, subtree: true });
+        window.__hubObs = mo;
+      }
+    } catch (e) { }
+    try { patchHub(); } catch (e) { }
+    let n = 0;
+    const t = setInterval(() => {
+      n++;
+      try { installUI24(); } catch (e) { }
+      try { patchHub(); } catch (e) { }
+      const ok = document.querySelector('#av12bar [data-a="qr24"]') && document.querySelector('#av17quick [data-q="qr24"]');
+      if (n >= 10 || (ok && n > 3)) clearInterval(t);
+    }, 900);
+    document.addEventListener('click', () => setTimeout(patchHub, 400), true);
+  }
+
+  /* ============================================================
+     6. public API
+     ============================================================ */
+  window.AV24 = {
+    version: '24.0',
+    qr: { encode: (t, ec) => QR.encode(t, ec), canvas: (t, px, o) => QR.toCanvas(QR.encode(t, (o && o.ec) || 'M'), px, o), svg: (t, o) => QR.toSVG(QR.encode(t, (o && o.ec) || 'M'), o) },
+    openQR, openPro, insertQR, rgbToCmyk, cmykPdf, nupPdf, batchZip, pdfBuild, deflateBytes,
+    qrState: QRS, __patchHub: patchHub, __openQR: openQR, __openPro: openPro
+  };
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initV24);
+  else initV24();
+  setTimeout(initV24, 900);
+  setTimeout(initV24, 2100);
+})();
+
+</script>
+
 </body>
 </html>
