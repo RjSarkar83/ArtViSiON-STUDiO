@@ -14016,7 +14016,10 @@ window.CDR = CDR;
 
 </script>
 
-<script id="av19-upgrade">
+<script id="av22-upgrade">
+
+
+
 
 
 /* ============================================================
@@ -14373,6 +14376,7 @@ window.CDR = CDR;
     palette: '<path d="M12 3a9 9 0 1 0 0 18c1.4 0 1.9-1 1.4-1.9-.6-1.1.2-2.3 1.6-2.3H17a4 4 0 0 0 4-4c0-5.3-4-9.8-9-9.8z"/><circle cx="7.6" cy="11" r="1.15" fill="currentColor" stroke="none"/><circle cx="10.4" cy="7.3" r="1.15" fill="currentColor" stroke="none"/><circle cx="15" cy="7.6" r="1.15" fill="currentColor" stroke="none"/>',
     crop: '<path d="M6.4 2.6v15h15"/><path d="M2.6 6.4h15v15"/>',
     open: '<path d="M3 7.5A1.5 1.5 0 014.5 6H9l1.8 2.2h8.7A1.5 1.5 0 0121 9.7v8.8A1.5 1.5 0 0119.5 20h-15A1.5 1.5 0 013 18.5z"/>',
+    mockup: '<rect x="3" y="4" width="8" height="8" rx="1.4"/><rect x="13" y="4" width="8" height="8" rx="1.4"/><rect x="3" y="14" width="8" height="6" rx="1.4"/><rect x="13" y="14" width="8" height="6" rx="1.4"/>',
     star: '<path d="M12 3.4l2.6 5.5 6 .8-4.4 4.2 1.1 6-5.3-2.9-5.3 2.9 1.1-6L3.4 9.7l6-.8z"/>',
     question: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 114 2c-.9.7-1.5 1.2-1.5 2.5"/><path d="M12 17.2v.1"/>',
   };
@@ -15078,6 +15082,7 @@ window.CDR = CDR;
       <button data-a="dup" title="Layer duplicate">${svg('copy')}<span class="t">Duplicate</span></button>
       <button data-a="text" title="Text add karo">${svg('text')}<span class="t">Text</span></button>
       <button data-a="crop" title="Crop to selection">${svg('crop')}</button>
+      <button data-a="mockup" title="Portfolio mockup library — 174 scenes">${svg('mockup')}<span class="t">Mockups</span></button>
       <button data-a="more" title="All quick actions (crop, undo, export, layers…)">${svg('layers')}<span class="t">More</span></button>
       <button data-a="filter" title="Filters / enhance">${svg('filter')}<span class="t">Filters</span></button>
       <button data-a="brand" title="Brand & palette — primary + secondary colour theory">${svg('palette')}<span class="t">Brand</span><i style="width:8px;height:8px;border-radius:50%;background:${state.brand};box-shadow:0 0 0 2px #fff inset"></i></button>
@@ -16254,7 +16259,7 @@ window.CDR = CDR;
      ============================================================ */
   const SIMPLE_KEY = 'artvision.v15.mode';
   let simple = true;
-  let mode = 'studio';
+  let mode = 'simple';
 
   const TOOL_LABELS = {
     move: 'Move', node: 'Nodes', pen: 'Pen', pencil: 'Pencil', brush: 'Brush',
@@ -16271,12 +16276,12 @@ window.CDR = CDR;
   function loadMode() {
     try {
       const v = localStorage.getItem(SIMPLE_KEY);
-      mode = (v === 'pro' || v === 'simple' || v === 'studio') ? v : 'studio';
+      mode = (v === 'pro' || v === 'simple' || v === 'studio') ? v : 'simple';
       simple = mode !== 'pro';
-    } catch (e) { mode = 'studio'; simple = true; }
+    } catch (e) { mode = 'simple'; simple = true; }
   }
   function applyMode(want, silent) {
-    const m = (want === 'pro' || want === 'simple' || want === 'studio') ? want : 'studio';
+    const m = (want === 'pro' || want === 'simple' || want === 'studio') ? want : 'simple';
     mode = m;
     simple = m !== 'pro';
     document.documentElement.classList.toggle('av-simple', simple);
@@ -16286,6 +16291,9 @@ window.CDR = CDR;
     // studio = violet-blue gradient skin on a dark base (v12 feel)
     if (m === 'studio') {
       try { applyTheme('dark', true); } catch (e) { }
+    } else if (m === 'simple') {
+      /* simple = saaf light shell (v15 wala easy look) */
+      try { applyTheme('light', true); } catch (e) { }
     }
     const btn = document.getElementById('av15mode');
     if (btn) btn.innerHTML = m === 'pro'
@@ -16295,16 +16303,18 @@ window.CDR = CDR;
       ? 'Pro mode — click for the Studio layout'
       : 'Studio layout — click for the full pro layout';
     refreshToolLabels();
+    try { injectCSS20(); } catch (e) { }
     try { buildQuickCards(); } catch (e) { }
     try { initV18(); } catch (e) { }
     if (typeof syncCard === 'function') { try { syncCard(true); } catch (e) { } }
     if (!silent) A.toast(m === 'pro' ? 'Pro mode — saare panels wapas'
-      : (m === 'studio' ? 'Studio mode — click-first, gradient skin' : 'Simple mode'), 'ok', 2000);
+      : (m === 'studio' ? 'Studio mode — dark gradient skin' : 'Simple mode — easy click-first shell'), 'ok', 2000);
   }
   function toggleMode() {
+    /* chip click = simple → studio → pro → simple (sab kuch click se pahunch me) */
     const cur = document.documentElement.classList.contains('av-studio') ? 'studio'
-      : (simple ? 'simple' : 'pro');
-    applyMode(cur === 'pro' ? 'studio' : 'pro');
+      : (document.documentElement.classList.contains('av-pro') ? 'pro' : 'simple');
+    applyMode(cur === 'simple' ? 'studio' : cur === 'studio' ? 'pro' : 'simple');
   }
 
   const CORE_TOOLS = ['move', 'wand', 'marquee', 'lasso', 'brush', 'eraser', 'fill',
@@ -16424,7 +16434,8 @@ window.CDR = CDR;
       <button class="mitem" data-act="theme">${svg(state.theme === 'light' ? 'moon' : 'sun', 15)} ${state.theme === 'light' ? 'Dark theme' : 'Light theme'}</button>
       <button class="mitem" data-act="brand">${svg('palette', 15)} Brand &amp; palette</button>
       <button class="mitem" data-act="home">${svg('sparkle', 15)} Studio home — click se shuru</button>
-      <button class="mitem" data-act="new">${svg('check', 15)} Naya kya hai — v19 update</button>
+      <button class="mitem" data-act="mockups">${svg('mockup', 15)} Mockup library — 174 scenes</button>
+      <button class="mitem" data-act="new">${svg('check', 15)} Naya kya hai — v22 update</button>
       <button class="mitem" data-act="start">${svg('question', 15)} Start guide (4 steps)</button>
       <button class="mitem" data-act="help">${svg('question', 15)} Shortcuts &amp; help</button>
       <button class="mitem" data-act="pro">${svg('sparkle', 15)} ${simple ? 'Pro mode (all panels)' : 'Studio mode'}</button>`;
@@ -16438,6 +16449,7 @@ window.CDR = CDR;
       if (a === 'start') openStartPanel();
       if (a === 'home') openStudioHome();
       if (a === 'new') openWhatsNew19();
+      if (a === 'mockups') openMockupsLib();
       if (a === 'help') openHelp();
       if (a === 'pro') toggleMode();
     });
@@ -16772,6 +16784,110 @@ window.CDR = CDR;
     #av17home .hd h2{font-size:18px}
   }
 `;
+  /* v20: startup par host ke purane toast/popup messages na dikhein */
+  function muteStartupNoise() {
+    /* host load par kuch purane marketing toasts bhejta hai — unhe hata do */
+    const BAD = /portfolio mockups|Start guide|Menu me sab kuch|welcome/i;
+    const box = document.getElementById('toasts');
+    if (!box || box.__av20obs) return;
+    box.__av20obs = true;
+    const t0 = Date.now();
+    const strip = () => {
+      if (Date.now() - t0 > 9000) { obs.disconnect(); return; }
+      [...box.children].forEach(el => { try { if (BAD.test(el.textContent || '')) el.remove(); } catch (e) { } });
+    };
+    const obs = new MutationObserver(strip);
+    obs.observe(box, { childList: true });
+    strip();
+  }
+
+  const CSS20 = `
+
+  body.av-panning,body.av-panning *{user-select:none!important;-webkit-user-select:none!important}
+  html.av-simple #topbar,html.av-simple #av12bar,html.av-simple #statusbar,html.av-simple #toolrail{
+    user-select:none;-webkit-user-select:none}
+
+  /* ============================================================
+     20. SIMPLE SHELL = default look (v15 ka easy UI + saare naye updates)
+     ============================================================ */
+  html.av-simple{
+    --avGrad:linear-gradient(135deg,#F54927 0%,#FF6B35 55%,#FF8A3D 100%);
+    --avGradSoft:rgba(245,73,39,.10);
+  }
+  /* rail: bade, padhne layak labels */
+  html.av-simple #toolrail{width:92px;padding:6px 6px 8px;gap:2px;background:#fff}
+  html.av-simple #toolrail .tool{width:80px;min-height:40px;padding:4px 4px 3px;border-radius:10px}
+  html.av-simple #toolrail .tool svg{width:17px;height:17px}
+  html.av-simple #toolrail .tsep{width:26px;height:1px;margin:3px 0;flex:none}
+  html.av-simple #toolrail .av15-grp{width:48px;height:1px;margin:2px 0;flex:none}
+  html.av-simple #toolrail .tool .lbl{font-size:10.5px;font-weight:800}
+  html.av-simple #toolrail .av15-more{width:80px;min-height:32px;font-size:10px}
+
+  /* side panel: cards + scroll, kuch bhi clip nahi */
+  html.av-simple #side{width:334px;overflow-y:auto!important;overflow-x:hidden!important;padding-bottom:14px}
+  html.av-simple #side>*{flex:none}
+  html.av-simple #side::-webkit-scrollbar{width:9px}
+  html.av-simple #side::-webkit-scrollbar-thumb{background:var(--line2,#e2e4ea);border-radius:9px}
+  html.av-simple #palette{grid-template-columns:repeat(9,1fr)!important;min-width:0}
+  html.av-simple #side *{max-width:100%}
+
+  /* 5-step card */
+  html.av-simple #av18steps{display:block;margin:10px 10px 0;padding:12px 10px 9px;border-radius:14px;
+    border:1px solid var(--line);background:#fff;box-shadow:0 2px 10px rgba(16,24,40,.05)}
+  html.av-simple #av18steps .sh b{font-size:11px;color:var(--tx2)}
+  html.av-simple #av18steps .stp{border-radius:11px}
+  html.av-simple #av18steps .stp:hover{background:#F6F7F9;border-color:var(--line)}
+  html.av-simple #av18steps .stp b{font-size:13px;color:var(--tx)}
+  html.av-simple #av18steps .stp small{font-size:11px;color:var(--tx3)}
+  html.av-simple #av18steps .stp .n{background:#EEF0F4;color:var(--tx2)}
+  html.av-simple #av18steps .stp.cur .n{background:var(--avGrad);color:#fff;box-shadow:0 5px 14px rgba(245,73,39,.35)}
+  html.av-simple #av18steps .bar i{background:var(--avGrad)}
+
+  /* quick action cards */
+  html.av-simple #av17quick{display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:min-content;gap:8px;
+    margin:10px 10px 0;padding:10px;border-radius:14px;border:1px solid var(--line);background:#fff;
+    box-shadow:0 2px 10px rgba(16,24,40,.05)}
+  html.av-simple #av17quick .qa{background:#F8F9FB;border:1px solid var(--line);border-radius:12px;min-height:86px}
+  html.av-simple #av17quick .qa.span2{min-height:64px}
+  html.av-simple #av17quick .qa:hover{border-color:var(--acc);box-shadow:0 8px 20px rgba(245,73,39,.14)}
+  html.av-simple #av17quick .qa i{background:var(--avGrad);box-shadow:0 6px 16px rgba(245,73,39,.3)}
+  html.av-simple #av17quick .qa b{font-size:12px;color:var(--tx)}
+  html.av-simple #av17quick .qa small{font-size:10.5px;color:var(--tx3)}
+
+  /* advanced button */
+  html.av-simple #av18adv{display:flex;background:#fff;border:1px dashed var(--line2);
+    color:var(--tx2);box-shadow:0 2px 10px rgba(16,24,40,.05)}
+  html.av-simple #av18adv:hover{border-color:var(--acc);color:var(--acc)}
+  html.av-simple.av-adv #av18adv{border-style:solid;color:var(--tx3)}
+  html.av-simple #av15adv{display:none}
+
+  /* empty state card */
+  html.av-simple #av18empty .card{background:rgba(255,255,255,.96);border:1px solid var(--line2);
+    box-shadow:0 24px 60px rgba(16,24,40,.16)}
+  html.av-simple #av18empty .eb{background:#F8F9FB;border:1px solid var(--line)}
+  html.av-simple #av18empty .eb:hover{border-color:var(--acc);background:#fff}
+  html.av-simple #av18empty .eb i{background:var(--avGrad);box-shadow:0 6px 16px rgba(245,73,39,.28)}
+
+  /* floating quick bar: stage ke andar rahe, side panel ko na dhake */
+  html.av-simple #av12bar{left:calc(50% - 121px);max-width:calc(100vw - 470px);
+    box-shadow:0 18px 44px rgba(16,24,40,.16)}
+
+  /* mode chip + menu button */
+  html.av-simple #av15mode{background:var(--avGrad);border-color:transparent;color:#fff}
+  html.av-simple #av15mode:hover{filter:brightness(1.05)}
+
+  /* what's-new panel bhi light */
+  html.av-simple #av19new .box{background:#fff;border-color:var(--line2)}
+  html.av-simple #av19new .hd h3{color:#141728}
+  html.av-simple #av19new .it b{color:#141728}
+  html.av-simple #av19new .ft button{background:#F8F9FB;color:#5A6280}
+  html.av-simple #av19new .ft button.pri{background:var(--avGrad);color:#fff}
+  `;
+  function injectCSS20(){
+    let st=document.getElementById('av20-style');
+    if(!st){st=document.createElement('style');st.id='av20-style';document.head.appendChild(st);}
+    st.textContent = CSS20;
+  }
   function injectCSS17(){ const st=document.createElement('style'); st.id='av17-style'; st.textContent=CSS17; document.head.appendChild(st); }
 
 
@@ -16898,6 +17014,9 @@ window.CDR = CDR;
       <button class="qa" data-q="resize"><i>${svg('resize', 15)}</i><b>Resize</b><small>W / H</small></button>
       <button class="qa" data-q="text"><i>${svg('text', 15)}</i><b>Text</b><small>heading</small></button>
       <button class="qa" data-q="filter"><i>${svg('filter', 15)}</i><b>Filters</b><small>12 presets</small></button>
+      <button class="qa span2" data-q="mockup" title="Portfolio mockup library — 174 SVG scenes">
+        <i>${svg('mockup', 15)}</i>
+        <span class="tx"><b>Mockup library</b><small>174 scenes · 23 categories</small></span></button>
       <button class="qa span2" data-q="export"><i>${svg('download', 15)}</i>
         <span class="tx"><b>Export PNG</b><small>ek click download</small></span></button>`;
     props.parentNode.insertBefore(wrap, props);
@@ -16910,6 +17029,7 @@ window.CDR = CDR;
         if (q === 'text') setTool('text');
         if (q === 'filter') openFilterDialog();
         if (q === 'export') exportImage('png', 1, 95);
+        if (q === 'mockup') openMockupsLib();
       } catch (e) { A.toast('Fail: ' + e.message, 'err', 2400); }
     });
   }
@@ -16922,6 +17042,8 @@ window.CDR = CDR;
     injectCSS15();
     injectCSS16();
     injectCSS17();
+    injectCSS20();
+    muteStartupNoise();
     bindHost();
     setFavicons();
     paintBrandMarks();
@@ -16936,7 +17058,7 @@ window.CDR = CDR;
     buildBar();
     buildCard();
     buildAdvToggle();
-    toggleCard(true);
+    toggleCard(false);
     try {
       if (simple && window.matchMedia && window.matchMedia('(max-width:760px)').matches) toggleCard(false);
     } catch (e) { }
@@ -16955,7 +17077,7 @@ window.CDR = CDR;
     }, 900);
     patchTools();
     window.AV12 = {
-      version: '19.0',
+      version: '22.0',
       bgRemove: bgRemoveV12,
       openBgDialog,
       cutoutData,
@@ -16989,8 +17111,14 @@ window.CDR = CDR;
       openBrandPanel,
       harmonyColors, ramp, contrast,
       setCanvasBg,
+      /* v21 */
+      mockups: openMockupsLib,
+      /* v22 */
+      selCopy: () => copySel(), selCut: cutSel, selPaste: pasteClip, selDelete: selDelete,
+      selFill: selFill, selFeather: selFeather, selGrow: (r) => selMorph(r || 2, true),
+      selShrink: (r) => selMorph(r || 2, false), deleteSmart,
     };
-    LOG('v19 active — no boot popup, drag = workspace pan');
+    LOG('v22 active — selection toolkit (delete/copy-cut-paste/fill/feather), simple shell');
     /* v19: first-run welcome popup hataya — seedha editor khulta hai */
     try { localStorage.setItem('av14.welcomed', '1'); } catch (e) { }
   }
@@ -17261,8 +17389,9 @@ window.CDR = CDR;
     if (!box) return;
     let has = true;
     try { has = (doc.layers || []).length > 0; } catch (e) { has = true; }
-    const studio = document.documentElement.classList.contains('av-studio');
-    box.classList.toggle('on', !has && studio);
+    const easy = document.documentElement.classList.contains('av-studio') ||
+                 document.documentElement.classList.contains('av-simple');
+    box.classList.toggle('on', !has && easy);
   }
 
   function buildAdvFooter18() {
@@ -17317,16 +17446,34 @@ window.CDR = CDR;
         if (curTool !== 'move') return;             // marquee/pen/etc = uncha
         if (typeof textEdit !== 'undefined' && textEdit) return;
       } catch (err) { return; }
+      /* pixel selection ke andar drag = selection content move (shape hit se pehle) */
+      try {
+        if (typeof pixSel !== 'undefined' && pixSel && !pixSel.float && typeof ptInSelRect === 'function') {
+          const r0 = cvs.getBoundingClientRect();
+          const pd = viewToDoc(e.clientX - r0.left, e.clientY - r0.top);
+          const Lr = A.active();
+          if (Lr && Lr.type === 'raster' && ptInSelRect(pd)) {
+            startFloatDrag(Lr, pd);
+            G.floatDrag = { start: pd };
+            try { cvs.setPointerCapture(e.pointerId); } catch (er) { }
+            e.stopImmediatePropagation(); e.preventDefault();
+            return;
+          }
+        }
+      } catch (err) { }
       if (hitAt(e.clientX, e.clientY)) return;      // object ke upar → normal move
       const r = cvs.getBoundingClientRect();
       try { G.pan = { sx: e.clientX - r.left, sy: e.clientY - r.top, px: panX, py: panY }; }
       catch (err) { return; }
       try { cvs.setPointerCapture(e.pointerId); } catch (err) { }
       cvs.style.cursor = 'grabbing';
+      /* drag ke waqt page text select na ho */
+      try { document.body.classList.add('av-panning'); getSelection().removeAllRanges(); } catch (err) { }
       e.stopImmediatePropagation();
       e.preventDefault();
       const done = () => {
         try { G.pan = null; } catch (err) { }
+        try { document.body.classList.remove('av-panning'); } catch (err) { }
         cvs.style.cursor = '';
         cvs.removeEventListener('pointerup', done, true);
         cvs.removeEventListener('pointercancel', done, true);
@@ -17386,18 +17533,22 @@ window.CDR = CDR;
     if (!ov) {
       ov = document.createElement('div'); ov.id = 'av19new';
       ov.innerHTML = `<div class="box">
-        <div class="hd"><span class="v">v19</span><h3>Naya kya hai</h3><button class="x" title="Close">${svg('x', 14)}</button></div>
-        <p class="sub">Aapke bataye do points sabse pehle — baaki uske saath.</p>
-        <div class="it"><i>1</i><span><b>Open par koi popup nahi</b>
-          <small>Home modal, splash, launcher, start toast — sab hata. Seedha editor. Chahiye to ☰ Menu → Studio home.</small></span></div>
-        <div class="it"><i>2</i><span><b>Mouse se workspace move</b>
-          <small>Move tool me khaali jagah par click + drag = canvas move. Object par drag = object move. Space+drag = kahin se bhi.</small></span></div>
-        <div class="it"><i>3</i><span><b>Shuru karo · 5 steps</b>
-          <small>Photo → Background → Size → Text → Export. Har step click par kaam, ho jaane par green tick.</small></span></div>
-        <div class="it"><i>4</i><span><b>Bade, padhne layak labels</b>
-          <small>Tool rail ke naam 11px (pehle 8.5px), panel me kuch bhi cut nahi, mobile par icon + naam.</small></span></div>
-        <div class="it"><i>5</i><span><b>Beginner panel</b>
-          <small>Layers + Colours "Advanced — layers + colours" button ke peeche. Sab kuch wahin milta hai.</small></span></div>
+        <div class="hd"><span class="v">v22</span><h3>Naya kya hai</h3><button class="x" title="Close">${svg('x', 14)}</button></div>
+        <p class="sub">Simple easy look wapas default — aur saare updates usi ke andar.</p>
+        <div class="it"><i>1</i><span><b>Selection ab poora kaam karta hai</b>
+          <small>Delete (pixels + layer), Copy/Cut/Paste (Ctrl+C/X/V), Fill, Feather, Grow/Shrink, Invert, naya layer — sab selection bar me.</small></span></div>
+        <div class="it"><i>2</i><span><b>Default look = Simple &amp; easy</b>
+          <small>Wahi pehla halka UI — safed panel, bade click cards, 5 steps. Dark Studio look ☰ Menu → mode se.</small></span></div>
+        <div class="it"><i>2</i><span><b>Open par koi popup nahi</b>
+          <small>Home modal, splash, launcher, size card, toast — sab hata. Seedha canvas.</small></span></div>
+        <div class="it"><i>3</i><span><b>Mouse se workspace move</b>
+          <small>Move tool me khaali jagah par click + drag = canvas move. Object par drag = object move.</small></span></div>
+        <div class="it"><i>4</i><span><b>Shuru karo · 5 steps</b>
+          <small>Photo → Background → Size → Text → Export, progress ke saath. Khaali canvas par quick-start card.</small></span></div>
+        <div class="it"><i>6</i><span><b>Mockup library wapas pahunch me</b>
+          <small>Side panel me "Mockup library" card, quick bar me "Mockups" button, ☰ Menu me item — 174 scenes.</small></span></div>
+        <div class="it"><i>5</i><span><b>Saare purane updates</b>
+          <small>Infinity logo, 15 tools + More, 145 menu actions, Remove BG, Subject, Resize, export PNG/JPG/SVG/PDF.</small></span></div>
         <div class="ft"><button class="pri" data-do="start">Shuru karo</button>
           <button data-do="close">Band karo</button></div>
       </div>`;
@@ -17410,6 +17561,550 @@ window.CDR = CDR;
     ov.classList.add('on');
   }
 
+
+  /* ============================================================
+     21. MOCKUP LIBRARY — entry points + fallback
+     (174 scenes / 23 categories, host ka mockups.html)
+     ============================================================ */
+  const CSS21 = `
+  #av21mockfail{position:absolute;inset:0;z-index:5;display:grid;place-items:center;padding:20px;background:#f6f7f5}
+  #av21mockfail .box{width:min(520px,100%);background:#fff;border:1px solid #e3e7ea;border-radius:16px;
+    padding:22px;box-shadow:0 18px 50px rgba(16,24,40,.14);text-align:center}
+  #av21mockfail b{font-size:16px;color:#171b20;display:block;margin-bottom:6px}
+  #av21mockfail p{margin:0 0 16px;font-size:12.5px;line-height:1.55;color:#5b6672}
+  #av21mockfail .row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+  #av21mockfail button{height:38px;padding:0 16px;border-radius:10px;border:1px solid #d6dbe0;background:#f7f8fa;
+    color:#33404d;font-size:12.5px;font-weight:800;cursor:pointer}
+  #av21mockfail button.pri{background:linear-gradient(135deg,#F54927,#FF8A3D);border-color:transparent;color:#fff}
+  #av21mockfail button:hover{border-color:#F54927;color:#C2410C}
+  #av21mockfail button.pri:hover{color:#fff}
+  `;
+  function injectCSS21() {
+    if (document.getElementById('av21-style')) return;
+    const st = document.createElement('style'); st.id = 'av21-style'; st.textContent = CSS21;
+    document.head.appendChild(st);
+  }
+
+  function openMockupsLib() {
+    injectCSS21();
+    let opened = false;
+    try {
+      if (typeof openPortfolioMockups === 'function') { openPortfolioMockups(); opened = true; }
+    } catch (e) { opened = false; }
+    if (!opened) {
+      try { const w = window.open('mockups.html', '_blank', 'noopener'); if (!w) throw 0; }
+      catch (e) { A.toast('mockups.html nahi mila — GitHub Pages URL se kholo', 'err', 3200); }
+      return;
+    }
+    watchMockups();
+  }
+
+  function mockupsFrameReady() {
+    const f = document.getElementById('portfolioMockupFrame');
+    if (!f) return false;
+    try {
+      const d = f.contentDocument;
+      return !!(d && d.body && (d.getElementById('mockupGrid') || d.querySelector('.grid') || d.querySelectorAll('img').length > 3));
+    } catch (e) { return false; }
+  }
+
+  function mockupsFallback() {
+    const wrap = document.getElementById('portfolioMockupFrameWrap');
+    if (!wrap || document.getElementById('av21mockfail')) return;
+    const el = document.createElement('div');
+    el.id = 'av21mockfail';
+    el.innerHTML = `<div class="box">
+      <b>Mockup library load nahi hui</b>
+      <p>174 scenes wali library <code style="background:#f1f3f7;border:1px solid #e3e7ea;border-radius:5px;padding:1px 5px">mockups.html</code>
+      se aati hai. Ye page local file (<code style="background:#f1f3f7;border:1px solid #e3e7ea;border-radius:5px;padding:1px 5px">file://</code>) se khula hai
+      ya wahi file upload nahi hui — browser aise iframe block kar deta hai.<br>
+      GitHub Pages URL se kholo, ya library naye tab me dekho.</p>
+      <div class="row">
+        <button class="pri" data-x="tab">Library naye tab me kholo</button>
+        <button data-x="close">Band karo</button>
+      </div>
+    </div>`;
+    wrap.appendChild(el);
+    el.querySelector('[data-x="tab"]').onclick = () => {
+      try { window.open('mockups.html', '_blank', 'noopener'); } catch (e) { }
+    };
+    el.querySelector('[data-x="close"]').onclick = () => { try { closePortfolioMockups(); } catch (e) { } el.remove(); };
+  }
+
+  function watchMockups() {
+    /* file:// par iframe turant block ho jata hai — 2.5s baad check */
+    setTimeout(() => {
+      const ov = document.getElementById('portfolioMockupOverlay');
+      if (!ov || !ov.classList.contains('open')) return;
+      if (mockupsFrameReady()) return;
+      setTimeout(() => {
+        const ov2 = document.getElementById('portfolioMockupOverlay');
+        if (ov2 && ov2.classList.contains('open') && !mockupsFrameReady()) mockupsFallback();
+      }, 1800);
+    }, 2500);
+  }
+
+
+  /* ============================================================
+     22. SELECTION & EDIT TOOLKIT
+     — delete (pixels / layer / shapes), copy-cut-paste, fill,
+       feather / grow / shrink, selection action bar
+     Host ke paas ye sab nahi tha (sirf vector shapes delete hote the)
+     ============================================================ */
+  const CSS22 = `
+  #av22sel{
+    position:fixed;z-index:9988;bottom:96px;
+    left:146px;right:344px;
+    display:none;align-items:center;justify-content:flex-start;gap:3px;padding:5px 7px;border-radius:14px;
+    background:rgba(255,255,255,.98);border:1px solid var(--line2,#e2e4ea);
+    box-shadow:0 18px 44px rgba(16,24,40,.18);overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+  html.av-simple #av22sel{left:106px;right:344px}
+  #av22sel::-webkit-scrollbar{height:0}
+  #av22sel.on{display:flex}
+  #av22sel .lbl{font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+    color:#8792A8;padding:0 5px 0 2px;white-space:nowrap}
+  #av22sel button{
+    flex:none;display:inline-flex;align-items:center;gap:4px;height:30px;padding:0 8px;border-radius:8px;
+    border:1px solid var(--line,#e6e8ee);background:#F8F9FB;color:#5A6280;font-size:11px;font-weight:800;
+    cursor:pointer;white-space:nowrap;transition:.12s}
+  #av22sel .sep{height:20px}
+  #av22sel button:hover{border-color:var(--acc,#F54927);color:var(--acc,#F54927);background:#fff}
+  #av22sel button.danger:hover{border-color:#DC2626;color:#DC2626}
+  #av22sel button.pri{background:linear-gradient(135deg,#F54927,#FF8A3D);border-color:transparent;color:#fff}
+  #av22sel button.pri:hover{filter:brightness(1.05);color:#fff}
+  #av22sel .sep{width:1px;height:22px;background:var(--line,#e6e8ee);flex:none;margin:0 2px}
+  html.av-studio #av22sel{background:rgba(20,26,39,.98);border-color:var(--line2,#2E3850)}
+  html.av-studio #av22sel button{background:#19202F;border-color:#232B3D;color:#9CABC4}
+  html.av-studio #av22sel button:hover{border-color:#7C5CFF;color:#C9B8FF;background:#212A3C}
+  html.av-studio #av22sel button.pri{background:linear-gradient(135deg,#7C5CFF,#4E8BFF);color:#fff}
+  @media(max-width:900px){
+    #av22sel,#av22sel.on{bottom:132px;left:8px;right:8px;justify-content:flex-start}
+  }
+  /* selection info chip */
+  #av22selinfo{font-size:10px;font-weight:800;color:#8792A8;padding:0 4px;white-space:nowrap}
+  @media(max-width:1560px){ #av22sel .lbl{display:none} }
+  @media(max-width:1460px){ #av22sel{flex-wrap:wrap;height:auto;justify-content:center;row-gap:5px;padding:6px 8px;gap:4px}
+    #av22sel button{padding:0 8px;font-size:11.5px} #av22sel .sep{display:none} }
+  @media(max-width:1100px){ #av22sel{left:100px;right:8px} }
+  @media(max-width:820px){ #av22sel .lb{display:none} #av22sel button{padding:0 9px} }
+  `;
+  function injectCSS22() {
+    let st = document.getElementById('av22-style');
+    if (!st) { st = document.createElement('style'); st.id = 'av22-style'; document.head.appendChild(st); }
+    st.textContent = CSS22;
+  }
+
+
+  function cloneShape22(src) {
+    /* deep clone — Path2D / cache jaise non-serializable fields chhod do */
+    const seen = new WeakSet();
+    const walk = (v, depth) => {
+      if (depth > 6 || v == null) return v;
+      if (typeof v === 'number' || typeof v === 'string' || typeof v === 'boolean') return v;
+      if (typeof v === 'function') return undefined;
+      if (typeof v !== 'object') return undefined;
+      if (typeof Path2D !== 'undefined' && v instanceof Path2D) return undefined;
+      if (typeof ImageData !== 'undefined' && v instanceof ImageData) return undefined;
+      if (typeof v.getContext === 'function') return undefined;
+      if (seen.has(v)) return undefined;
+      seen.add(v);
+      if (Array.isArray(v)) return v.map(x => { const r = walk(x, depth + 1); return r === undefined ? null : r; }).filter(x => x !== null);
+      const out = {};
+      for (const k in v) {
+        if (!Object.prototype.hasOwnProperty.call(v, k)) continue;
+        if (k.charAt(0) === '_') continue;             // caches / flags
+        const r = walk(v[k], depth + 1);
+        if (r !== undefined) out[k] = r;
+      }
+      return out;
+    };
+    const c = walk(src, 0) || {};
+    c.id = (typeof uid === 'function' ? uid() : 'c' + Date.now() + Math.random());
+    c._dirty = true;
+    return c;
+  }
+  const CLIP22 = { pix: null, shapes: null, pastes: 0 };
+
+  function selHas() {
+    try { return !!(typeof pixSel !== 'undefined' && pixSel && pixSel.mask); } catch (e) { return false; }
+  }
+  function shapesHave() {
+    try { return typeof selShapes !== 'undefined' && selShapes && selShapes.length > 0; } catch (e) { return false; }
+  }
+  function countSelPx() {
+    try {
+      if (!selHas()) return 0;
+      let n = 0; const m = pixSel.mask;
+      for (let i = 0; i < m.length; i++) if (m[i]) n++;
+      return n;
+    } catch (e) { return 0; }
+  }
+  function activeRaster(activate) {
+    try {
+      const L = A.active();
+      if (L && L.type === 'raster') return L;
+      /* active layer vector/group hai — sabse upar wali bitmap layer lo
+         (warna user ko "kuch nahi ho raha" lagta hai) */
+      const rs = A.layers().filter(l => l.type === 'raster' && l.visible !== false);
+      const pick = rs[rs.length - 1] || null;
+      if (pick && activate !== false) {
+        try {
+          doc.activeId = pick.id;
+          A.ui(); uiLayers(); uiLayersRefresh(); needRender = true;
+        } catch (e) { }
+      }
+      return pick;
+    } catch (e) { return null; }
+  }
+  function docMaskCanvas() {
+    /* doc-size canvas jiska alpha = selection mask */
+    const c = mkCanvas(doc.w, doc.h), g = c.getContext('2d', { willReadFrequently: true });
+    const id = g.createImageData(doc.w, doc.h);
+    const m = pixSel.mask;
+    for (let i = 0; i < m.length; i++) {
+      id.data[i * 4] = 255; id.data[i * 4 + 1] = 255; id.data[i * 4 + 2] = 255;
+      id.data[i * 4 + 3] = m[i] ? 255 : 0;
+    }
+    g.putImageData(id, 0, 0);
+    return c;
+  }
+
+  /* ---------- delete ---------- */
+  function selDelete() {
+    if (!selHas()) { A.toast('Pehle selection banao (M / L / W)', '', 1800); return false; }
+    const L = activeRaster();
+    if (!L) { A.toast('Bitmap layer select karo', 'err', 2000); return false; }
+    try { deleteSelectionPixels(false); return true; }
+    catch (e) {
+      /* fallback: destination-out */
+      try {
+        A.undoPush(); A.bake(L);
+        const g = L.canvas.getContext('2d');
+        g.save(); g.globalCompositeOperation = 'destination-out';
+        g.drawImage(docMaskCanvas(), 0, 0); g.restore();
+        layerVerBump(L); docDirty = true; needRender = true; uiLayersRefresh();
+        A.toast('Selection delete ho gaya', 'ok', 1600); return true;
+      } catch (e2) { A.toast('Delete fail: ' + e2.message, 'err', 2400); return false; }
+    }
+  }
+  function deleteSmart() {
+    /* Delete key: pixels → selection, warna layer */
+    if (selHas()) return selDelete();
+    if (shapesHave()) { try { deleteSelection(); return true; } catch (e) { } }
+    try {
+      const L = A.active();
+      if (!L) return false;
+      const leaves = A.layers().filter(l => l.type !== 'group');
+      if (leaves.length <= 1) { A.toast('Kam se kam ek layer chahiye', 'err', 1800); return false; }
+      deleteLayer();
+      A.toast('Layer delete ho gayi (Ctrl+Z undo)', 'ok', 1800);
+      return true;
+    } catch (e) { A.toast('Delete fail: ' + e.message, 'err', 2200); return false; }
+  }
+
+  /* ---------- copy / cut / paste ---------- */
+  function copySel(silent) {
+    /* pixel selection ko priority — shapes sirf tab jab pixels select na hon */
+    if (!selHas() && shapesHave()) {
+      try {
+        CLIP22.shapes = selShapes.map(sh => cloneShape22(sh));
+        CLIP22.layerId = activeLayer().id;
+        CLIP22.pix = null; CLIP22.pastes = 0; CLIP22.mode = 'shapes';
+        if (!silent) A.toast('Vector shape copy ✓ (Ctrl+V)', 'ok', 1600);
+        return true;
+      } catch (e) { }
+    }
+    if (!selHas()) { if (!silent) A.toast('Pehle selection banao — M / L / W tool', '', 1900); return false; }
+    const L = activeRaster();
+    if (!L) { if (!silent) A.toast('Bitmap layer select karo', 'err', 1800); return false; }
+    try {
+      A.bake(L);
+      const bb = pixSel.bbox, w = bb.x2 - bb.x + 1, h = bb.y2 - bb.y + 1;
+      const c = mkCanvas(w, h), g = c.getContext('2d');
+      g.drawImage(L.canvas, -bb.x, -bb.y);
+      g.globalCompositeOperation = 'destination-in';
+      g.drawImage(docMaskCanvas(), -bb.x, -bb.y);
+      CLIP22.pix = { canvas: c, x: bb.x, y: bb.y, w, h };
+      CLIP22.shapes = null; CLIP22.pastes = 0; CLIP22.mode = 'pix';
+      if (!silent) A.toast('Copy ✓ ' + w + '×' + h + ' px (Ctrl+V paste)', 'ok', 1800);
+      return true;
+    } catch (e) { if (!silent) A.toast('Copy fail: ' + e.message, 'err', 2200); return false; }
+  }
+  function cutSel() {
+    if (!selHas() && shapesHave()) {
+      try {
+        CLIP22.shapes = selShapes.map(sh => cloneShape22(sh));
+        CLIP22.layerId = activeLayer().id; CLIP22.pix = null; CLIP22.pastes = 0; CLIP22.mode = 'shapes';
+        deleteSelection();
+        A.toast('Cut ✓ (Ctrl+V paste)', 'ok', 1700);
+        return true;
+      } catch (e) { }
+    }
+    if (!copySel(true)) { A.toast('Pehle selection banao — M / L / W tool', '', 1900); return false; }
+    selDelete();
+    A.toast('Cut ✓ ' + (CLIP22.pix ? CLIP22.pix.w + '×' + CLIP22.pix.h + ' px' : '') + ' (Ctrl+V paste)', 'ok', 1800);
+    return true;
+  }
+  function pasteClip() {
+    if (CLIP22.mode === 'shapes' && CLIP22.shapes && CLIP22.shapes.length) {
+      try {
+        const L = activeLayer();
+        const arr = selShapes && selShapes.length ? selShapes : CLIP22.shapes;
+        A.undoPush();
+        const copies = CLIP22.shapes.map(sh => {
+          const c = cloneShape22(sh);
+          c.x = (c.x || 0) + 16; c.y = (c.y || 0) + 16;
+          if (Array.isArray(c.pts)) c.pts = c.pts.map(pt => ({ x: (pt.x || 0) + 16, y: (pt.y || 0) + 16 }));
+          L.shapes.push(c); return c;
+        });
+        try { selShapes = copies; } catch (e) { }
+        layerVerBump(L); docDirty = true; needRender = true; uiLayersRefresh(); uiProps();
+        A.toast('Paste ✓ ' + copies.length + ' shape', 'ok', 1700);
+        return true;
+      } catch (e) { A.toast('Paste fail: ' + e.message, 'err', 2200); return false; }
+    }
+    if (!CLIP22.pix) { A.toast('Clipboard khali hai — pehle Ctrl+C', '', 1800); return false; }
+    try {
+      A.undoPush();
+      const p = CLIP22.pix;
+      const off = 16 * (++CLIP22.pastes);
+      const x = Math.min(doc.w - p.w, p.x + off), y = Math.min(doc.h - p.h, p.y + off);
+      const L = newRasterLayer('Pasted');
+      L.canvas.getContext('2d').drawImage(p.canvas, x, y);
+      L.offset = { x: 0, y: 0 };
+      const ref = activeLayer();
+      insertLayer(L, ref);
+      doc.activeId = L.id;
+      layerVerBump(L); docDirty = true; needRender = true;
+      uiLayers(); uiLayersRefresh(); uiProps();
+      /* pasted area ko select karo — turant move kar sako */
+      try {
+        const mask = new Uint8Array(doc.w * doc.h);
+        const g = p.canvas.getContext('2d');
+        const d = g.getImageData(0, 0, p.w, p.h).data;
+        for (let yy = 0; yy < p.h; yy++) for (let xx = 0; xx < p.w; xx++) {
+          if (d[(yy * p.w + xx) * 4 + 3] > 8) mask[(y + yy) * doc.w + (x + xx)] = 255;
+        }
+        setPixSel(mask);
+      } catch (e) { }
+      A.toast('Paste ✓ naya layer bana — Move tool se drag karo', 'ok', 2400);
+      return true;
+    } catch (e) { A.toast('Paste fail: ' + e.message, 'err', 2400); return false; }
+  }
+
+  /* ---------- fill ---------- */
+  function selFill(colour) {
+    if (!selHas()) { A.toast('Pehle selection banao', '', 1700); return false; }
+    const L = activeRaster();
+    if (!L) { A.toast('Bitmap layer select karo', 'err', 1800); return false; }
+    try {
+      A.undoPush(); A.bake(L);
+      const col = colour || (typeof primary !== 'undefined' ? primary : (state.brand || '#F54927'));
+      const g = L.canvas.getContext('2d');
+      const tmp = mkCanvas(doc.w, doc.h), tg = tmp.getContext('2d');
+      tg.fillStyle = col; tg.fillRect(0, 0, doc.w, doc.h);
+      tg.globalCompositeOperation = 'destination-in';
+      tg.drawImage(docMaskCanvas(), 0, 0);
+      g.drawImage(tmp, 0, 0);
+      layerVerBump(L); docDirty = true; needRender = true; uiLayersRefresh();
+      A.toast('Selection fill ✓ ' + col, 'ok', 1700);
+      return true;
+    } catch (e) { A.toast('Fill fail: ' + e.message, 'err', 2200); return false; }
+  }
+
+  /* ---------- feather / grow / shrink ---------- */
+  function boxBlurMask(src, w, h, r) {
+    if (r < 1) return src;
+    const tmp = new Uint8ClampedArray(src.length), out = new Uint8ClampedArray(src.length);
+    const win = r * 2 + 1;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let s = 0;
+        for (let k = -r; k <= r; k++) { const xx = Math.min(w - 1, Math.max(0, x + k)); s += src[y * w + xx]; }
+        tmp[y * w + x] = s / win;
+      }
+    }
+    for (let x = 0; x < w; x++) {
+      for (let y = 0; y < h; y++) {
+        let s = 0;
+        for (let k = -r; k <= r; k++) { const yy = Math.min(h - 1, Math.max(0, y + k)); s += tmp[yy * w + x]; }
+        out[y * w + x] = s / win;
+      }
+    }
+    return out;
+  }
+  function morphMask(src, w, h, r, grow) {
+    if (r < 1) return src;
+    const pass = (arr, horiz) => {
+      const out = new Uint8Array(arr.length);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          let v = grow ? 0 : 255;
+          for (let k = -r; k <= r; k++) {
+            const xx = horiz ? Math.min(w - 1, Math.max(0, x + k)) : x;
+            const yy = horiz ? y : Math.min(h - 1, Math.max(0, y + k));
+            const s = arr[yy * w + xx];
+            if (grow) { if (s > v) v = s; } else { if (s < v) v = s; }
+          }
+          out[y * w + x] = v;
+        }
+      }
+      return out;
+    };
+    return pass(pass(src, true), false);
+  }
+  function selFeather(radius) {
+    if (!selHas()) { A.toast('Pehle selection banao', '', 1600); return false; }
+    const r = Math.max(1, radius | 0);
+    try {
+      const blurred = boxBlurMask(pixSel.mask, doc.w, doc.h, r);
+      const mask = new Uint8Array(doc.w * doc.h);
+      for (let i = 0; i < mask.length; i++) mask[i] = blurred[i] > 127 ? 255 : 0;
+      setPixSel(mask);
+      A.toast('Feather ' + r + ' px ✓', 'ok', 1500);
+      return true;
+    } catch (e) { A.toast('Feather fail', 'err', 1800); return false; }
+  }
+  function selMorph(radius, grow) {
+    if (!selHas()) { A.toast('Pehle selection banao', '', 1600); return false; }
+    const r = Math.max(1, radius | 0);
+    try {
+      const out = morphMask(pixSel.mask, doc.w, doc.h, r, grow);
+      const mask = new Uint8Array(doc.w * doc.h);
+      for (let i = 0; i < mask.length; i++) mask[i] = out[i] > 40 ? 255 : 0;
+      setPixSel(mask);
+      A.toast((grow ? 'Grow ' : 'Shrink ') + r + ' px ✓', 'ok', 1500);
+      return true;
+    } catch (e) { A.toast('Selection adjust fail', 'err', 1800); return false; }
+  }
+
+  /* ---------- selection action bar ---------- */
+  function buildSelBar() {
+    injectCSS22();
+    if (document.getElementById('av22sel')) return;
+    const bar = document.createElement('div');
+    bar.id = 'av22sel';
+    bar.innerHTML = `
+      <span class="lbl">Selection</span>
+      <span id="av22selinfo"></span>
+      <button data-s="fill" class="pri" title="Primary colour se bharo (selection ke andar)">${svg('sparkle', 13)}<span class="lb">Fill</span></button>
+      <button data-s="del" class="danger" title="Selected pixels hatao (Delete)">${svg('trash', 13)}<span class="lb">Delete</span></button>
+      <button data-s="copy" title="Copy (Ctrl+C)">${svg('copy', 13)}<span class="lb">Copy</span></button>
+      <button data-s="cut" title="Cut (Ctrl+X)">${svg('cut', 13)}<span class="lb">Cut</span></button>
+      <button data-s="paste" title="Paste (Ctrl+V)">${svg('download', 13)}<span class="lb">Paste</span></button>
+      <div class="sep"></div>
+      <button data-s="grow" title="Selection bada karo">＋<span class="lb">Grow</span></button>
+      <button data-s="shrink" title="Selection chhota karo">－<span class="lb">Shrink</span></button>
+      <button data-s="feather" title="Kinare smooth karo">◌<span class="lb">Feather</span></button>
+      <button data-s="invert" title="Ulta selection">${svg('flipv', 13)}<span class="lb">Invert</span></button>
+      <div class="sep"></div>
+      <button data-s="newlayer" title="Selection ko naya layer banao">${svg('layers', 13)}<span class="lb">Layer</span></button>
+      <button data-s="adjust" title="Colour adjust sirf selection ke andar">🎛<span class="lb">Adjust</span></button>
+      <button data-s="none" title="Deselect (Ctrl+D / Esc)">${svg('x', 13)}<span class="lb">Done</span></button>`;
+    document.body.appendChild(bar);
+    bar.addEventListener('click', e => {
+      const b = e.target.closest('[data-s]'); if (!b) return;
+      const s = b.dataset.s;
+      try {
+        if (s === 'fill') selFill();
+        else if (s === 'del') selDelete();
+        else if (s === 'copy') copySel();
+        else if (s === 'cut') cutSel();
+        else if (s === 'paste') pasteClip();
+        else if (s === 'grow') selMorph(2, true);
+        else if (s === 'shrink') selMorph(2, false);
+        else if (s === 'feather') selFeather(3);
+        else if (s === 'invert') { invertSel(); }
+        else if (s === 'newlayer') { selToNewLayer(); }
+        else if (s === 'adjust') { adjustDialog(); }
+        else if (s === 'none') { clearPixSel(); }
+      } catch (err) { A.toast('Fail: ' + err.message, 'err', 2400); }
+      setTimeout(syncSelBar, 250);
+    });
+    syncSelBar();
+  }
+  function syncSelBar() {
+    const bar = document.getElementById('av22sel');
+    if (!bar) return;
+    const on = selHas() || shapesHave();
+    bar.classList.toggle('on', on);
+    if (!on) return;
+    const info = document.getElementById('av22selinfo');
+    const n = countSelPx();
+    if (info) info.textContent = selHas() ? (n ? n.toLocaleString() + ' px' : '') : (selShapes.length + ' shape');
+  }
+
+  /* ---------- keyboard layer (host se pehle) ---------- */
+  function installSelKeys() {
+    if (window.__av22keys) return;
+    window.__av22keys = true;
+    window.addEventListener('keydown', e => {
+      const tag = (e.target.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+      if (document.querySelector('.modal-ov.on, #av12modal.on, #av19new.on')) return;
+      const mod = e.ctrlKey || e.metaKey;
+      const k = (e.key || '').toLowerCase();
+      if (mod && !e.shiftKey && k === 'c') {
+        if (!selHas() && !shapesHave()) return;
+        e.preventDefault(); e.stopImmediatePropagation(); copySel(); syncSelBar(); return;
+      }
+      if (mod && !e.shiftKey && k === 'x') {
+        if (!selHas() && !shapesHave()) return;
+        e.preventDefault(); e.stopImmediatePropagation(); cutSel(); syncSelBar(); return;
+      }
+      if (mod && !e.shiftKey && k === 'v') {
+        e.preventDefault(); e.stopImmediatePropagation(); pasteClip(); syncSelBar(); return;
+      }
+      if (e.key === 'Escape') {
+        if (typeof pixSel !== 'undefined' && pixSel && pixSel.float) {
+          e.preventDefault(); e.stopImmediatePropagation(); commitFloat(); syncSelBar(); return;
+        }
+        return;
+      }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !mod) {
+        if (selHas()) { e.preventDefault(); e.stopImmediatePropagation(); selDelete(); syncSelBar(); return; }
+        if (shapesHave()) return;                       // host handle karega
+        e.preventDefault(); e.stopImmediatePropagation(); deleteSmart(); syncSelBar(); return;
+      }
+    }, true);
+  }
+
+  /* ---------- Edit menu me entries ---------- */
+  function patchEditMenu() {
+    try {
+      if (typeof MENUS === 'undefined' || !MENUS.Edit || MENUS.Edit.__av22) return;
+      const extra = [
+        { l: 'Copy Selection / Shape', k: 'Ctrl+C', a: () => copySel() },
+        { l: 'Cut Selection / Shape', k: 'Ctrl+X', a: () => cutSel() },
+        { l: 'Paste', k: 'Ctrl+V', a: () => pasteClip() },
+        { l: 'Delete Selection Pixels', k: 'Del', a: () => selDelete() },
+        { l: 'Fill Selection (primary colour)', a: () => selFill() },
+        { l: 'Feather Selection 3px', a: () => selFeather(3) },
+        { l: 'Grow Selection 2px', a: () => selMorph(2, true) },
+        { l: 'Shrink Selection 2px', a: () => selMorph(2, false) },
+        '-',
+        { l: 'New Layer from Selection', a: () => selToNewLayer() },
+        { l: 'Adjust Colours (inside selection)', k: 'Ctrl+U', a: () => adjustDialog() },
+        { l: 'Delete Layer', a: () => deleteSmart() },
+      ];
+      MENUS.Edit = extra.concat(MENUS.Edit);
+      MENUS.Edit.__av22 = true;
+    } catch (e) { }
+  }
+
+  function initV22() {
+    injectCSS22();
+    try { buildSelBar(); } catch (e) { }
+    try { installSelKeys(); } catch (e) { }
+    try { patchEditMenu(); } catch (e) { }
+    if (!initV22._t) initV22._t = setInterval(() => { try { syncSelBar(); } catch (e) { } }, 700);
+  }
+  window.AV22 = {
+    copy: () => copySel(), cut: cutSel, paste: pasteClip, del: selDelete,
+    delSmart: deleteSmart, fill: selFill, feather: selFeather, grow: (r) => selMorph(r || 2, true),
+    shrink: (r) => selMorph(r || 2, false), bar: buildSelBar, sync: syncSelBar,
+  };
+
   function initV18() {
     injectCSS18();
     try { if (localStorage.getItem('av18.adv') === '1') document.documentElement.classList.add('av-adv'); } catch (e) { }
@@ -17417,6 +18112,9 @@ window.CDR = CDR;
     try { buildSteps18(); } catch (e) { }
     try { buildEmpty18(); } catch (e) { }
     try { installPanDrag(); } catch (e) { }
+    try { muteStartupNoise(); } catch (e) { }
+    try { injectCSS21(); } catch (e) { }
+    try { initV22(); } catch (e) { }
     try {
       const sb = document.getElementById('statusbar');
       if (sb) {
@@ -17436,9 +18134,13 @@ window.CDR = CDR;
       }, 900);
     }
   }
-  window.AV18 = { steps: () => S18, refresh: refreshSteps18, empty: syncEmpty18, adv: buildAdvFooter18, pan: installPanDrag, whatsNew: openWhatsNew19 };
+  window.AV18 = { steps: () => S18, refresh: refreshSteps18, empty: syncEmpty18, adv: buildAdvFooter18, pan: installPanDrag, whatsNew: openWhatsNew19,
+    mockups: openMockupsLib };
 
 })();
+
+
+
 
 
 
