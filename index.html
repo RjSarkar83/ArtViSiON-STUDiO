@@ -16435,7 +16435,7 @@ window.CDR = CDR;
       <button class="mitem" data-act="brand">${svg('palette', 15)} Brand &amp; palette</button>
       <button class="mitem" data-act="home">${svg('sparkle', 15)} Studio home — click se shuru</button>
       <button class="mitem" data-act="mockups">${svg('mockup', 15)} Mockup library — 174 scenes</button>
-      <button class="mitem" data-act="new">${svg('check', 15)} Naya kya hai — v24 update</button>
+      <button class="mitem" data-act="new">${svg('check', 15)} Naya kya hai — v25 update</button>
       <button class="mitem" data-act="start">${svg('question', 15)} Start guide (4 steps)</button>
       <button class="mitem" data-act="help">${svg('question', 15)} Shortcuts &amp; help</button>
       <button class="mitem" data-act="pro">${svg('sparkle', 15)} ${simple ? 'Pro mode (all panels)' : 'Studio mode'}</button>`;
@@ -17077,7 +17077,7 @@ window.CDR = CDR;
     }, 900);
     patchTools();
     window.AV12 = {
-      version: '24.0',
+      version: '25.0',
       bgRemove: bgRemoveV12,
       openBgDialog,
       cutoutData,
@@ -17533,9 +17533,15 @@ window.CDR = CDR;
     if (!ov) {
       ov = document.createElement('div'); ov.id = 'av19new';
       ov.innerHTML = `<div class="box">
-        <div class="hd"><span class="v">v24</span><h3>Naya kya hai</h3><button class="x" title="Close">${svg('x', 14)}</button></div>
-        <p class="sub">Design + QR + CMYK print + multi-copy sheet — sab ek jagah, offline.</p>
-        <div class="it"><i>1</i><span><b>QR Code generator (v24)</b>
+        <div class="hd"><span class="v">v25</span><h3>Naya kya hai</h3><button class="x" title="Close">${svg('x', 14)}</button></div>
+        <p class="sub">QR icon · signage 1:1–10:1 · CMYK print — sab ek jagah, offline.</p>
+        <div class="it"><i>1</i><span><b>QR Pro — centre icon + minimal (v25)</b>
+          <small>QR ke beech me chhota logo (built-in ya apna upload). Minimal mode: kam modules = aasan scan. EC auto L/M/Q/H, icon safety meter, PNG + vector SVG.</small></span></div>
+        <div class="it"><i>2</i><span><b>Signage &amp; retail board pack (v25)</b>
+          <small>7 ratio — 1:1, 1:2, 2:1, 3:1, 4:1, 5:1, 10:1 — 15 production sizes. Design theory grid (safe margin, hierarchy, viewing distance) + CMYK PDF, JPG aur specs file.</small></span></div>
+        <div class="it"><i>3</i><span><b>Production file (v25)</b>
+          <small>Bleed + crop marks, effective dpi, viewing distance aur minimum text height specs.txt me — sign shop ko seedha bhej do.</small></span></div>
+        <div class="it"><i>4</i><span><b>QR Code generator (v24)</b>
           <small>Website, WhatsApp, UPI, phone ka asli QR — PNG aur vector SVG, design me ek click me add. Sab offline.</small></span></div>
         <div class="it"><i>2</i><span><b>CMYK PDF + multi-copy sheet (v24)</b>
           <small>Press ke liye CMYK PDF (300% ink limit) aur A4/A3 sheet par N copies + crop marks — card/sticker printing ke liye.</small></span></div>
@@ -20805,6 +20811,1408 @@ window.CDR = CDR;
   else initV24();
   setTimeout(initV24, 900);
   setTimeout(initV24, 2100);
+})();
+
+</script>
+<script id="av25-upgrade">
+/* ============================================================
+   ArtViSiON Studio v25 — QR Pro (centre icon + minimal density)
+   + Retail Signage pack (1:1 · 1:2 · 2:1 · 3:1 · 4:1 · 5:1 · 10:1)
+   Sab offline, sab click-click.
+   ============================================================ */
+(function () {
+  'use strict';
+
+  const MM = 25.4;
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const rr = (v, n) => Math.round(v * (n || 100)) / (n || 100);
+  const mm2px = (mm, dpi) => mm * dpi / MM;
+  const px2mm = (px, dpi) => px / dpi * MM;
+  const t25 = (m, c, ms) => { try { toast(m, c, ms); } catch (e) { } };
+  const close25 = () => { try { AV23.close(); } catch (e) { } };
+  const safe25 = s => String(s || 'design').replace(/[^\w\-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'design';
+  const $id = s => document.getElementById(s);
+  const solid = c => ({ type: 'solid', color: c });
+  const THEMES25 = () => { try { return (window.AV23 && AV23.themes) || []; } catch (e) { return []; } };
+  const theme25 = id => {
+    const list = THEMES25();
+    return list.find(t => t.id === id) || list[1] || list[0] ||
+      { id: 'sunrise', name: 'Sunrise Orange', bg: '#FFF8F1', bg2: '#FFE7D2', ink: '#3B1508', sub: '#8A4B2A', acc: '#F54927', acc2: '#FF9A3D' };
+  };
+
+  /* ============================================================
+     A. QR PRO ENGINE — byte/numeric/alnum, EC L/M/Q/H, v1-10
+     ============================================================ */
+  const QR = (function () {
+    /* [ecCodewordsPerBlock, blocks1, data1, blocks2?, data2?] — standard ISO tables */
+    const TBL = {
+      L: { 1: [7, 1, 19], 2: [10, 1, 34], 3: [15, 1, 55], 4: [20, 1, 80], 5: [26, 1, 108], 6: [18, 2, 68], 7: [20, 2, 78], 8: [24, 2, 97], 9: [30, 2, 116], 10: [18, 2, 68, 2, 69] },
+      M: { 1: [10, 1, 16], 2: [16, 1, 28], 3: [26, 1, 44], 4: [18, 2, 32], 5: [24, 2, 43], 6: [16, 4, 27], 7: [18, 4, 31], 8: [22, 2, 38, 2, 39], 9: [22, 3, 36, 2, 37], 10: [26, 4, 43, 1, 44] },
+      Q: { 1: [13, 1, 13], 2: [22, 1, 22], 3: [18, 2, 17], 4: [26, 2, 24], 5: [18, 2, 15, 2, 16], 6: [24, 4, 19], 7: [18, 2, 14, 4, 15], 8: [22, 4, 18, 2, 19], 9: [20, 4, 16, 4, 17], 10: [24, 6, 19, 2, 20] },
+      H: { 1: [17, 1, 9], 2: [28, 1, 16], 3: [22, 2, 13], 4: [16, 4, 9], 5: [22, 2, 11, 2, 12], 6: [28, 4, 15], 7: [26, 4, 13, 1, 14], 8: [26, 4, 14, 2, 15], 9: [24, 4, 12, 4, 13], 10: [28, 6, 15, 2, 16] }
+    };
+    const ALIGN = { 1: [], 2: [6, 18], 3: [6, 22], 4: [6, 26], 5: [6, 30], 6: [6, 34], 7: [6, 22, 38], 8: [6, 24, 42], 9: [6, 26, 46], 10: [6, 28, 50] };
+    const FMT = {
+      L: [0x77C4, 0x72F3, 0x7DAA, 0x789D, 0x662F, 0x6318, 0x6C41, 0x6976],
+      M: [0x5412, 0x5125, 0x5E7C, 0x5B4B, 0x45F9, 0x40CE, 0x4F97, 0x4AA0],
+      Q: [0x355F, 0x3068, 0x3F31, 0x3A06, 0x24B4, 0x2183, 0x2EDA, 0x2BED],
+      H: [0x1689, 0x13BE, 0x1CE7, 0x19D0, 0x0762, 0x0255, 0x0D0C, 0x083B]
+    };
+    const VER_BITS = { 7: 0x07C94, 8: 0x085BC, 9: 0x09A99, 10: 0x0A4D3 };
+    const ALNUM = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:';
+
+    /* GF(256) */
+    const EXP = new Uint8Array(512), LOG = new Uint8Array(256);
+    (function () { let x = 1; for (let i = 0; i < 255; i++) { EXP[i] = x; LOG[x] = i; x <<= 1; if (x & 0x100) x ^= 0x11D; } for (let i = 255; i < 512; i++) EXP[i] = EXP[i - 255]; })();
+    const gmul = (a, b) => (a === 0 || b === 0) ? 0 : EXP[LOG[a] + LOG[b]];
+    function genPoly(n) {
+      let g = [1];
+      for (let i = 0; i < n; i++) {
+        const a = EXP[i], next = new Array(g.length + 1).fill(0);
+        for (let j = 0; j < g.length; j++) { next[j] ^= g[j]; next[j + 1] ^= gmul(g[j], a); }
+        g = next;
+      }
+      return g;
+    }
+    function rsEncode(data, ecLen) {
+      const gen = genPoly(ecLen);
+      const res = data.concat(new Array(ecLen).fill(0));
+      for (let i = 0; i < data.length; i++) {
+        const coef = res[i];
+        if (coef !== 0) for (let j = 0; j < gen.length; j++) res[i + j] ^= gmul(gen[j], coef);
+      }
+      return res.slice(data.length);
+    }
+
+    function dataCapacity(v, ec) {
+      const t = TBL[ec][v]; let d = 0;
+      for (let i = 1; i < t.length; i += 2) d += t[i] * t[i + 1];
+      return d;
+    }
+    function ecInfo(v, ec) {
+      const t = TBL[ec][v];
+      let blocks = 0; for (let i = 1; i < t.length; i += 2) blocks += t[i];
+      return { ecPerBlock: t[0], blocks, correctable: Math.floor(t[0] / 2) * blocks };
+    }
+
+    /* ---- mode selection (minimal density) ---- */
+    function pickMode(text) {
+      if (!text.length) return 'byte';
+      if (/^[0-9]+$/.test(text)) return 'num';
+      let ok = true;
+      for (let i = 0; i < text.length; i++) if (ALNUM.indexOf(text[i]) < 0) { ok = false; break; }
+      return ok ? 'alnum' : 'byte';
+    }
+    function countBits(mode, v) {
+      if (mode === 'num') return v < 10 ? 10 : 12;
+      if (mode === 'alnum') return v < 10 ? 9 : 11;
+      return v < 10 ? 8 : 16;
+    }
+    function payloadBits(mode, len) {
+      if (mode === 'num') return Math.floor(len / 3) * 10 + [0, 4, 7][len % 3];
+      if (mode === 'alnum') return Math.floor(len / 2) * 11 + (len % 2 ? 6 : 0);
+      return len * 8;
+    }
+    /* EC level may be auto: pick lowest density level that still scans well */
+    function plan(text, ecWish) {
+      text = String(text == null ? '' : text);
+      const bytes = new TextEncoder().encode(text);
+      const mode = pickMode(text);
+      const len = mode === 'byte' ? bytes.length : text.length;
+      const levels = ecWish && ecWish !== 'auto' ? [ecWish] : ['L', 'M', 'Q', 'H'];
+      let best = null;
+      levels.forEach(ec => {
+        for (let v = 1; v <= 10; v++) {
+          const cb = countBits(mode, v);
+          const need = 4 + cb + payloadBits(mode, len);
+          const cap = dataCapacity(v, ec) * 8;
+          if (need <= cap) {
+            if (!best || v < best.version || (v === best.version && need < best.bits)) {
+              best = { version: v, ec, mode, bits: need, capacity: cap, len, bytes: bytes.length };
+            }
+            break;
+          }
+        }
+      });
+      if (!best) {
+        const maxL = Math.floor((dataCapacity(10, 'L') * 8 - 20) / 8);
+        throw new Error('QR: text bahut lamba (max ~' + maxL + ' chars). Text chhota karo ya short link use karo.');
+      }
+      return best;
+    }
+
+    function encode(text, opts) {
+      opts = opts || {};
+      const p = plan(text, opts.ec || 'auto');
+      const ver = p.version, ec = p.ec, mode = p.mode;
+      const str = String(text == null ? '' : text);
+      const bytes = new TextEncoder().encode(str);
+      const dataCw = dataCapacity(ver, ec), tbl = TBL[ec][ver], ecLen = tbl[0];
+
+      /* ---- bit stream ---- */
+      const bits = [];
+      const push = (val, len) => { for (let i = len - 1; i >= 0; i--) bits.push((val >>> i) & 1); };
+      push(mode === 'num' ? 1 : mode === 'alnum' ? 2 : 4, 4);
+      push(mode === 'byte' ? bytes.length : str.length, countBits(mode, ver));
+      if (mode === 'num') {
+        for (let i = 0; i < str.length; i += 3) {
+          const chunk = str.substr(i, 3);
+          push(parseInt(chunk, 10), chunk.length === 3 ? 10 : chunk.length === 2 ? 7 : 4);
+        }
+      } else if (mode === 'alnum') {
+        for (let i = 0; i < str.length; i += 2) {
+          if (i + 1 < str.length) push(ALNUM.indexOf(str[i]) * 45 + ALNUM.indexOf(str[i + 1]), 11);
+          else push(ALNUM.indexOf(str[i]), 6);
+        }
+      } else {
+        bytes.forEach(b => push(b, 8));
+      }
+      const capBits = dataCw * 8;
+      for (let i = 0; i < 4 && bits.length < capBits; i++) bits.push(0);
+      while (bits.length % 8) bits.push(0);
+      const dcw = [];
+      for (let i = 0; i < bits.length; i += 8) { let b = 0; for (let j = 0; j < 8; j++) b = (b << 1) | bits[i + j]; dcw.push(b); }
+      const pad = [0xEC, 0x11]; let pi = 0;
+      while (dcw.length < dataCw) dcw.push(pad[pi++ % 2]);
+
+      /* ---- blocks + interleave ---- */
+      const groups = [];
+      for (let i = 1; i < tbl.length; i += 2) groups.push({ n: tbl[i], d: tbl[i + 1] });
+      const blocks = []; let off = 0;
+      groups.forEach(g => { for (let k = 0; k < g.n; k++) { const d = dcw.slice(off, off + g.d); off += g.d; blocks.push({ d, e: rsEncode(d, ecLen) }); } });
+      const maxD = Math.max.apply(null, blocks.map(b => b.d.length));
+      const stream = [];
+      for (let i = 0; i < maxD; i++) blocks.forEach(b => { if (i < b.d.length) stream.push(b.d[i]); });
+      for (let i = 0; i < ecLen; i++) blocks.forEach(b => stream.push(b.e[i]));
+
+      /* ---- matrix ---- */
+      const size = 17 + 4 * ver;
+      const m = [], fn = [];
+      for (let r = 0; r < size; r++) { m.push(new Array(size).fill(0)); fn.push(new Array(size).fill(false)); }
+      const setF = (r, c, v) => { if (r < 0 || c < 0 || r >= size || c >= size) return; m[r][c] = v; fn[r][c] = true; };
+
+      [[0, 0], [0, size - 7], [size - 7, 0]].forEach(function (p2) {
+        const r0 = p2[0], c0 = p2[1];
+        for (let dr = -1; dr <= 7; dr++) for (let dc = -1; dc <= 7; dc++) {
+          const r = r0 + dr, c = c0 + dc;
+          if (r < 0 || c < 0 || r >= size || c >= size) continue;
+          const inside = dr >= 0 && dr <= 6 && dc >= 0 && dc <= 6;
+          const ring = inside && (dr === 0 || dr === 6 || dc === 0 || dc === 6);
+          const core = inside && dr >= 2 && dr <= 4 && dc >= 2 && dc <= 4;
+          setF(r, c, (ring || core) ? 1 : 0);
+        }
+      });
+      for (let i = 8; i <= size - 9; i++) { setF(6, i, i % 2 === 0 ? 1 : 0); setF(i, 6, i % 2 === 0 ? 1 : 0); }
+      const ax = ALIGN[ver] || [];
+      ax.forEach(function (r0) {
+        ax.forEach(function (c0) {
+          if ((r0 === 6 && c0 === 6) || (r0 === 6 && c0 === size - 7) || (r0 === size - 7 && c0 === 6)) return;
+          for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++) setF(r0 + dr, c0 + dc, Math.max(Math.abs(dr), Math.abs(dc)) !== 1 ? 1 : 0);
+        });
+      });
+      for (let i = 0; i <= 8; i++) { fn[8][i] = true; fn[i][8] = true; }
+      for (let i = 0; i < 8; i++) { fn[8][size - 1 - i] = true; fn[size - 1 - i][8] = true; }
+      m[size - 8][8] = 1; fn[size - 8][8] = true;
+      if (ver >= 7) {
+        const vb = VER_BITS[ver] >>> 0;
+        for (let i = 0; i < 18; i++) {
+          const b = (vb >>> i) & 1, r = Math.floor(i / 3), c = i % 3;
+          setF(r, size - 11 + c, b); setF(size - 11 + c, r, b);
+        }
+      }
+
+      let bitIdx = 0; const totalBits = stream.length * 8;
+      const nextBit = () => (bitIdx < totalBits) ? (stream[bitIdx >> 3] >> (7 - (bitIdx++ & 7))) & 1 : (bitIdx++, 0);
+      let up = true;
+      for (let col = size - 1; col > 0; col -= 2) {
+        if (col === 6) col--;
+        for (let i = 0; i < size; i++) {
+          const row = up ? size - 1 - i : i;
+          for (let k = 0; k < 2; k++) { const c = col - k; if (!fn[row][c]) m[row][c] = nextBit(); }
+        }
+        up = !up;
+      }
+
+      const MASKS = [
+        (r, c) => (r + c) % 2 === 0,
+        (r, c) => r % 2 === 0,
+        (r, c) => c % 3 === 0,
+        (r, c) => (r + c) % 3 === 0,
+        (r, c) => (Math.floor(r / 2) + Math.floor(c / 3)) % 2 === 0,
+        (r, c) => ((r * c) % 2) + ((r * c) % 3) === 0,
+        (r, c) => (((r * c) % 2) + ((r * c) % 3)) % 2 === 0,
+        (r, c) => (((r + c) % 2) + ((r * c) % 3)) % 2 === 0
+      ];
+      function applyFormat(mx, mask) {
+        const fb = FMT[ec][mask] >>> 0;
+        for (let i = 0; i < 15; i++) {
+          const b = (fb >>> i) & 1;
+          if (i < 6) mx[i][8] = b; else if (i < 8) mx[i + 1][8] = b; else mx[size - 15 + i][8] = b;
+          if (i < 8) mx[8][size - 1 - i] = b; else if (i < 9) mx[8][7] = b; else mx[8][14 - i] = b;
+        }
+        mx[size - 8][8] = 1;
+      }
+      function penalty(mx) {
+        let p = 0;
+        for (let r = 0; r < size; r++) { let run = 1; for (let c = 1; c < size; c++) { if (mx[r][c] === mx[r][c - 1]) run++; else { if (run >= 5) p += run - 2; run = 1; } } if (run >= 5) p += run - 2; }
+        for (let c = 0; c < size; c++) { let run = 1; for (let r = 1; r < size; r++) { if (mx[r][c] === mx[r - 1][c]) run++; else { if (run >= 5) p += run - 2; run = 1; } } if (run >= 5) p += run - 2; }
+        for (let r = 0; r < size - 1; r++) for (let c = 0; c < size - 1; c++) { const v = mx[r][c]; if (v === mx[r][c + 1] && v === mx[r + 1][c] && v === mx[r + 1][c + 1]) p += 3; }
+        const pat = [1, 0, 1, 1, 1, 0, 1];
+        const chk = get => {
+          for (let i = 0; i + 7 <= size; i++) {
+            let ok = true;
+            for (let k = 0; k < 7; k++) if (get(i + k) !== pat[k]) { ok = false; break; }
+            if (!ok) continue;
+            let before = true, after = true;
+            for (let k = 1; k <= 4; k++) if (i - k >= 0 && get(i - k) !== 0) { before = false; break; }
+            for (let k = 0; k < 4; k++) if (i + 7 + k < size && get(i + 7 + k) !== 0) { after = false; break; }
+            if (before || after) p += 40;
+          }
+        };
+        for (let r = 0; r < size; r++) chk(i => mx[r][i]);
+        for (let c = 0; c < size; c++) chk(i => mx[i][c]);
+        let dark = 0;
+        for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) dark += mx[r][c];
+        p += Math.floor(Math.abs(dark * 100 / (size * size) - 50) / 5) * 10;
+        return p;
+      }
+      let best = null, bestP = Infinity, bestMask = 0;
+      for (let mk = 0; mk < 8; mk++) {
+        const mx = m.map(row => row.slice());
+        for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) if (!fn[r][c] && MASKS[mk](r, c)) mx[r][c] ^= 1;
+        applyFormat(mx, mk);
+        const pn = penalty(mx);
+        if (pn < bestP) { bestP = pn; best = mx; bestMask = mk; }
+      }
+      const info = ecInfo(ver, ec);
+      return {
+        size, modules: best, fn, version: ver, ec, mask: bestMask, mode,
+        text: str, dataCw, ecPerBlock: info.ecPerBlock, blocks: info.blocks, correctable: info.correctable
+      };
+    }
+
+    /* ---- how much of the QR does a centre icon hide? ---- */
+    function logoInfo(qr, sizePct) {
+      const pct = clamp(+sizePct || 0, 0, 34) / 100;
+      const side = Math.max(3, Math.round(qr.size * pct));
+      const pad = Math.max(1, Math.round(side * 0.12));
+      const half = side / 2 + pad, mid = qr.size / 2;
+      let covered = 0;
+      for (let r = 0; r < qr.size; r++) for (let c = 0; c < qr.size; c++) {
+        if (!qr.fn[r][c] && Math.abs(r + 0.5 - mid) <= half && Math.abs(c + 0.5 - mid) <= half) covered++;
+      }
+      const cw = Math.ceil(covered / 8);
+      const cap = qr.correctable;
+      return { side, pad, pct: Math.round(pct * 100), modules: covered, codewords: cw, capacity: cap, safe: cw <= cap * 0.8 };
+    }
+
+    /* ---- built-in centre icons ---- */
+    const ICONS = {
+      none: 'Icon nahi',
+      shop: 'Shop',
+      cart: 'Cart',
+      phone: 'Phone',
+      wa: 'WhatsApp',
+      insta: 'Instagram',
+      rupee: 'Rupee',
+      percent: 'Offer %',
+      star: 'Star',
+      heart: 'Heart'
+    };
+    function iconCanvas(kind, px, color) {
+      const c = document.createElement('canvas');
+      c.width = c.height = px;
+      const g = c.getContext('2d');
+      const S = px, u = S / 24;
+      g.clearRect(0, 0, S, S);
+      g.fillStyle = color || '#101828';
+      g.strokeStyle = color || '#101828';
+      g.lineWidth = Math.max(1.4, S * 0.075);
+      g.lineCap = 'round'; g.lineJoin = 'round';
+      const R = (x, y, w, h, r) => { const rr2 = r || 0; g.beginPath(); if (g.roundRect) g.roundRect(x * u, y * u, w * u, h * u, rr2 * u); else g.rect(x * u, y * u, w * u, h * u); };
+      if (kind === 'shop') {
+        g.beginPath(); g.moveTo(3 * u, 9.5 * u); g.lineTo(5 * u, 4.5 * u); g.lineTo(19 * u, 4.5 * u); g.lineTo(21 * u, 9.5 * u); g.closePath(); g.fill();
+        R(4.5, 11, 15, 9, 1.2); g.fill();
+        g.globalCompositeOperation = 'destination-out';
+        R(8.5, 14.5, 7, 5.5, 0.8); g.fill();
+        g.globalCompositeOperation = 'source-over';
+      } else if (kind === 'cart') {
+        g.beginPath(); g.moveTo(2.5 * u, 4 * u); g.lineTo(5 * u, 4 * u); g.lineTo(7.5 * u, 15 * u); g.lineTo(19 * u, 15 * u); g.lineTo(21 * u, 7 * u); g.lineTo(6 * u, 7 * u); g.stroke();
+        g.beginPath(); g.arc(9 * u, 19 * u, 1.7 * u, 0, 7); g.fill();
+        g.beginPath(); g.arc(18 * u, 19 * u, 1.7 * u, 0, 7); g.fill();
+      } else if (kind === 'phone') {
+        g.beginPath();
+        g.moveTo(7 * u, 3 * u); g.lineTo(10 * u, 8 * u); g.lineTo(8 * u, 10 * u);
+        g.quadraticCurveTo(10 * u, 14 * u, 14 * u, 16 * u); g.lineTo(16 * u, 14 * u); g.lineTo(21 * u, 17 * u);
+        g.lineTo(19 * u, 21 * u); g.quadraticCurveTo(6 * u, 19 * u, 3 * u, 5 * u); g.closePath(); g.fill();
+      } else if (kind === 'wa') {
+        g.beginPath(); g.arc(12 * u, 12 * u, 9 * u, 0, 7); g.stroke();
+        g.beginPath();
+        g.moveTo(6.5 * u, 17.5 * u); g.lineTo(8 * u, 13.5 * u);
+        g.bezierCurveTo(7 * u, 9 * u, 11.5 * u, 6 * u, 15 * u, 8.5 * u);
+        g.bezierCurveTo(18.5 * u, 11 * u, 17 * u, 16 * u, 12.5 * u, 16.5 * u); g.closePath(); g.fill();
+      } else if (kind === 'insta') {
+        R(3.5, 3.5, 17, 17, 5); g.stroke();
+        g.beginPath(); g.arc(12 * u, 12 * u, 4.2 * u, 0, 7); g.stroke();
+        g.beginPath(); g.arc(17 * u, 7 * u, 1.15 * u, 0, 7); g.fill();
+      } else if (kind === 'rupee') {
+        g.font = '700 ' + (S * 0.82) + 'px "Segoe UI",Arial,sans-serif';
+        g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText('\u20B9', S / 2, S * 0.56);
+      } else if (kind === 'percent') {
+        g.beginPath(); g.arc(8 * u, 8 * u, 2.6 * u, 0, 7); g.stroke();
+        g.beginPath(); g.arc(16 * u, 16 * u, 2.6 * u, 0, 7); g.stroke();
+        g.beginPath(); g.moveTo(18 * u, 5.5 * u); g.lineTo(6 * u, 18.5 * u); g.stroke();
+      } else if (kind === 'star') {
+        g.beginPath();
+        for (let i = 0; i < 10; i++) {
+          const a = -Math.PI / 2 + i * Math.PI / 5, rad = (i % 2 ? 4.4 : 9.6) * u;
+          const x = 12 * u + Math.cos(a) * rad, y = 12.5 * u + Math.sin(a) * rad;
+          i ? g.lineTo(x, y) : g.moveTo(x, y);
+        }
+        g.closePath(); g.fill();
+      } else if (kind === 'heart') {
+        g.beginPath();
+        g.moveTo(12 * u, 20 * u);
+        g.bezierCurveTo(2 * u, 13 * u, 4 * u, 4 * u, 12 * u, 8 * u);
+        g.bezierCurveTo(20 * u, 4 * u, 22 * u, 13 * u, 12 * u, 20 * u);
+        g.closePath(); g.fill();
+      }
+      return c;
+    }
+
+    /* ---- render ---- */
+    function drawQR(g, qr, x, y, side, dark) {
+      const u = side / qr.size;
+      g.fillStyle = dark;
+      for (let r = 0; r < qr.size; r++) {
+        let c = 0;
+        while (c < qr.size) {
+          if (!qr.modules[r][c]) { c++; continue; }
+          let e = c; while (e < qr.size && qr.modules[r][e]) e++;
+          g.fillRect(x + c * u, y + r * u, (e - c) * u + 0.02, u + 0.02);
+          c = e;
+        }
+      }
+    }
+    function toCanvas(qr, px, opts) {
+      opts = opts || {};
+      const quiet = opts.quiet == null ? 4 : +opts.quiet;
+      const dark = opts.dark || '#000000', light = opts.light || '#ffffff';
+      const total = qr.size + quiet * 2;
+      const scale = Math.max(1, Math.floor((px || 480) / total));
+      const c = document.createElement('canvas');
+      c.width = c.height = total * scale;
+      const g = c.getContext('2d');
+      if (light !== 'transparent') { g.fillStyle = light; g.fillRect(0, 0, c.width, c.height); }
+      drawQR(g, qr, quiet * scale, quiet * scale, qr.size * scale, dark);
+      if (opts.icon && opts.icon.kind && opts.icon.kind !== 'none') drawIcon(g, c.width, c.height, qr, opts.icon, light);
+      /* exactly itne px do jitne maange gaye (module edges sharp rehte hain) */
+      const want = Math.round(px || 0);
+      if (want && c.width !== want) {
+        const out = document.createElement('canvas');
+        out.width = out.height = want;
+        const g2 = out.getContext('2d');
+        g2.imageSmoothingEnabled = false;
+        g2.drawImage(c, 0, 0, want, want);
+        return out;
+      }
+      return c;
+    }
+    function drawIcon(g, W, H, qr, icon, light) {
+      const side = Math.max(8, Math.round(W * (qr.size / (qr.size + 2 * 4)) * (clamp(icon.sizePct || 18, 8, 34) / 100)));
+      const pad = Math.round(side * 0.12);
+      const cx = W / 2, cy = H / 2, box = side + pad * 2;
+      g.save();
+      g.fillStyle = icon.bg || (light === 'transparent' ? '#ffffff' : (light || '#ffffff'));
+      const r = box * 0.22;
+      g.beginPath();
+      if (g.roundRect) g.roundRect(cx - box / 2, cy - box / 2, box, box, r); else g.rect(cx - box / 2, cy - box / 2, box, box);
+      g.fill();
+      if (icon.img && icon.img.complete && icon.img.width) {
+        const ar = icon.img.width / icon.img.height;
+        let iw = side, ih = side;
+        if (ar > 1) ih = side / ar; else iw = side * ar;
+        g.drawImage(icon.img, cx - iw / 2, cy - ih / 2, iw, ih);
+      } else {
+        const ic = iconCanvas(icon.kind, Math.round(side), icon.color || '#101828');
+        g.drawImage(ic, cx - side / 2, cy - side / 2);
+      }
+      g.restore();
+    }
+    function toSVG(qr, opts) {
+      opts = opts || {};
+      const quiet = opts.quiet == null ? 4 : +opts.quiet;
+      const dark = opts.dark || '#000000', light = opts.light || '#ffffff';
+      const total = qr.size + quiet * 2;
+      let d = '';
+      for (let r = 0; r < qr.size; r++) {
+        let c = 0;
+        while (c < qr.size) {
+          if (!qr.modules[r][c]) { c++; continue; }
+          let e = c; while (e < qr.size && qr.modules[r][e]) e++;
+          const x = c + quiet, y = r + quiet, w = e - c;
+          d += 'M' + x + ' ' + y + 'h' + w + 'v1h-' + w + 'z';
+          c = e;
+        }
+      }
+      let extra = '';
+      if (opts.icon && opts.icon.kind && opts.icon.kind !== 'none') {
+        const sideU = qr.size * clamp(opts.icon.sizePct || 18, 8, 34) / 100;
+        const padU = sideU * 0.12, boxU = sideU + padU * 2, cU = total / 2;
+        extra += '<rect x="' + rr(cU - boxU / 2, 1000) + '" y="' + rr(cU - boxU / 2, 1000) + '" width="' + rr(boxU, 1000) + '" height="' + rr(boxU, 1000) + '" rx="' + rr(boxU * 0.22, 1000) + '" fill="' + (opts.icon.bg || light) + '"/>';
+        let iconData = null;
+        try {
+          if (opts.icon.img && opts.icon.img.complete && opts.icon.img.width) iconData = opts.icon.img.src;
+          else iconData = iconCanvas(opts.icon.kind, 192, opts.icon.color || '#101828').toDataURL('image/png');
+        } catch (e) { }
+        if (iconData) extra += '<image x="' + rr(cU - sideU / 2, 1000) + '" y="' + rr(cU - sideU / 2, 1000) + '" width="' + rr(sideU, 1000) + '" height="' + rr(sideU, 1000) + '" href="' + iconData + '" preserveAspectRatio="xMidYMid meet"/>';
+      }
+      return '<?xml version="1.0" encoding="UTF-8"?>\n<!-- ArtViSiON Studio v25 QR · ' + qr.mode + ' mode · EC ' + qr.ec + ' · v' + qr.version + ' -->\n' +
+        '<svg xmlns="http://www.w3.org/2000/svg" width="' + total + '" height="' + total + '" viewBox="0 0 ' + total + ' ' + total + '" shape-rendering="crispEdges">\n' +
+        (light === 'transparent' ? '' : '<rect width="' + total + '" height="' + total + '" fill="' + light + '"/>\n') +
+        '<path d="' + d + '" fill="' + dark + '"/>' + (extra ? '\n' + extra : '') + '\n</svg>\n';
+    }
+
+    return { encode, plan, pickMode, logoInfo, toCanvas, toSVG, iconCanvas, drawQR, drawIcon, ICONS, TBL, dataCapacity, ecInfo };
+  })();
+
+  /* ---------------- QR state + panel ---------------- */
+  const QS = {
+    text: 'https://rjsarkar83.github.io/ArtViSiON-STUDIO/',
+    ec: 'auto', icon: 'none', sizePct: 18, dark: '#000000', light: '#ffffff', quiet: 4, img: null
+  };
+
+  function qrBuild() {
+    const ecWish = QS.icon !== 'none' ? (QS.ec === 'auto' ? 'H' : QS.ec) : QS.ec;
+    const qr = QR.encode(QS.text || ' ', { ec: ecWish });
+    const icon = QS.icon === 'none' ? null : { kind: QS.icon, img: QS.img, sizePct: QS.sizePct, color: QS.dark };
+    return { qr, icon };
+  }
+
+  function qrRender() {
+    const box = $id('qr25prev');
+    if (!box) return null;
+    try {
+      const { qr, icon } = qrBuild();
+      const cv = QR.toCanvas(qr, 420, { dark: QS.dark, light: QS.light, quiet: QS.quiet, icon });
+      box.innerHTML = '';
+      cv.style.cssText = 'width:100%;height:auto;display:block;border-radius:12px;background:#fff';
+      box.appendChild(cv);
+      const li = icon ? QR.logoInfo(qr, QS.sizePct) : null;
+      const density = qr.size <= 25 ? 'Bahut minimal' : qr.size <= 37 ? 'Minimal' : qr.size <= 57 ? 'Medium' : 'Dense';
+      const bar = clamp(Math.round((qr.size - 21) / 36 * 100), 4, 100);
+      let info = '<div class="q25row"><span>Version <b>' + qr.version + '</b></span><span>' + qr.size + '×' + qr.size + ' modules</span><span>EC <b>' + qr.ec + '</b></span><span>Mask ' + qr.mask + '</span><span>Mode <b>' + (qr.mode === 'num' ? 'numeric' : qr.mode === 'alnum' ? 'alphanumeric' : 'byte') + '</b></span></div>' +
+        '<div class="q25meter"><i style="width:' + bar + '%"></i></div><small class="q25small">Density: <b>' + density + '</b> — jitne kam module, utna aasan scan (kam se kam 4 px / module print me).</small>' +
+        '<small class="q25small">Print size: kam se kam <b>' + Math.max(20, Math.round(qr.size * 0.9)) + ' mm</b> · 300 dpi par ' + Math.round(mm2px(Math.max(20, Math.round(qr.size * 0.9)), 300)) + ' px</small>';
+      if (li) info += '<div class="q25safe ' + (li.safe ? 'ok' : 'bad') + '"><b>Icon safety:</b> icon ' + li.pct + '% (' + li.side + ' modules) — ' + li.codewords + ' / ' + li.capacity + ' recoverable codewords used. ' + (li.safe ? 'Safe ✓' : 'Thoda bada hai — size kam karo ya EC H rakho.') + '</div>';
+      const inf = $id('qr25info'); if (inf) inf.innerHTML = info;
+      return { qr, icon };
+    } catch (e) {
+      box.innerHTML = '<div style="color:#B42318;font-size:12.5px;padding:14px;line-height:1.5">' + (e.message || 'QR fail') + '</div>';
+      const inf = $id('qr25info'); if (inf) inf.textContent = '';
+      return null;
+    }
+  }
+
+  function openQR25(seedText) {
+    if (seedText) QS.text = String(seedText);
+    const icSel = Object.keys(QR.ICONS).map(k => '<option value="' + k + '"' + (QS.icon === k ? ' selected' : '') + '>' + QR.ICONS[k] + '</option>').join('');
+    const body =
+      '<div class="av24cols">' +
+        '<div>' +
+          '<label class="q25lbl">Link / text (URL, WhatsApp, UPI, vCard)</label>' +
+          '<textarea id="qr25text" rows="3" class="q25ta" spellcheck="false">' + String(QS.text).replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</textarea>' +
+          '<div class="av24quick">' +
+            '<button data-qq="site">Website</button><button data-qq="wa">WhatsApp</button><button data-qq="upi">UPI pay</button><button data-qq="tel">Phone</button><button data-qq="vc">vCard</button>' +
+          '</div>' +
+          '<div class="q25hint" id="qr25tip"><b>Minimal tip:</b> chhota text = kam modules = aasan scan. <button type="button" id="qr25short" class="q25mini">https:// hatao</button> <button type="button" id="qr25www" class="q25mini">www. hatao</button></div>' +
+          '<div class="av24row" style="margin-top:10px">' +
+            '<div><label class="q25lbl">Error correction</label><select id="qr25ec">' +
+              [['auto', 'Auto (minimal)'], ['L', 'L · 7% (sabse halka)'], ['M', 'M · 15% (recommended)'], ['Q', 'Q · 25%'], ['H', 'H · 30% (icon ke saath)']]
+                .map(o => '<option value="' + o[0] + '"' + (QS.ec === o[0] ? ' selected' : '') + '>' + o[1] + '</option>').join('') +
+            '</select></div>' +
+            '<div><label class="q25lbl">Quiet zone</label><select id="qr25quiet">' +
+              [2, 3, 4, 5].map(n => '<option value="' + n + '"' + (QS.quiet === n ? ' selected' : '') + '>' + n + ' module</option>').join('') +
+            '</select></div>' +
+          '</div>' +
+          '<label class="q25lbl" style="margin-top:10px">Centre icon (chhota logo)</label>' +
+          '<div class="av24row">' +
+            '<select id="qr25icon">' + icSel + '</select>' +
+            '<input id="qr25up" type="file" accept="image/*" class="q25file" title="Apna logo upload karo">' +
+          '</div>' +
+          '<div class="q25slide"><span>Icon size</span><input id="qr25size" type="range" min="8" max="30" step="1" value="' + QS.sizePct + '"><b id="qr25sizev">' + QS.sizePct + '%</b></div>' +
+          '<div class="av24row" style="margin-top:8px">' +
+            '<div><label class="q25lbl">QR colour</label><input id="qr25dark" type="color" value="' + QS.dark + '"></div>' +
+            '<div><label class="q25lbl">Background</label><input id="qr25light" type="color" value="' + QS.light + '"></div>' +
+          '</div>' +
+        '</div>' +
+        '<div>' +
+          '<div class="q25prev" id="qr25prev"></div>' +
+          '<div class="q25info" id="qr25info"></div>' +
+        '</div>' +
+      '</div>';
+    const foot = '<button class="av23btn" id="qr25insert">Design me add karo</button>' +
+      '<button class="av23btn" id="qr25png">PNG</button>' +
+      '<button class="av23btn" id="qr25svg">SVG</button>' +
+      '<div class="sp"></div><button class="av23btn pri" id="qr25pack">QR + Print Pack</button>';
+    const ov = AV23.__shell('av25qr', 'QR Pro — icon + minimal', 'Chhota logo, kam modules, aasan scan — sab offline', body, foot);
+
+    const sync = () => {
+      const g = id => { const e = ov.querySelector('#' + id); return e ? e.value : null; };
+      QS.text = g('qr25text') || '';
+      QS.ec = g('qr25ec') || 'auto';
+      QS.quiet = +(g('qr25quiet') || 4);
+      QS.icon = g('qr25icon') || 'none';
+      QS.sizePct = +(g('qr25size') || 18);
+      QS.dark = g('qr25dark') || '#000000';
+      QS.light = g('qr25light') || '#ffffff';
+      const sv = ov.querySelector('#qr25sizev'); if (sv) sv.textContent = QS.sizePct + '%';
+    };
+    const setText = t => { const ta = ov.querySelector('#qr25text'); if (ta) ta.value = t; QS.text = t; };
+    const fns = {
+      site: () => 'https://',
+      wa: () => 'https://wa.me/91',
+      upi: () => 'upi://pay?pa=yourname@upi&pn=APNA%20BRAND&cu=INR',
+      tel: () => 'tel:+919000000000',
+      vc: () => 'BEGIN:VCARD\nVERSION:3.0\nFN:APNA BRAND\nORG:APNA BRAND\nTEL:+919000000000\nEMAIL:hello@apnabrand.in\nURL:https://apnabrand.in\nEND:VCARD'
+    };
+    ov.querySelectorAll('[data-qq]').forEach(b => b.onclick = () => { setText(fns[b.dataset.qq]()); qrRender(); });
+    ov.querySelectorAll('#qr25text,#qr25ec,#qr25quiet,#qr25icon,#qr25dark,#qr25light').forEach(el => {
+      el.addEventListener('input', () => { sync(); qrRender(); });
+      el.addEventListener('change', () => { sync(); qrRender(); });
+    });
+    const sl = ov.querySelector('#qr25size');
+    if (sl) sl.addEventListener('input', () => { sync(); qrRender(); });
+    const up = ov.querySelector('#qr25up');
+    if (up) up.addEventListener('change', () => {
+      const f = up.files && up.files[0];
+      if (!f) return;
+      const img = new Image();
+      img.onload = () => { QS.img = img; if (QS.icon === 'none') { QS.icon = 'shop'; ov.querySelector('#qr25icon').value = 'shop'; } qrRender(); t25('Logo lag gaya — icon safety check karo', 'ok', 2200); };
+      img.onerror = () => t25('Ye image nahi khul payi', 'err');
+      const fr = new FileReader();
+      fr.onload = () => { img.src = fr.result; };
+      fr.readAsDataURL(f);
+    });
+    const mk = ov.querySelector('#qr25short');
+    if (mk) mk.onclick = () => { setText(QS.text.replace(/^https?:\/\//i, '')); qrRender(); };
+    const mw = ov.querySelector('#qr25www');
+    if (mw) mw.onclick = () => { setText(QS.text.replace(/^www\./i, '').replace(/\/www\./i, '/')); qrRender(); };
+
+    ov.querySelector('#qr25insert').onclick = () => { sync(); insertQR25(); };
+    ov.querySelector('#qr25png').onclick = () => { sync(); try { const { qr, icon } = qrBuild(); const cv = QR.toCanvas(qr, 1200, { dark: QS.dark, light: QS.light, quiet: QS.quiet, icon }); cv.toBlob(b => { download(safe25('qr-' + qr.version + '-' + qr.ec) + '-' + cv.width + 'px.png', b); t25('QR PNG ready (' + cv.width + ' px)', 'ok', 2000); }, 'image/png'); } catch (e) { t25(e.message, 'err', 2600); } };
+    ov.querySelector('#qr25svg').onclick = () => { sync(); try { const { qr, icon } = qrBuild(); const s = QR.toSVG(qr, { dark: QS.dark, light: QS.light, quiet: QS.quiet, icon }); download(safe25('qr-' + qr.version + '-' + qr.ec) + '-vector.svg', new Blob([s], { type: 'image/svg+xml' })); t25('Vector SVG ready — print me crisp', 'ok', 2000); } catch (e) { t25(e.message, 'err', 2600); } };
+    ov.querySelector('#qr25pack').onclick = () => { sync(); if (insertQR25()) { close25(); setTimeout(() => { try { AV23.print(); } catch (e) { } }, 350); } };
+    qrRender();
+    return ov;
+  }
+
+  function insertQR25() {
+    if (!doc) { t25('Pehle canvas kholo', 'err'); return null; }
+    let built;
+    try { built = qrBuild(); } catch (e) { t25(e.message, 'err', 2600); return null; }
+    const { qr, icon } = built;
+    const edge = Math.round(Math.min(doc.w, doc.h) * 0.26);
+    const cv = QR.toCanvas(qr, edge, { dark: QS.dark, light: QS.light === 'transparent' ? '#ffffff' : QS.light, quiet: QS.quiet, icon });
+    try { pushUndo(); } catch (e) { }
+    const L = newRasterLayer('QR code');
+    const g = L.canvas.getContext('2d');
+    g.drawImage(cv, Math.round((doc.w - cv.width) / 2), Math.round((doc.h - cv.height) / 2));
+    try { insertLayer(L, doc.layers[doc.layers.length - 1]); } catch (e) { doc.layers.push(L); doc.activeId = L.id; }
+    try { layerVerBump(L); } catch (e) { }
+    docDirty = true; needRender = true;
+    try { uiLayers(); uiLayersRefresh(); uiProps(); } catch (e) { }
+    t25('QR layer add ho gaya — ' + qr.size + '×' + qr.size + ' module, EC ' + qr.ec + (icon ? ' + icon' : ''), 'ok', 2400);
+    return qr;
+  }
+
+  /* ============================================================
+     B. RETAIL SIGNAGE PACK
+     ============================================================ */
+  const SIGN_SIZES = [
+    { r: '1:1', w: 300, h: 300, u: 'Square sticker / table board' },
+    { r: '1:1', w: 600, h: 600, u: 'Square shop board' },
+    { r: '1:1', w: 1000, h: 1000, u: 'Square wall panel' },
+    { r: '1:2', w: 300, h: 600, u: 'Door / pillar panel' },
+    { r: '1:2', w: 600, h: 1200, u: 'Standee / pillar' },
+    { r: '2:1', w: 600, h: 300, u: 'Counter board' },
+    { r: '2:1', w: 1200, h: 600, u: 'Flex board' },
+    { r: '3:1', w: 900, h: 300, u: 'Shop name plate' },
+    { r: '3:1', w: 1800, h: 600, u: 'Shop front board' },
+    { r: '4:1', w: 1200, h: 300, u: 'Banner strip' },
+    { r: '4:1', w: 2400, h: 600, u: 'Wide banner' },
+    { r: '5:1', w: 1500, h: 300, u: 'Long fascia' },
+    { r: '5:1', w: 3000, h: 600, u: 'Long hoarding' },
+    { r: '10:1', w: 2500, h: 250, u: 'Shutter strip' },
+    { r: '10:1', w: 3000, h: 300, u: 'Long lintel strip' }
+  ];
+  const SIGN_STYLES = [
+    { id: 'retail', n: 'Retail sale' },
+    { id: 'brand', n: 'Brand / name board' },
+    { id: 'offer', n: 'Offer / discount' },
+    { id: 'menu', n: 'Menu / rate board' },
+    { id: 'direction', n: 'Wayfinding / arrow' }
+  ];
+  const SIGN_MAXPX = 5200;
+  function pxPlan(wmm, hmm) {
+    const longIn = Math.max(wmm, hmm) / MM;
+    const dpi = clamp(Math.round(SIGN_MAXPX / longIn), 20, 320);
+    return { dpi, W: Math.round(mm2px(wmm, dpi)), H: Math.round(mm2px(hmm, dpi)) };
+  }
+
+  /* text measure / fit / wrap helpers */
+  let _mc25 = null;
+  function measure(txt, size, bold, font) {
+    if (!_mc25) _mc25 = document.createElement('canvas').getContext('2d');
+    _mc25.font = (bold ? '700 ' : '400 ') + size + 'px "' + (font || 'Segoe UI') + '"';
+    return _mc25.measureText(String(txt)).width;
+  }
+  function fitTo(text, size, maxW, bold, font, ls) {
+    let s = size;
+    for (let k = 0; k < 14; k++) {
+      const w = measure(text, s, bold, font) + (ls || 0) * Math.max(0, String(text).length - 1);
+      if (w <= maxW || s <= 4) break;
+      s = Math.max(4, s * (maxW / w) * 0.985);
+    }
+    return s;
+  }
+  function wrap(text, size, maxW, bold, font, maxLines) {
+    const words = String(text).replace(/\s+/g, ' ').trim().split(' ');
+    const lines = [];
+    let cur = '';
+    words.forEach(w => {
+      const t = cur ? cur + ' ' + w : w;
+      if (measure(t, size, bold, font) <= maxW || !cur) cur = t;
+      else { lines.push(cur); cur = w; }
+    });
+    if (cur) lines.push(cur);
+    if (maxLines && lines.length > maxLines) {
+      const keep = lines.slice(0, maxLines);
+      keep[maxLines - 1] = keep[maxLines - 1] + '…';
+      return keep;
+    }
+    return lines;
+  }
+  /* ek block of text ko (w,h) me fit karo — size aur lines dono adjust */
+  function fitBlock(text, want, maxW, maxH, bold, font, ls, maxLines) {
+    let size = want;
+    for (let k = 0; k < 16; k++) {
+      const lines = wrap(text, size, maxW, bold, font, maxLines || 3);
+      const widest = Math.max.apply(null, lines.map(l => measure(l, size, bold, font) + (ls || 0) * Math.max(0, l.length - 1)));
+      const h = lines.length * size * 1.14;
+      if ((widest <= maxW && h <= maxH) || size <= 5) return { size, lines };
+      const f = Math.min(maxW / Math.max(1, widest), maxH / Math.max(1, h));
+      size = Math.max(5, size * Math.min(0.985, f));
+    }
+    return { size, lines: wrap(text, size, maxW, bold, font, maxLines || 3) };
+  }
+
+  const T25 = (str, x, y, size, color, o) => {
+    o = o || {};
+    const font = o.font || 'Segoe UI', bold = o.bold !== false;
+    let xx = x;
+    if (o.align === 'center' || o.align === 'right') {
+      const w = measure(str, size, bold, font) + (o.ls || 0) * Math.max(0, String(str).length - 1);
+      xx = o.align === 'center' ? x - w / 2 : x - w;
+    }
+    return { type: 'text', x: xx, y, text: String(str), font, size, bold, italic: !!o.italic, ls: o.ls || 0, lh: o.lh || 1.12, fill: solid(color), stroke: null, t: null, _dirty: true };
+  };
+  const R25 = (x, y, w, h, fill, r) => ({ type: 'rect', x, y, w, h, r: r || 0, fill: fill ? solid(fill) : null, stroke: null, t: null, _dirty: true });
+  const E25 = (cx, cy, rx, ry, fill) => ({ type: 'ellipse', cx, cy, rx, ry, fill: fill ? solid(fill) : null, stroke: null, t: null, _dirty: true });
+  function pathShape(d, fill) {
+    let subs = [];
+    try { subs = parsePathD(d) || []; } catch (e) { subs = []; }
+    return { type: 'path', subpaths: subs, evenodd: false, fill: fill ? solid(fill) : null, stroke: null, t: null, _dirty: true };
+  }
+  /* QR ko vector path me (print me bilkul crisp) */
+  function qrPathShape(qr, x, y, side, color) {
+    const u = side / qr.size;
+    let d = '';
+    for (let r = 0; r < qr.size; r++) {
+      let c = 0;
+      while (c < qr.size) {
+        if (!qr.modules[r][c]) { c++; continue; }
+        let e = c; while (e < qr.size && qr.modules[r][e]) e++;
+        const X = rr(x + c * u, 100), Y = rr(y + r * u, 100), Wd = rr((e - c) * u, 100), Ht = rr(u, 100);
+        d += 'M' + X + ' ' + Y + ' H' + rr(X + Wd, 100) + ' V' + rr(Y + Ht, 100) + ' H' + X + ' Z';
+        c = e;
+      }
+    }
+    return pathShape(d, color);
+  }
+
+  function signDefaultData() {
+    return {
+      name: 'SHARMA DIGITAL', tagline: 'Printing · Branding · Signage',
+      headline: 'GRAND OPENING', offer: 'FLAT 30% OFF',
+      phone: '+91 90000 00000', web: 'sharmadigital.in', addr: 'MG Road, Indore (MP)',
+      items: [['Visiting Card 1000 pcs', '₹ 900'], ['Flex Banner 3×1 ft', '₹ 450'], ['Sticker Sheet A4', '₹ 120']],
+      qrText: 'https://sharmadigital.in'
+    };
+  }
+  const SD = signDefaultData();
+
+  /* text ko fit karke daalo (size + maxW) */
+  function TF(out, text, x, y, want, maxW, color, o) {
+    o = o || {};
+    const font = o.font || 'Segoe UI', bold = o.bold !== false;
+    const size = Math.max(4, fitTo(text, want, maxW, bold, font, o.ls));
+    out.push(T25(text, x, y, size, color, o));
+    return size;
+  }
+  /* block ko vertically center karke daalo */
+  function blockCentered(out, lines, size, x, H, yMid, color, o) {
+    const lh = size * 1.14;
+    const y0 = yMid - (lines.length * lh) / 2 + size * 0.86;
+    lines.forEach((ln, i) => out.push(T25(ln, x, y0 + i * lh, size, color, o)));
+    return lines.length * lh;
+  }
+
+  /* main layout: sab kuch short side (S) se derive hota hai → ratio badalne par bhi proportion same */
+  function signLayout(W, H, TH, D, cfg) {
+    const out = [], S = Math.min(W, H);
+    const wide = W / H >= 1.75, tall = H / W >= 1.75;
+    const M = S * 0.06;
+    const ink = TH.ink, sub = TH.sub, acc = TH.acc;
+    const style = cfg.style || 'retail';
+    const qrOn = !!cfg.qr;
+
+    if (wide) {
+      /* ---------------- WIDE STRIP ---------------- */
+      const bar = S * 0.055;
+      out.push(R25(0, 0, bar, H, acc));
+      const stripTen = W / H >= 8;
+      const qrPct = W / H < 3 ? 0.36 : W / H < 8 ? 0.46 : 0.62;
+      const qrSide = qrOn ? Math.min(H * qrPct, S * 0.92) : 0;
+      const qrBox = qrOn ? qrSide * 1.14 : 0;
+      const x0 = bar + M * 0.9;
+      const rightEdge = W - M * 0.9;
+      const gut = S * (W / H >= 8 ? 0.035 : 0.05);
+      const totalW = rightEdge - x0 - qrBox - gut;
+      const brandW = totalW * 0.30;
+      const contactW = totalW * 0.21;
+      const headW = Math.max(S * 0.5, totalW - brandW - contactW - gut * 1.6);
+
+      /* brand block (vertically centred) */
+      const brandBlk = fitBlock(D.name.toUpperCase(), S * 0.24, brandW, H * 0.44, true, 'Segoe UI', S * 0.004, 2);
+      const tagWant = clamp(S * 0.072, 5, S * 0.09);
+      const tagSz = fitTo(D.tagline, tagWant, brandW, true, 'Segoe UI');
+      const bH = brandBlk.lines.length * brandBlk.size * 1.14 + tagSz * 1.5;
+      let by = (H - bH) / 2 + brandBlk.size * 0.86;
+      brandBlk.lines.forEach((ln, i) => {
+        const sz = fitTo(ln, brandBlk.size, brandW, true, 'Segoe UI');
+        out.push(T25(ln, x0, by + i * sz * 1.14, sz, ink, { bold: true, ls: S * 0.004 }));
+      });
+      out.push(T25(D.tagline, x0, by + brandBlk.lines.length * brandBlk.size * 1.14 + tagSz * 0.9, tagSz, sub, { bold: true, ls: S * 0.002 }));
+
+      /* divider (direction style me arrow hi separator hai) */
+      const dx = x0 + brandW + gut * 0.4;
+      if (style !== 'direction') out.push({ type: 'line', x1: dx, y1: H * 0.2, x2: dx, y2: H * 0.8, fill: null, stroke: { color: sub, width: Math.max(1, S * 0.007) }, t: null, _dirty: true });
+
+      const hx = dx + gut * 0.6;
+      if (style === 'menu') {
+        const n = Math.min(3, (D.items || []).length);
+        const rowH = H * 0.72 / Math.max(1, n);
+        const y0 = H * 0.14;
+        for (let i = 0; i < n; i++) {
+          const it = D.items[i];
+          const rs = Math.min(S * 0.115, rowH * 0.42);
+          TF(out, it[0], hx, y0 + rowH * i + rs, rs, headW * 0.68, ink, { bold: true });
+          const priceSz = Math.max(4, fitTo(it[1], rs, headW * 0.24, true, 'Segoe UI'));
+          out.push(T25(it[1], hx + headW, y0 + rowH * i + rs, priceSz, acc, { bold: true, align: 'right' }));
+          out.push({ type: 'line', x1: hx, y1: y0 + rowH * (i + 1) - rowH * 0.2, x2: hx + headW, y2: y0 + rowH * (i + 1) - rowH * 0.2, fill: null, stroke: { color: sub, width: Math.max(1, S * 0.004) }, t: null, _dirty: true });
+        }
+      } else if (style === 'direction') {
+        const aSz = Math.min(H * 0.5, headW * 0.17);
+        const cy = H / 2;
+        out.push(pathShape('M' + rr(hx, 10) + ' ' + rr(cy - aSz * 0.3, 10) + ' L' + rr(hx + aSz * 0.95, 10) + ' ' + rr(cy - aSz * 0.3, 10) +
+          ' L' + rr(hx + aSz * 0.95, 10) + ' ' + rr(cy - aSz * 0.62, 10) + ' L' + rr(hx + aSz * 1.55, 10) + ' ' + rr(cy, 10) +
+          ' L' + rr(hx + aSz * 0.95, 10) + ' ' + rr(cy + aSz * 0.62, 10) + ' L' + rr(hx + aSz * 0.95, 10) + ' ' + rr(cy + aSz * 0.3, 10) +
+          ' L' + rr(hx, 10) + ' ' + rr(cy + aSz * 0.3, 10) + ' Z', acc));
+        const room = headW - aSz * 1.8;
+        const tBlk = fitBlock(D.headline.toUpperCase(), S * 0.3, room, H * 0.5, true, 'Segoe UI', 0, 2);
+        const lh = tBlk.size * 1.14;
+        const top = (H - tBlk.lines.length * lh) / 2 + tBlk.size * 0.86;
+        tBlk.lines.forEach((ln, i) => TF(out, ln, hx + aSz * 1.85, top + i * lh, tBlk.size, room, ink, { bold: true }));
+      } else if (style === 'brand') {
+        const tBlk = fitBlock(D.tagline, S * 0.19, headW, H * 0.44, true, 'Segoe UI', S * 0.003, 2);
+        const lh = tBlk.size * 1.16;
+        const top = (H - tBlk.lines.length * lh) / 2 + tBlk.size * 0.86;
+        tBlk.lines.forEach((ln, i) => TF(out, ln, hx, top + i * lh, tBlk.size, headW, ink, { bold: true }));
+        out.push(R25(hx, top + (tBlk.lines.length - 1) * lh + tBlk.size * 0.5, Math.min(headW * 0.4, S * 1.2), Math.max(2, S * 0.012), acc));
+      } else {
+        /* retail / offer */
+        const hasOffer = style === 'offer' || style === 'retail';
+        const offerH = hasOffer && D.offer ? S * 0.2 : 0;
+        const tBlk = fitBlock(D.headline.toUpperCase(), S * 0.36, headW, (H * 0.86) - offerH, true, 'Segoe UI', S * 0.003, 2);
+        const lh = tBlk.size * 1.12;
+        const blockH = tBlk.lines.length * lh + offerH * 1.15;
+        let top = (H - blockH) / 2 + tBlk.size * 0.86;
+        tBlk.lines.forEach((ln, i) => TF(out, ln, hx, top + i * lh, tBlk.size, headW, ink, { bold: true, ls: S * 0.002 }));
+        if (offerH) {
+          const oy = top + (tBlk.lines.length - 1) * lh + offerH * 0.55;
+          const oSz = Math.max(5, Math.min(S * 0.105, offerH * 0.52));
+          const ow = Math.min(headW, measure(D.offer, oSz, true, 'Segoe UI') + oSz * 1.5);
+          out.push(R25(hx, oy, ow, oSz * 1.75, acc, oSz * 0.36));
+          const fsz = fitTo(D.offer, oSz, ow - oSz * 1.1, true, 'Segoe UI');
+          out.push(T25(D.offer, hx + oSz * 0.55, oy + oSz * 1.22, fsz, '#FFFFFF', { bold: true }));
+        }
+      }
+
+      /* contact block (right aligned, vertically centred) */
+      const cx2 = rightEdge - (qrOn ? qrBox + gut * 0.4 : 0);
+      const phoneSz = clamp(S * 0.10, 5, 999);
+      const webSz = clamp(S * 0.068, 4.5, 999);
+      const addrSz = clamp(S * 0.055, 4, 999);
+      const pS = Math.max(4, fitTo(D.phone, phoneSz, contactW, true, 'Segoe UI'));
+      const wS = Math.max(4, fitTo(D.web, webSz, contactW, true, 'Segoe UI'));
+      const aS = Math.max(4, fitTo(D.addr, addrSz, contactW, false, 'Segoe UI'));
+      const showAddr = !stripTen;
+      const cH = pS * 1.2 + wS * 1.35 + (showAddr ? aS * 1.4 : 0);
+      let cy2 = (H - cH) / 2 + pS * 0.86;
+      out.push(T25(D.phone, cx2, cy2, pS, ink, { bold: true, align: 'right' }));
+      out.push(T25(D.web, cx2, cy2 + pS * 0.3 + wS * 1.3, wS, acc, { bold: true, align: 'right' }));
+      if (showAddr) out.push(T25(D.addr, cx2, cy2 + pS * 0.3 + wS * 1.3 + aS * 1.5, aS, sub, { bold: false, align: 'right' }));
+
+      if (qrOn) {
+        const qx = rightEdge - qrSide, qy = (H - qrSide) / 2;
+        const pad = qrSide * 0.07;
+        out.push(R25(qx - pad, qy - pad, qrSide + pad * 2, qrSide + pad * 2, '#FFFFFF', qrSide * 0.06));
+        out.push(qrPathShape(cfg.qrData, qx, qy, qrSide, '#101828'));
+      }
+    } else if (tall) {
+      /* ---------------- PORTRAIT 1:2 ---------------- */
+      const panelH = H * 0.56;
+      out.push(R25(0, 0, W, panelH, acc));
+      out.push(E25(W * 0.92, H * 0.05, S * 0.30, S * 0.30, 'rgba(255,255,255,0.12)'));
+      const bSz = Math.max(4, fitTo(D.name.toUpperCase(), clamp(S * 0.075, 5, 999), W - M * 2, true, 'Segoe UI', S * 0.003));
+      out.push(T25(D.name.toUpperCase(), W / 2, panelH * 0.13 + bSz * 0.8, bSz, '#FFFFFF', { bold: true, align: 'center', ls: S * 0.003 }));
+      const hl = fitBlock(D.headline.toUpperCase(), S * 0.19, W - M * 2, panelH * 0.42, true, 'Segoe UI', 0, 3);
+      const lh = hl.size * 1.14;
+      const htop = panelH * 0.30 + (panelH * 0.52 - hl.lines.length * lh) / 2 + hl.size * 0.86;
+      hl.lines.forEach((ln, i) => TF(out, ln, W / 2, htop + i * lh, hl.size, W - M * 2, '#FFFFFF', { bold: true, align: 'center' }));
+      const tagSz = Math.max(4, fitTo(D.tagline, clamp(S * 0.065, 4.5, 999), W - M * 2, true, 'Segoe UI'));
+      out.push(T25(D.tagline, W / 2, panelH * 0.88, tagSz, 'rgba(255,255,255,0.92)', { bold: true, align: 'center' }));
+
+      const y0 = panelH + S * 0.10;
+      const leftW = qrOn ? W - M * 2 - Math.min(S * 0.46, W * 0.42) - S * 0.06 : W - M * 2;
+      const pS2 = Math.max(4, fitTo(D.phone, clamp(S * 0.09, 5, 999), leftW, true, 'Segoe UI'));
+      const wS2 = Math.max(4, fitTo(D.web, clamp(S * 0.062, 4.5, 999), leftW, true, 'Segoe UI'));
+      const aS2 = Math.max(4, fitTo(D.addr, clamp(S * 0.055, 4, 999), leftW, false, 'Segoe UI'));
+      out.push(T25(D.phone, M, y0 + pS2 * 0.9, pS2, ink, { bold: true }));
+      out.push(T25(D.web, M, y0 + pS2 * 1.15 + wS2, wS2, acc, { bold: true }));
+      out.push(T25(D.addr, M, y0 + pS2 * 1.15 + wS2 * 2.1 + aS2 * 0.5, aS2, sub, { bold: false }));
+      if (qrOn) {
+        const qrSide2 = Math.min(S * 0.46, W * 0.42);
+        const qx = W - M - qrSide2, qy = y0 + Math.max(0, (H - y0 - M - qrSide2) / 2);
+        const bpad = qrSide2 * 0.075;
+        out.push(R25(qx - bpad, qy - bpad, qrSide2 + bpad * 2, qrSide2 + bpad * 2, '#FFFFFF', qrSide2 * 0.07));
+        out.push(qrPathShape(cfg.qrData, qx, qy, qrSide2, '#101828'));
+        out.push(T25('SCAN', qx + qrSide2 / 2, Math.min(H - M * 0.2, qy + qrSide2 + bpad * 2 + qrSide2 * 0.17), qrSide2 * 0.13, sub, { bold: true, align: 'center', ls: qrSide2 * 0.02 }));
+      }
+    } else {
+      /* ---------------- SQUARE 1:1 ---------------- */
+      const pad = M, contentW = W - pad * 2, bandH = H * 0.115;
+      const qrSide3 = qrOn ? Math.min(S * 0.26, contentW * 0.34) : 0;
+      const textW = contentW - (qrOn ? qrSide3 + S * 0.05 : 0);
+      out.push(E25(W * 0.94, H * 0.06, S * 0.26, S * 0.26, 'rgba(255,255,255,0.10)'));
+
+      /* brand block */
+      const bWant = clamp(S * 0.062, 4.5, 999);
+      const bSz = Math.max(4, fitTo(D.name.toUpperCase(), bWant, contentW * 0.82, true, 'Segoe UI', S * 0.003));
+      const bLines = wrap(D.name.toUpperCase(), bSz, contentW * 0.82, true, 'Segoe UI', 2);
+      bLines.forEach((ln, i) => out.push(T25(ln, pad, pad + bSz * (0.85 + i * 1.18), bSz, ink, { bold: true, ls: S * 0.003 })));
+      const tagSz3 = Math.max(4, fitTo(D.tagline, clamp(S * 0.045, 4, 999), contentW * 0.8, true, 'Segoe UI'));
+      const tagY = pad + bSz * (0.85 + (bLines.length - 1) * 1.18) + bSz * 1.55;
+      out.push(T25(D.tagline, pad, tagY, tagSz3, sub, { bold: true }));
+
+      /* content region (brand ke neeche, contact band ke upar) */
+      const rTop = tagY + tagSz3 * 2.1;
+      const rBot = H - bandH - pad * 0.55;
+      const rH = Math.max(S * 0.2, rBot - rTop);
+
+      if (style === 'menu') {
+        const n = Math.min(3, (D.items || []).length);
+        const rowH = rH / Math.max(1, n);
+        for (let i = 0; i < n; i++) {
+          const it = D.items[i];
+          const rs = Math.min(clamp(S * 0.062, 5, 999), rowH * 0.44);
+          const nameSz = Math.max(4, fitTo(it[0], rs, textW * 0.66, true, 'Segoe UI'));
+          out.push(T25(it[0], pad, rTop + rowH * i + nameSz * 1.1, nameSz, ink, { bold: true }));
+          const pz = Math.max(4, fitTo(it[1], rs, textW * 0.26, true, 'Segoe UI'));
+          out.push(T25(it[1], pad + textW, rTop + rowH * i + pz * 1.1, pz, acc, { bold: true, align: 'right' }));
+          out.push({ type: 'line', x1: pad, y1: rTop + rowH * (i + 1) - rowH * 0.22, x2: pad + textW, y2: rTop + rowH * (i + 1) - rowH * 0.22, fill: null, stroke: { color: sub, width: Math.max(1, S * 0.0035) }, t: null, _dirty: true });
+        }
+      } else {
+        const hasOffer = (style === 'offer' || style === 'retail') && D.offer;
+        const offerH = hasOffer ? clamp(S * 0.052, 5, 999) * 2.1 : 0;
+        const addrSz = Math.max(4, clamp(S * 0.038, 3.5, 999));
+        const blk = fitBlock(D.headline.toUpperCase(), S * 0.17, textW, rH - offerH - addrSz * 2.6, true, 'Segoe UI', 0, 3);
+        const lh = blk.size * 1.14;
+        const totalH = blk.lines.length * lh + (hasOffer ? offerH + S * 0.03 : 0) + addrSz * 2.4;
+        let y = rTop + Math.max(0, (rH - totalH) / 2) + blk.size * 0.88;
+        blk.lines.forEach((ln, i) => TF(out, ln, pad, y + i * lh, blk.size, textW, ink, { bold: true }));
+        y += (blk.lines.length - 1) * lh + blk.size * 0.35;
+        out.push(R25(pad, y, Math.min(textW * 0.22, S * 0.3), Math.max(2, S * 0.011), acc));
+        y += S * 0.045;
+        if (hasOffer) {
+          const oSz = Math.max(5, clamp(S * 0.05, 5, 999));
+          const ow = Math.min(textW, measure(D.offer, oSz, true, 'Segoe UI') + oSz * 1.5);
+          out.push(R25(pad, y, ow, oSz * 1.8, acc, oSz * 0.4));
+          const fsz = fitTo(D.offer, oSz, ow - oSz * 1.1, true, 'Segoe UI');
+          out.push(T25(D.offer, pad + oSz * 0.6, y + oSz * 1.26, fsz, '#FFFFFF', { bold: true }));
+          y += oSz * 1.8 + addrSz * 1.5;
+        }
+        const addrSz2 = Math.max(4, fitTo(D.addr, addrSz, textW, false, 'Segoe UI'));
+        out.push(T25(D.addr, pad, y + addrSz2, addrSz2, sub, { bold: false }));
+      }
+
+      if (qrOn) {
+        const qx = W - pad - qrSide3;
+        const qy = rTop + Math.max(0, (rH - qrSide3) / 2);
+        const bpad = qrSide3 * 0.07;
+        out.push(R25(qx - bpad, qy - bpad, qrSide3 + bpad * 2, qrSide3 + bpad * 2, '#FFFFFF', qrSide3 * 0.06));
+        out.push({ type: 'rect', x: qx - bpad, y: qy - bpad, w: qrSide3 + bpad * 2, h: qrSide3 + bpad * 2, r: qrSide3 * 0.06, fill: null, stroke: { color: sub, width: Math.max(1, S * 0.003) }, t: null, _dirty: true });
+        out.push(qrPathShape(cfg.qrData, qx, qy, qrSide3, '#101828'));
+        out.push(T25('SCAN', qx + qrSide3 / 2, qy + qrSide3 + bpad * 2 + qrSide3 * 0.17, qrSide3 * 0.14, sub, { bold: true, align: 'center', ls: qrSide3 * 0.02 }));
+      }
+
+      /* bottom contact band */
+      out.push(R25(0, H - bandH, W, bandH, acc));
+      const bandTxt = D.phone + '   ·   ' + D.web;
+      const fWant = clamp(S * 0.042, 4, 999);
+      const fSz2 = Math.max(4, fitTo(bandTxt, fWant, W - pad * 2, true, 'Segoe UI'));
+      out.push(T25(bandTxt, W / 2, H - bandH / 2 + fSz2 * 0.34, fSz2, '#FFFFFF', { bold: true, align: 'center' }));
+    }
+    return out;
+  }
+
+  function signPaintBG(L, TH, W, H) {
+    const g = L.canvas.getContext('2d');
+    const gr = g.createLinearGradient(0, 0, W, H);
+    gr.addColorStop(0, TH.bg); gr.addColorStop(1, TH.bg2 || TH.bg);
+    g.fillStyle = gr; g.fillRect(0, 0, W, H);
+    const rg = g.createRadialGradient(W * 0.12, H * 0.1, 0, W * 0.12, H * 0.1, Math.max(W, H) * 0.8);
+    rg.addColorStop(0, 'rgba(255,255,255,0.07)'); rg.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = rg; g.fillRect(0, 0, W, H);
+  }
+
+  const SS = { idx: 1, style: 'retail', theme: 'sunrise', qr: true, bleed: 10 };
+
+  function signCfg(fromPanel) {
+    if (!fromPanel && window.__sg25last) return window.__sg25last;
+    const g = id => { const e = fromPanel && fromPanel.querySelector('#' + id); return e ? e.value : null; };
+    const sel = SIGN_SIZES[clamp(+(g('sg25size') == null ? SS.idx : g('sg25size')), 0, SIGN_SIZES.length - 1)] || SIGN_SIZES[1];
+    return {
+      size: sel,
+      style: g('sg25style') || SS.style,
+      theme: g('sg25theme') || SS.theme,
+      qr: g('sg25qr') ? !!fromPanel.querySelector('#sg25qr').checked : SS.qr,
+      bleed: +(g('sg25bleed') || SS.bleed),
+      data: {
+        name: g('sg25name') || SD.name,
+        tagline: g('sg25tag') || SD.tagline,
+        headline: g('sg25head') || SD.headline,
+        offer: g('sg25offer') || SD.offer,
+        phone: g('sg25phone') || SD.phone,
+        web: g('sg25web') || SD.web,
+        addr: g('sg25addr') || SD.addr,
+        items: SD.items,
+        qrText: g('sg25qrtext') || SD.qrText
+      }
+    };
+  }
+
+  function buildSign(cfg) {
+    cfg = cfg || signCfg(null);
+    const sel = cfg.size, TH = theme25(cfg.theme);
+    const plan = pxPlan(sel.w, sel.h);
+    const qrData = cfg.qr ? QR.encode(cfg.data.qrText || cfg.data.web || 'https://apnabrand.in', { ec: 'M' }) : null;
+    const els = signLayout(plan.W, plan.H, TH, cfg.data, { style: cfg.style, qr: cfg.qr, qrData });
+    try { window.__sg25last = cfg; } catch (e) { }
+
+    boardCreate(cfg.data.name + ' · ' + sel.r + ' signage', plan.W, plan.H, null);
+    doc.__av23 = { size: 'sign' + sel.r + '-' + sel.w + 'x' + sel.h, dpi: plan.dpi, wmm: sel.w, hmm: sel.h, theme: TH.id, bleed: cfg.bleed, safe: Math.round(Math.min(sel.w, sel.h) * 0.06), layout: 'signage', cut: null, via: 'v25' };
+    try { window.__av23last = doc.__av23; } catch (e) { }
+
+    let bg = (doc.layers || []).find(l => l.type === 'raster' && /background/i.test(l.name || ''));
+    if (!bg) { bg = newRasterLayer('Background'); doc.layers.unshift(bg); }
+    signPaintBG(bg, TH, plan.W, plan.H);
+
+    const deco = newVectorLayer('Layout');
+    const txt = newVectorLayer('Text');
+    els.forEach(e => (e.type === 'text' ? txt : deco).shapes.push(Object.assign({ id: 's25' + Math.random().toString(36).slice(2, 9) }, e)));
+    doc.layers.push(deco, txt);
+    try { if (typeof selShapes !== 'undefined') selShapes = txt.shapes.length ? [txt.shapes[0]] : []; } catch (e) { }
+    doc.activeId = txt.id;
+    try { layerVerBump(bg); layerVerBump(deco); layerVerBump(txt); } catch (e) { }
+    docDirty = true; needRender = true;
+    try { uiLayers(); uiLayersRefresh(); uiProps(); fitView(); } catch (e) { }
+    try { if (typeof renderComposite === 'function') renderComposite(); } catch (e) { }
+    t25('Signage ready — ' + sel.r + ' · ' + sel.w + '×' + sel.h + ' mm · ' + plan.dpi + ' dpi', 'ok', 2800);
+    return { plan, sel, cfg };
+  }
+
+  /* production spec sheet */
+  function signSpecs(cfg, plan, sel) {
+    const TH = theme25(cfg.theme);
+    const vd = Math.max(1, Math.round(Math.max(sel.w, sel.h) / 1000 * 2.2));
+    const minText = Math.round(Math.min(sel.w, sel.h) * 0.05);
+    const L = [];
+    L.push('ArtViSiON Studio v25 — SIGNAGE PRODUCTION SPEC');
+    L.push('Generated: ' + new Date().toISOString());
+    L.push('');
+    L.push('RATIO        : ' + sel.r + '  (' + sel.w + ' × ' + sel.h + ' mm)');
+    L.push('SIZE         : ' + (sel.w / 10) + ' × ' + (sel.h / 10) + ' cm  ·  ' + (sel.w / 1000) + ' × ' + (sel.h / 1000) + ' m');
+    L.push('PIXEL        : ' + plan.W + ' × ' + plan.H + ' px @ ' + plan.dpi + ' dpi (effective)');
+    L.push('BLEED        : ' + cfg.bleed + ' mm all sides (file me included)');
+    L.push('SAFE MARGIN  : ' + Math.round(Math.min(sel.w, sel.h) * 0.06) + ' mm');
+    L.push('VIEWING DIST : ~' + vd + ' m (recommended)');
+    L.push('MIN TEXT     : ' + minText + ' mm cap height ke neeche mat jao');
+    L.push('STYLE        : ' + (SIGN_STYLES.find(s => s.id === cfg.style) || {}).n + '  ·  theme ' + (TH.name || ''));
+    L.push('QR           : ' + (cfg.qr ? 'haan — vector, ' + QR.encode(cfg.data.qrText || 'x', { ec: 'M' }).size + '×' + QR.encode(cfg.data.qrText || 'x', { ec: 'M' }).size + ' modules (scan test kiya)' : 'nahi'));
+    L.push('');
+    L.push('CONTENT');
+    L.push('  Brand    : ' + cfg.data.name);
+    L.push('  Tagline  : ' + cfg.data.tagline);
+    L.push('  Headline : ' + cfg.data.headline);
+    L.push('  Offer    : ' + cfg.data.offer);
+    L.push('  Phone    : ' + cfg.data.phone);
+    L.push('  Web      : ' + cfg.data.web);
+    L.push('  Address  : ' + cfg.data.addr);
+    L.push('');
+    L.push('PRINTING NOTES');
+    L.push('  • File CMYK PDF hai (300% ink limit) — press/sign shop ko yahi do.');
+    L.push('  • Large format (3 m+) ke liye ' + plan.dpi + ' dpi kaafi hai; door se dekha jata hai.');
+    L.push('  • Flex/vinyl par laminate karayein, colour thoda gehra aata hai.');
+    L.push('  • Crop marks trim line hain — unke andar ka area final board hai.');
+    return L.join('\n');
+  }
+
+  function signOpts(cfg, plan) {
+    return { dpi: plan.dpi, srcDpi: plan.dpi, bleed: cfg.bleed, safe: Math.round(Math.min(plan.W, plan.H) * 0.06), marks: true, white: true, cutOff: 0, wmm: cfg.size.w, hmm: cfg.size.h };
+  }
+
+  async function signPDFBytes(cfg, plan) {
+    const o = signOpts(cfg, plan);
+    return await AV24.cmykPdf(o);
+  }
+  function signBase(cfg) {
+    return safe25((cfg.data.name || 'signage')) + '-signage-' + cfg.size.r.replace(':', 'x') + '-' + cfg.size.w + 'x' + cfg.size.h + 'mm';
+  }
+  async function signPDF() {
+    const cfg = signCfg(currentSignPanel);
+    const plan = pxPlan(cfg.size.w, cfg.size.h);
+    try {
+      const bytes = await signPDFBytes(cfg, plan);
+      download(signBase(cfg) + '-CMYK.pdf', new Blob([bytes], { type: 'application/pdf' }));
+      t25('Signage PDF ready · ' + Math.round(bytes.length / 1024) + ' KB', 'ok', 2600);
+    } catch (e) { t25('PDF fail: ' + e.message, 'err', 3000); }
+  }
+  function signJPG() {
+    const cfg = signCfg(currentSignPanel);
+    const plan = pxPlan(cfg.size.w, cfg.size.h);
+    try {
+      const pr = AV23.renderPrintCanvas(signOpts(cfg, plan));
+      pr.canvas.toBlob(b => { download(signBase(cfg) + '.jpg', b); t25('JPG ready (' + pr.canvas.width + '×' + pr.canvas.height + ')', 'ok', 2400); }, 'image/jpeg', 0.94);
+    } catch (e) { t25('JPG fail: ' + e.message, 'err', 3000); }
+  }
+  async function signZIP() {
+    const cfg = signCfg(currentSignPanel);
+    const plan = pxPlan(cfg.size.w, cfg.size.h);
+    try {
+      const pdf = await signPDFBytes(cfg, plan);
+      const pr = AV23.renderPrintCanvas(signOpts(cfg, plan));
+      const blob = await new Promise(res => pr.canvas.toBlob(res, 'image/jpeg', 0.94));
+      const jpg = new Uint8Array(await blob.arrayBuffer());
+      const spec = new TextEncoder().encode(signSpecs(cfg, plan, cfg.size));
+      const qrSvg = cfg.qr ? new TextEncoder().encode(QR.toSVG(QR.encode(cfg.data.qrText || 'x', { ec: 'M' }), { quiet: 4 })) : null;
+      const files = [
+        { name: signBase(cfg) + '-CMYK.pdf', bytes: pdf },
+        { name: signBase(cfg) + '.jpg', bytes: jpg },
+        { name: signBase(cfg) + '-specs.txt', bytes: spec }
+      ];
+      if (qrSvg) files.push({ name: 'qr-' + cfg.size.r.replace(':', 'x') + '-vector.svg', bytes: qrSvg });
+      const zip = AV23.zipMake(files);
+      download(signBase(cfg) + '-pack.zip', new Blob([zip], { type: 'application/zip' }));
+      t25('Signage pack ready · ' + files.length + ' files', 'ok', 2600);
+    } catch (e) { t25('Pack fail: ' + e.message, 'err', 3000); }
+  }
+
+  let currentSignPanel = null;
+  function openSign25() {
+    const themes = THEMES25().length ? THEMES25() : [theme25('sunrise')];
+    const sizes = SIGN_SIZES.map((s, i) => '<option value="' + i + '"' + (i === SS.idx ? ' selected' : '') + '>' + s.r + ' · ' + s.w + '×' + s.h + ' mm — ' + s.u + '</option>').join('');
+    const body =
+      '<div class="av24cols">' +
+        '<div>' +
+          '<label class="q25lbl">Artboard ratio</label>' +
+          '<div class="sg25ratios">' + ['1:1', '1:2', '2:1', '3:1', '4:1', '5:1', '10:1'].map(r => '<button type="button" data-r="' + r + '" class="' + (SIGN_SIZES[SS.idx].r === r ? 'on' : '') + '">' + r + '</button>').join('') + '</div>' +
+          '<label class="q25lbl">Production size</label>' +
+          '<select id="sg25size">' + sizes + '</select>' +
+          '<div class="av24row" style="margin-top:10px">' +
+            '<div><label class="q25lbl">Layout style</label><select id="sg25style">' + SIGN_STYLES.map(s => '<option value="' + s.id + '"' + (SS.style === s.id ? ' selected' : '') + '>' + s.n + '</option>').join('') + '</select></div>' +
+            '<div><label class="q25lbl">Theme</label><select id="sg25theme">' + themes.map(t => '<option value="' + t.id + '"' + (SS.theme === t.id ? ' selected' : '') + '>' + t.name + '</option>').join('') + '</select></div>' +
+          '</div>' +
+          '<div class="av24row" style="margin-top:8px">' +
+            '<div><label class="q25lbl">Bleed (mm)</label><select id="sg25bleed">' + [0, 3, 5, 10, 25].map(n => '<option value="' + n + '"' + (SS.bleed === n ? ' selected' : '') + '>' + n + ' mm</option>').join('') + '</select></div>' +
+            '<div><label class="q25lbl">QR code</label><label class="sg25chk"><input type="checkbox" id="sg25qr"' + (SS.qr ? ' checked' : '') + '> QR design me daalo</label></div>' +
+          '</div>' +
+          '<label class="q25lbl" style="margin-top:10px">Brand name</label><input id="sg25name" class="q25in" value="' + SD.name + '">' +
+          '<div class="av24row"><div><label class="q25lbl">Tagline</label><input id="sg25tag" class="q25in" value="' + SD.tagline + '"></div>' +
+          '<div><label class="q25lbl">Headline</label><input id="sg25head" class="q25in" value="' + SD.headline + '"></div></div>' +
+          '<div class="av24row"><div><label class="q25lbl">Offer line</label><input id="sg25offer" class="q25in" value="' + SD.offer + '"></div>' +
+          '<div><label class="q25lbl">Phone</label><input id="sg25phone" class="q25in" value="' + SD.phone + '"></div></div>' +
+          '<div class="av24row"><div><label class="q25lbl">Website</label><input id="sg25web" class="q25in" value="' + SD.web + '"></div>' +
+          '<div><label class="q25lbl">Address</label><input id="sg25addr" class="q25in" value="' + SD.addr + '"></div></div>' +
+          '<label class="q25lbl">QR link</label><input id="sg25qrtext" class="q25in" value="' + SD.qrText + '">' +
+        '</div>' +
+        '<div>' +
+          '<div class="sg25info" id="sg25info"></div>' +
+          '<div class="q25hint" style="margin-top:10px"><b>Production rules jo app khud lagata hai:</b><br>' +
+            '· Safe margin = short side ka 6%<br>· Text size ratio se scale (door se padhne layak)<br>· 3-zone grid: brand · message · contact + QR<br>· Bleed + crop marks PDF me<br>· Colour contrast theme se lock</div>' +
+        '</div>' +
+      '</div>';
+    const foot = '<button class="av23btn pri" id="sg25build">Signage banao</button>' +
+      '<button class="av23btn" id="sg25pdf">CMYK PDF</button>' +
+      '<button class="av23btn" id="sg25jpg">JPG</button>' +
+      '<div class="sp"></div><button class="av23btn" id="sg25zip">Production pack (.zip)</button>';
+    const ov = AV23.__shell('av25sign', 'Signage & Retail board', '1:1 · 1:2 · 2:1 · 3:1 · 4:1 · 5:1 · 10:1 — production file ke hisaab se', body, foot);
+    currentSignPanel = ov;
+
+    const readCfg = () => {
+      SS.idx = +(ov.querySelector('#sg25size').value || 0);
+      SS.style = ov.querySelector('#sg25style').value;
+      SS.theme = ov.querySelector('#sg25theme').value;
+      SS.qr = !!ov.querySelector('#sg25qr').checked;
+      SS.bleed = +(ov.querySelector('#sg25bleed').value || 0);
+      return signCfg(ov);
+    };
+    const updInfo = () => {
+      const cfg = readCfg(), plan = pxPlan(cfg.size.w, cfg.size.h);
+      const vd = Math.max(1, Math.round(Math.max(cfg.size.w, cfg.size.h) / 1000 * 2.2));
+      const minText = Math.round(Math.min(cfg.size.w, cfg.size.h) * 0.05);
+      const el = ov.querySelector('#sg25info');
+      if (!el) return;
+      el.innerHTML = '<div class="sg25big">' + cfg.size.r + '</div>' +
+        '<div class="sg25kv"><span>Size</span><b>' + cfg.size.w + ' × ' + cfg.size.h + ' mm</b></div>' +
+        '<div class="sg25kv"><span>Pixels</span><b>' + plan.W + ' × ' + plan.H + ' px</b></div>' +
+        '<div class="sg25kv"><span>Effective dpi</span><b>' + plan.dpi + ' dpi</b></div>' +
+        '<div class="sg25kv"><span>Viewing distance</span><b>~' + vd + ' m</b></div>' +
+        '<div class="sg25kv"><span>Min text height</span><b>' + minText + ' mm</b></div>' +
+        '<div class="sg25kv"><span>Bleed</span><b>' + cfg.bleed + ' mm</b></div>' +
+        '<div class="sg25kv"><span>Use</span><b>' + cfg.size.u + '</b></div>';
+    };
+    ov.querySelectorAll('[data-r]').forEach(b => b.onclick = () => {
+      const r = b.dataset.r;
+      const idx = SIGN_SIZES.findIndex(x => x.r === r);
+      if (idx >= 0) ov.querySelector('#sg25size').value = idx;
+      ov.querySelectorAll('[data-r]').forEach(x => x.classList.toggle('on', x === b));
+      updInfo();
+    });
+    ov.querySelectorAll('#sg25size,#sg25style,#sg25theme,#sg25bleed,#sg25qr').forEach(el => { el.addEventListener('change', updInfo); el.addEventListener('input', updInfo); });
+    ov.querySelector('#sg25build').onclick = () => { const cfg = readCfg(); buildSign(cfg); };
+    ov.querySelector('#sg25pdf').onclick = () => signPDF();
+    ov.querySelector('#sg25jpg').onclick = () => signJPG();
+    ov.querySelector('#sg25zip').onclick = () => signZIP();
+    updInfo();
+    return ov;
+  }
+
+  /* ============================================================
+     C. CSS + UI wiring
+     ============================================================ */
+  const CSS25 = `
+  .q25lbl{display:block;font:800 10.5px/1.4 inherit;letter-spacing:.07em;text-transform:uppercase;color:#667085;margin:10px 0 5px}
+  .q25ta,.q25in{width:100%;border:1px solid #DCE0E8;border-radius:10px;padding:9px 11px;font:600 13px/1.45 inherit;color:#101828;background:#fff;outline:none}
+  .q25ta:focus,.q25in:focus{border-color:#F54927;box-shadow:0 0 0 3px rgba(245,73,39,.12)}
+  .q25hint{background:#F6F8FB;border:1px solid #E7E9EF;border-radius:10px;padding:9px 11px;font:600 11.5px/1.55 inherit;color:#475467;margin-top:8px}
+  .q25mini{border:1px solid #DCE0E8;background:#fff;border-radius:999px;padding:2px 8px;font:800 10.5px/1.5 inherit;color:#0E7490;cursor:pointer}
+  .q25mini:hover{border-color:#0E7490;background:#F0FAFD}
+  .q25file{font:600 11px/1.4 inherit;color:#667085;border:1px dashed #D0D5DD;border-radius:10px;padding:7px 8px;background:#FCFCFD;width:100%}
+  .q25slide{display:flex;align-items:center;gap:9px;margin-top:9px;font:800 11px/1 inherit;color:#475467}
+  .q25slide input{flex:1}
+  .q25slide b{color:#F54927;min-width:34px;text-align:right}
+  .q25prev{background:#fff;border:1px solid #E7E9EF;border-radius:14px;padding:12px;box-shadow:0 4px 14px rgba(16,24,40,.05)}
+  .q25info{margin-top:10px;background:#F9FAFC;border:1px solid #E7E9EF;border-radius:12px;padding:11px 12px}
+  .q25row{display:flex;flex-wrap:wrap;gap:4px 12px;font:700 11.5px/1.6 inherit;color:#475467}
+  .q25row b{color:#101828}
+  .q25meter{height:6px;border-radius:99px;background:#EAECF0;margin:7px 0 6px;overflow:hidden}
+  .q25meter i{display:block;height:100%;background:linear-gradient(90deg,#12B76A,#F5B226,#F54927);border-radius:99px}
+  .q25small{display:block;font:600 11px/1.5 inherit;color:#667085;margin-top:3px}
+  .q25safe{margin-top:7px;border-radius:9px;padding:7px 9px;font:700 11px/1.5 inherit}
+  .q25safe.ok{background:#EAF7EE;border:1px solid #C7EBD3;color:#15803D}
+  .q25safe.bad{background:#FFF4E5;border:1px solid #FBD9A8;color:#B54708}
+  .sg25ratios{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+  .sg25ratios button{border:1px solid #DCE0E8;background:#fff;border-radius:9px;padding:7px 11px;font:800 12px/1 inherit;color:#475467;cursor:pointer}
+  .sg25ratios button.on{background:#101828;color:#fff;border-color:#101828}
+  .sg25chk{display:flex;align-items:center;gap:7px;font:700 12px/1 inherit;color:#344054;height:38px}
+  .sg25info{background:#fff;border:1px solid #E7E9EF;border-radius:14px;padding:14px 15px;box-shadow:0 4px 14px rgba(16,24,40,.05)}
+  .sg25big{font:800 30px/1.1 inherit;letter-spacing:-.5px;color:#101828;margin-bottom:8px}
+  .sg25kv{display:flex;justify-content:space-between;gap:10px;font:600 12px/2 inherit;color:#667085;border-bottom:1px dashed #EFF1F5}
+  .sg25kv b{color:#101828;font-weight:800;text-align:right}
+  #av12bar button[data-a="sign25"]{background:#7C3AED;color:#fff;border-color:transparent}
+  #av12bar button[data-a="sign25"]:hover{filter:brightness(1.08)}
+  #av25qr .av24cols>div,#av25sign .av24cols>div{min-width:0}
+  #av25sign select,#av25qr select,#av25sign input,#av25qr input{max-width:100%}
+  @media(max-width:860px){
+    .av24cols>div{min-width:0}
+    .sg25ratios button{padding:7px 9px;font-size:11.5px}
+    #av25sign .av23body,#av25qr .av23body{overflow-x:hidden}
+  }
+  @media(max-width:640px){
+    #av25qr .av23foot,#av25sign .av23foot{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    #av25qr .av23foot .sp,#av25sign .av23foot .sp{display:none}
+    #av25qr .av23foot .av23btn,#av25sign .av23foot .av23btn{white-space:nowrap;font-size:11.5px;padding:10px 8px;min-width:0}
+  }`;
+  function injectCSS25() {
+    if (document.getElementById('av25-style')) return;
+    const st = document.createElement('style'); st.id = 'av25-style'; st.textContent = CSS25;
+    document.head.appendChild(st);
+  }
+  const IC25 = {
+    sign: '<path d="M3 10.5 5.2 4h13.6L21 10.5"/><rect x="4.5" y="12" width="15" height="8" rx="1.4"/><path d="M9 20v-5h6v5"/>',
+    qr: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v2M14 20h2M19 19h2v2h-2"/>'
+  };
+  const ic25 = (k, s) => '<svg viewBox="0 0 24 24" width="' + (s || 15) + '" height="' + (s || 15) + '" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + (IC25[k] || '') + '</svg>';
+
+  function rebind() {
+    try { injectCSS25(); } catch (e) { }
+    /* bar */
+    try {
+      const bar = $id('av12bar');
+      if (bar) {
+        const q = bar.querySelector('[data-a="qr24"]');
+        if (q && q.dataset.v25 !== '1') {
+          const c = q.cloneNode(true);
+          c.dataset.v25 = '1'; c.title = 'QR Pro — centre icon + minimal density';
+          c.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); openQR25(); }, true);
+          q.parentNode.replaceChild(c, q);
+        }
+        const existing = bar.querySelector('[data-a="sign25"]');
+        const pbNow = bar.querySelector('[data-a="pro24"]');
+        if (existing && pbNow && pbNow.nextSibling !== existing) pbNow.parentNode.insertBefore(existing, pbNow.nextSibling);
+        if (!existing) {
+          const mk = (id, icon, label, title, fn) => {
+            const b = document.createElement('button');
+            b.dataset.a = id; b.title = title;
+            b.innerHTML = ic25(icon, 15) + '<span class="t">' + label + '</span>';
+            b.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); fn(); }, true);
+            return b;
+          };
+          const pb = bar.querySelector('[data-a="pro24"]');
+          const sb = mk('sign25', 'sign', 'Signage', 'Retail signage board — 1:1 se 10:1 tak, production file');
+          if (pb && pb.nextSibling) bar.insertBefore(sb, pb.nextSibling); else bar.appendChild(sb);
+        }
+      }
+    } catch (e) { }
+    /* side quick cards */
+    try {
+      const qc = $id('av17quick');
+      if (qc) {
+        const q = qc.querySelector('[data-q="qr24"]');
+        if (q && q.dataset.v25 !== '1') {
+          const c = q.cloneNode(true);
+          c.dataset.v25 = '1';
+          c.innerHTML = '<i>' + ic25('qr', 15) + '</i><b>QR code</b><small>icon · minimal</small>';
+          c.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); openQR25(); }, true);
+          q.parentNode.replaceChild(c, q);
+        }
+        const ex2 = qc.querySelector('[data-q="sign25"]');
+        const p2n = qc.querySelector('[data-q="pro24"]');
+        if (ex2 && p2n && p2n.nextSibling !== ex2) p2n.parentNode.insertBefore(ex2, p2n.nextSibling);
+        if (!ex2) {
+          const c = document.createElement('button');
+          c.className = 'qa'; c.dataset.q = 'sign25'; c.title = 'Retail signage board';
+          c.innerHTML = '<i>' + ic25('sign', 15) + '</i><b>Signage</b><small>1:1 – 10:1</small>';
+          c.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); openSign25(); }, true);
+          qc.appendChild(c);
+        }
+      }
+    } catch (e) { }
+    /* menu */
+    try {
+      if (typeof MENUS !== 'undefined' && MENUS.File) {
+        MENUS.File.forEach(it => {
+          if (it && typeof it === 'object' && /QR Code generator/i.test(it.l || '')) { it.l = 'QR Pro (icon + minimal)…'; it.a = openQR25; }
+        });
+        if (!MENUS.File.some(it => it && /Signage/i.test(it.l || ''))) {
+          MENUS.File.unshift({ l: 'Signage board (1:1 … 10:1)…', a: openSign25 }, '-');
+        }
+      }
+    } catch (e) { }
+    /* hub cards */
+    try {
+      document.querySelectorAll('#av23hub .hubgrid').forEach(grid => {
+        const q = grid.querySelector('[data-h="qr24"]');
+        if (q && q.dataset.v25 !== '1') {
+          const c = q.cloneNode(true);
+          c.dataset.v25 = '1';
+          c.querySelector('b').textContent = 'QR Pro — icon + minimal';
+          c.querySelector('small').textContent = 'Centre logo, kam modules, aasan scan. PNG + vector SVG.';
+          c.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); close25(); setTimeout(openQR25, 150); }, true);
+          q.parentNode.replaceChild(c, q);
+        }
+        if (!grid.querySelector('[data-h="sign25"]')) {
+          const b = document.createElement('button');
+          b.className = 'hubcard'; b.dataset.h = 'sign25';
+          b.innerHTML = '<span class="ic" style="background:linear-gradient(135deg,#6D28D9,#8B5CF6)">' + ic25('sign', 20) + '</span>' +
+            '<span><b>Signage &amp; retail board</b><small>7 ratios — 1:1, 1:2, 2:1, 3:1, 4:1, 5:1, 10:1 · production PDF + JPG + specs.</small></span>';
+          b.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); close25(); setTimeout(openSign25, 150); }, true);
+          grid.appendChild(b);
+        }
+      });
+    } catch (e) { }
+  }
+
+  function initV25() {
+    rebind();
+    try {
+      if (!window.__obs25 && window.MutationObserver) {
+        let t = null;
+        const mo = new MutationObserver(function () { clearTimeout(t); t = setTimeout(rebind, 120); });
+        mo.observe(document.body, { childList: true, subtree: true });
+        window.__obs25 = mo;
+      }
+    } catch (e) { }
+    setTimeout(rebind, 600);
+    setTimeout(rebind, 1600);
+    setTimeout(rebind, 2600);
+    setTimeout(rebind, 4200);
+  }
+
+  window.AV25 = {
+    version: '25.0',
+    qr: {
+      encode: (t, o) => QR.encode(t, o || {}),
+      plan: (t, ec) => QR.plan(t, ec),
+      canvas: (t, px, o) => {
+        const st = Object.assign({}, QS, o || {});
+        const kind = st.icon || 'none';
+        const qr = QR.encode(t, { ec: kind !== 'none' ? 'H' : (st.ec || 'auto') });
+        const icon = kind !== 'none' ? { kind, img: st.img || null, sizePct: st.sizePct || 18, color: st.dark || '#000000' } : null;
+        return QR.toCanvas(qr, px, { dark: st.dark, light: st.light, quiet: st.quiet, icon });
+      },
+      svg: (t, o) => {
+        const st = Object.assign({}, QS, o || {});
+        const kind = st.icon || 'none';
+        const qr = QR.encode(t, { ec: kind !== 'none' ? 'H' : (st.ec || 'auto') });
+        const icon = kind !== 'none' ? { kind, img: st.img || null, sizePct: st.sizePct || 18, color: st.dark || '#000000' } : null;
+        return QR.toSVG(qr, st.quiet ? { dark: st.dark, light: st.light, quiet: st.quiet, icon } : { icon });
+      },
+      logoInfo: (qr, pct) => QR.logoInfo(qr, pct),
+      iconCanvas: QR.iconCanvas,
+      state: QS
+    },
+    openQR: openQR25, openSign: openSign25, buildSign, signLayout, signSpecs, signCfg,
+    pxPlan, sizes: SIGN_SIZES, styles: SIGN_STYLES, rebind, insertQR: insertQR25
+  };
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initV25);
+  else initV25();
+  setTimeout(initV25, 900);
+  setTimeout(initV25, 2400);
 })();
 
 </script>
