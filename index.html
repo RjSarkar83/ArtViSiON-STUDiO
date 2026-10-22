@@ -14016,5 +14016,3432 @@ window.CDR = CDR;
 
 </script>
 
+<script id="av19-upgrade">
+
+
+/* ============================================================
+   ArtViSiON STUDiO · v12 COMPAT UPGRADE  (for the old index.html)
+   ------------------------------------------------------------
+   Ye file purane app ke UPAR chalti hai. Purana code chhua nahi
+   gaya — sirf missing/broken cheezein fix + naya click-first UI.
+
+   Lagane ka tarika: index.html me </body> se just pehle
+       <script src="v12-upgrade.js"><\/script>
+   ============================================================ */
+(function () {
+  'use strict';
+  if (window.__AV12) return;
+  window.__AV12 = true;
+
+  const LOG = (...a) => console.log('%c[AV12]', 'color:#7c5cff;font-weight:bold', ...a);
+  const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+  const TAU = Math.PI * 2;
+
+  /* ============================================================
+     0. tiny helpers (independent of the host app)
+     ============================================================ */
+  function hexToRgb(h) {
+    h = String(h || '#000').replace('#', '');
+    if (h.length === 3) h = h.split('').map(c => c + c).join('');
+    const n = parseInt(h, 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+  }
+  function rgbToHex(r, g, b) {
+    return '#' + [r, g, b].map(v => clamp(Math.round(v), 0, 255).toString(16).padStart(2, '0')).join('');
+  }
+  function cdist(r1, g1, b1, r2, g2, b2) {
+    const dr = r1 - r2, dg = g1 - g2, db = b1 - b2;
+    return Math.sqrt(2 * dr * dr + 4 * dg * dg + 3 * db * db) / 3;
+  }
+
+  /* ============================================================
+     1. CSS — modern palette + our components
+     ============================================================ */
+  const CSS = `
+  :root{
+    --bg:#0a0c11; --p1:#0f1219; --p2:#151a24; --p3:#1c2230;
+    --line:#28313f; --line2:#354155;
+    --tx:#e9edf6; --tx2:#9aa5bb; --tx3:#6f7b91;
+    --acc:#7c5cff; --acc2:#22d3ee; --good:#34d399; --warn:#fbbf24; --bad:#fb7185;
+    --r:12px;
+    --avGrad:linear-gradient(135deg,#7c5cff 0%,#b25cff 45%,#22d3ee 100%);
+  }
+  body{font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif !important;letter-spacing:.005em}
+  ::-webkit-scrollbar-thumb{background:#2b3444;border-radius:8px;border:2px solid var(--p1)}
+  ::-webkit-scrollbar-thumb:hover{background:#3a465c}
+
+  /* ---------- v12 quick bar ---------- */
+  #av12bar{
+    position:fixed; left:calc(50% + 26px); transform:translateX(-50%); bottom:38px; z-index:9990;
+    display:flex; align-items:center; gap:4px; padding:6px; max-width:min(1180px, calc(100vw - 92px));
+    background:rgba(18,23,33,.97); border:1px solid var(--line2); border-radius:16px;
+    box-shadow:0 18px 48px rgba(0,0,0,.55); backdrop-filter:blur(16px);
+    overflow-x:auto; scrollbar-width:none;
+  }
+  #av12bar::-webkit-scrollbar{height:0}
+  #av12bar .av-sep{width:1px;height:24px;background:var(--line);margin:0 3px;flex:none}
+  #av12bar button{
+    position:relative; display:inline-flex; align-items:center; gap:6px; height:38px; padding:0 11px;
+    border-radius:10px; color:var(--tx2); font-weight:700; font-size:11.5px; white-space:nowrap; flex:none;
+    transition:.14s; border:1px solid transparent;
+  }
+  #av12bar button:hover{background:var(--p3); color:#fff; border-color:var(--line2)}
+  #av12bar button.on{background:rgba(124,92,255,.24); color:#fff; border-color:rgba(124,92,255,.6)}
+  #av12bar button.primary{background:var(--avGrad); color:#fff; box-shadow:0 6px 18px rgba(124,92,255,.4)}
+  #av12bar button.primary:hover{filter:brightness(1.08)}
+  #av12bar button.danger{color:#fda4af}
+  #av12bar button.danger:hover{background:#3a1c25;color:#ffd9df}
+  #av12bar svg{width:16px;height:16px;flex:none}
+  #av12bar .av-label{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#55617a;font-weight:800;padding:0 6px}
+
+  /* ---------- layer size card ---------- */
+  #av12card{
+    position:fixed; right:calc(var(--avSideW, 328px) + 14px); bottom:108px; width:262px; z-index:9989;
+    background:rgba(18,23,33,.98); border:1px solid var(--line2); border-radius:14px;
+    box-shadow:0 18px 48px rgba(0,0,0,.55); backdrop-filter:blur(16px);
+    font-size:12px; display:none; overflow:hidden;
+  }
+  #av12card.on{display:block}
+  #av12card .c-h{display:flex;align-items:center;gap:7px;padding:9px 11px;border-bottom:1px solid var(--line)}
+  #av12card .c-h b{font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #av12card .c-h .tag{font-size:9px;padding:2px 5px;border-radius:5px;background:#0007;color:var(--tx3);
+    font-weight:800;letter-spacing:.05em;text-transform:uppercase}
+  #av12card .c-h .x{margin-left:auto;width:20px;height:20px;border-radius:5px;color:var(--tx3);
+    display:grid;place-items:center;flex:none}
+  #av12card .c-h .x:hover{background:#0007;color:#fff}
+  #av12card .c-b{padding:9px 11px;display:flex;flex-direction:column;gap:8px}
+  #av12card .c-row{display:flex;align-items:center;gap:6px}
+  #av12card label{font-size:10px;color:var(--tx3);font-weight:700;letter-spacing:.04em}
+  #av12card .c-in{display:flex;align-items:center;gap:4px;background:#0a0c11;border:1px solid var(--line);
+    border-radius:8px;height:28px;padding:0 6px;flex:1}
+  #av12card .c-in span{font-size:10px;color:var(--tx3);font-weight:700}
+  #av12card .c-in input{width:100%;background:none;border:0;color:var(--tx);font-size:12px;
+    font-weight:700;text-align:right;outline:none;font-variant-numeric:tabular-nums}
+  #av12card .c-btn{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+  #av12card .c-btn button{height:30px;border-radius:8px;background:var(--p3);border:1px solid var(--line);
+    color:var(--tx2);display:grid;place-items:center;transition:.12s}
+  #av12card .c-btn button:hover{background:#2a3242;color:#fff;border-color:var(--line2)}
+  #av12card .c-btn svg{width:15px;height:15px}
+  #av12card .c-btn2{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+  #av12card .c-btn2 button{height:30px;border-radius:8px;background:var(--p3);border:1px solid var(--line);
+    color:var(--tx2);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:5px}
+  #av12card .c-btn2 button:hover{background:#2a3242;color:#fff}
+  #av12card .c-btn2 svg{width:14px;height:14px}
+  #av12card .c-hint{font-size:10px;color:var(--tx3);line-height:1.45}
+  #av12card .c-slider{height:24px;display:flex;align-items:center;gap:7px}
+  #av12card input[type=range]{-webkit-appearance:none;appearance:none;flex:1;height:20px;background:none}
+  #av12card input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:99px;background:#2b3444}
+  #av12card input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;margin-top:-4.5px;
+    border-radius:50%;background:#fff;border:3px solid var(--acc);box-shadow:0 1px 4px #0008}
+
+  /* ---------- av12 modal ---------- */
+  #av12modal{position:fixed;inset:0;z-index:10040;display:none;align-items:center;justify-content:center;
+    background:rgba(4,6,10,.74);backdrop-filter:blur(6px);padding:18px}
+  #av12modal.on{display:flex}
+  #av12modal .m{width:min(620px,100%);max-height:88vh;overflow:auto;background:var(--p1);
+    border:1px solid var(--line2);border-radius:18px;box-shadow:0 30px 80px #000c}
+  #av12modal .m-h{display:flex;align-items:center;gap:9px;padding:14px 16px;border-bottom:1px solid var(--line);
+    position:sticky;top:0;background:var(--p1);z-index:2}
+  #av12modal .m-h h3{margin:0;font-size:14.5px;font-weight:800}
+  #av12modal .m-h .x{margin-left:auto;width:28px;height:28px;border-radius:8px;color:var(--tx2);
+    display:grid;place-items:center}
+  #av12modal .m-h .x:hover{background:var(--p3);color:#fff}
+  #av12modal .m-b{padding:14px 16px;display:flex;flex-direction:column;gap:11px;font-size:12.5px;color:var(--tx2);line-height:1.55}
+  #av12modal .m-f{display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--line);
+    position:sticky;bottom:0;background:var(--p1)}
+  #av12modal .row{display:flex;gap:8px;align-items:center}
+  #av12modal .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  #av12modal .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+  #av12modal .btn{height:32px;padding:0 12px;border-radius:9px;background:var(--p3);border:1px solid var(--line);
+    color:var(--tx);font-weight:700;font-size:12px;display:inline-flex;align-items:center;gap:6px;justify-content:center}
+  #av12modal .btn:hover{background:#2a3242;border-color:var(--line2)}
+  #av12modal .btn.primary{background:var(--avGrad);border:0;color:#fff}
+  #av12modal .btn.on{box-shadow:inset 0 0 0 1.5px var(--acc);color:#fff}
+  #av12modal input[type=number],#av12modal input[type=text],#av12modal select{
+    background:#0a0c11;border:1px solid var(--line);border-radius:8px;height:30px;padding:0 8px;
+    color:var(--tx);font-size:12.5px;width:100%;outline:none}
+  #av12modal input[type=color]{width:30px;height:30px;border:1px solid var(--line2);border-radius:8px;
+    background:none;padding:0}
+  #av12modal input[type=range]{-webkit-appearance:none;width:100%;height:20px;background:none}
+  #av12modal input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:99px;background:#2b3444}
+  #av12modal input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;
+    margin-top:-5px;border-radius:50%;background:#fff;border:3px solid var(--acc)}
+  #av12modal .preview{background:conic-gradient(#2a3040 0 25%,#222836 0 50%,#2a3040 0 75%,#222836 0) 0 0/14px 14px;
+    border:1px solid var(--line);border-radius:10px;display:grid;place-items:center;min-height:180px;overflow:hidden}
+  #av12modal canvas{max-width:100%;max-height:260px;display:block}
+  #av12modal .sw{width:20px;height:20px;border-radius:5px;border:1px solid #ffffff22;cursor:pointer;flex:none}
+  #av12modal .sw:hover{transform:scale(1.14)}
+  .av12-toast{position:fixed;left:50%;transform:translateX(-50%);bottom:100px;z-index:9999;
+    background:rgba(22,28,38,.98);border:1px solid var(--line2);border-radius:11px;padding:9px 14px;
+    font-size:12.5px;font-weight:700;color:#eaf0ff;box-shadow:0 12px 32px #0009;opacity:0;transition:.22s}
+  .av12-toast.on{opacity:1;transform:translateX(-50%) translateY(-6px)}
+  .av12-toast.ok{border-color:#1d5545;background:rgba(16,44,36,.98)}
+  .av12-toast.err{border-color:#5b2532;background:rgba(46,20,26,.98)}
+
+
+  /* ============================================================
+     v14 · LIGHT "soft grey space" THEME  (default)  + dark fallback
+     ============================================================ */
+  html.av-light{
+    color-scheme:light;
+    --bg:#F4F5F7; --p1:#FFFFFF; --p2:#FBFBFC; --p3:#F0F1F4;
+    --line:#E5E8ED; --line2:#D4DAE2;
+    --tx:#15171C; --tx2:#535B69; --tx3:#767E8C;
+    --acc:var(--avBrand,#F54927); --acc2:var(--avBrand2,#1D7BF5);
+    --good:#0E9F6E; --warn:#C77A0A; --bad:#E0413A;
+    --avBrand:#F54927; --avBrand2:#1D7BF5; --avSoft:#FDECE8; --avSoft2:#E8F1FE;
+    --avShadow:0 18px 44px rgba(17,24,39,.12);
+    --avShadowSm:0 8px 22px rgba(17,24,39,.10);
+  }
+  html.av-light body{background:var(--bg);color:var(--tx)}
+  html.av-light ::-webkit-scrollbar-thumb{background:#C9CFD8;border:2px solid var(--p1)}
+  html.av-light ::-webkit-scrollbar-thumb:hover{background:#B2BAC6}
+
+  /* chrome */
+  html.av-light #topbar{background:#FFFFFF;border-bottom:1px solid var(--line);box-shadow:0 1px 0 rgba(17,24,39,.03)}
+  html.av-light #toolrail{background:#FFFFFF;border-right:1px solid var(--line)}
+  html.av-light #side{background:#FFFFFF;border-left:1px solid var(--line)}
+  html.av-light #stage{background:#EDEEF1}
+  html.av-light #statusbar{background:rgba(255,255,255,.94);border-top:1px solid var(--line);color:var(--tx2)}
+  html.av-light #menuRoot{background:#FFFFFF;border:1px solid var(--line2);box-shadow:0 16px 40px rgba(17,24,39,.16)}
+  html.av-light .ctxmenu{background:#FFFFFF;border:1px solid var(--line2);box-shadow:0 16px 40px rgba(17,24,39,.16)}
+  html.av-light .ctxsep{background:var(--line)}
+  html.av-light .mi:hover,html.av-light .menu .mi:hover{background:var(--avSoft);color:var(--tx)}
+  html.av-light .toast{background:#FFFFFF;border:1px solid var(--line2);border-left:3px solid var(--acc);color:var(--tx);box-shadow:0 12px 30px rgba(17,24,39,.14)}
+  html.av-light .modal{background:#FFFFFF;border:1px solid var(--line2);box-shadow:0 30px 80px rgba(17,24,39,.22)}
+  html.av-light .btn.danger:hover{background:#FDECEA}
+
+  /* home launcher + creator studio + library */
+  html.av-light .homebox{background:#FFFFFF;border:1px solid var(--line2);box-shadow:0 28px 72px rgba(17,24,39,.2)}
+  html.av-light .hcard{background:#FBFBFC;border:1px solid var(--line)}
+  html.av-light .hcard:hover{background:#FFFFFF;border-color:var(--acc);box-shadow:0 6px 18px rgba(245,73,39,.12)}
+  html.av-light .hbtn{background:#FFFFFF;border:1px solid var(--line2);color:var(--tx)}
+  html.av-light .hbtn:hover{border-color:var(--acc);color:var(--acc)}
+  html.av-light .palbox{background:#FFFFFF;border:1px solid var(--line2);box-shadow:0 28px 72px rgba(17,24,39,.2)}
+  html.av-light .palinp{background:#F7F8FA;color:var(--tx);border-bottom:1px solid var(--line)}
+  html.av-light .moodbox{background:#FFFFFF;border:1px solid var(--line2);box-shadow:var(--avShadow)}
+  html.av-light .moodhead{border-bottom:1px solid var(--line);color:var(--tx)}
+  html.av-light .mitem2,html.av-light .libcell,html.av-light .tchip,html.av-light .btab{border-color:var(--line)}
+  html.av-light .tchip:hover,html.av-light .btab:hover{border-color:var(--acc);color:var(--acc)}
+  html.av-light .libcell canvas,html.av-light .libcell img{background:#F4F5F7}
+  html.av-light .fcell{border-color:var(--line)}
+  html.av-light .fcell:hover{border-color:var(--acc)}
+
+  /* checkerboard (canvas transparency) → light */
+  html.av-light .lrow canvas,html.av-light .tframe canvas{
+    background:conic-gradient(#E6E8EC 25%,#F7F8FA 0 50%,#E6E8EC 0 75%,#F7F8FA 0) 0 0/10px 10px}
+  html.av-light .lact.off{color:#C3C9D2}
+
+  /* generic controls that were tuned for dark */
+  html.av-light input:not([type=range]):not([type=color]),html.av-light select,html.av-light textarea{
+    background:#FFFFFF;border:1px solid var(--line2);color:var(--tx);border-radius:7px}
+  html.av-light input:focus,html.av-light select:focus,html.av-light textarea:focus{
+    outline:none;border-color:var(--acc);box-shadow:0 0 0 3px rgba(245,73,39,.14)}
+  html.av-light .btn{background:#FFFFFF;border:1px solid var(--line2);color:var(--tx)}
+  html.av-light .btn:hover{border-color:var(--acc);color:var(--acc)}
+  html.av-light .btn.acc,html.av-light .btn.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+  html.av-light .btn.acc:hover,html.av-light .btn.primary:hover{filter:brightness(.95);color:#fff}
+  html.av-light .sec-h,html.av-light .secH{color:var(--tx2)}
+  html.av-light .tool:hover{background:var(--avSoft)}
+  html.av-light .tool.on{background:var(--acc);color:#fff}
+  html.av-light .pnote{background:#F7F8FA;border:1px solid var(--line);color:var(--tx2)}
+  html.av-light .lrow.on,html.av-light .lrow.active{background:var(--avSoft);box-shadow:inset 2px 0 0 var(--acc)}
+  html.av-light .kbd{background:#F1F2F5;border:1px solid var(--line2);color:var(--tx2)}
+
+  html.av-light .mark,html.av-light #logo .mark{background:linear-gradient(135deg,var(--avBrand,#F54927),var(--avBrand2,#1D7BF5));color:#fff}
+  html.av-light #logo b{background:linear-gradient(90deg,#F54927,#B23A1D);-webkit-background-clip:text;background-clip:text;color:transparent}
+  html.av-light #logo span{color:#8B93A1}
+  html.av-light .tool{color:#59616F}
+  html.av-light .tool:hover{background:#F2F3F6;color:#15171C}
+  html.av-light .tool.on{background:var(--acc)!important;color:#fff!important;box-shadow:0 6px 16px rgba(245,73,39,.3)!important}
+  html.av-light #toolrail{background:#FAFAFB}
+  #toolrail{padding-bottom:58px}
+  html.av-light .btab{background:#fff;color:var(--tx2);border-color:var(--line)}
+  html.av-light .btab.on{color:var(--tx);background:var(--avSoft);border-color:var(--acc)}
+  html.av-light .btab.add:hover{color:var(--acc);border-color:var(--acc)}
+  html.av-light .bname{color:inherit}
+  html.av-light .lrow:hover{background:#F7F8FA}
+  html.av-light .pnote b,html.av-light .sec-h b{color:var(--tx)}
+  html.av-light .prow label,html.av-light .plabel{color:var(--tx2)}
+
+  /* our own widgets in light mode */
+  html.av-light #av12bar{background:rgba(255,255,255,.97);border:1px solid var(--line2);box-shadow:0 16px 40px rgba(17,24,39,.16)}
+  html.av-light #av12bar button{color:#59616F}
+  html.av-light #av12bar button:hover{background:#F4F5F7;color:var(--tx);border-color:var(--line2)}
+  html.av-light #av12bar button.on{background:var(--avSoft);color:var(--acc);border-color:rgba(245,73,39,.45)}
+  html.av-light #av12bar button.primary{background:var(--acc);color:#fff;box-shadow:0 8px 20px rgba(245,73,39,.32)}
+  html.av-light #av12bar button.danger{color:#D33B33}
+  html.av-light #av12bar button.danger:hover{background:#FDECEA}
+  html.av-light #av12bar .av-sep{background:var(--line)}
+  html.av-light #av12card{background:rgba(255,255,255,.99);border:1px solid var(--line2);box-shadow:0 18px 46px rgba(17,24,39,.18)}
+  html.av-light #av12card .c-h{border-bottom:1px solid var(--line)}
+  html.av-light #av12card .c-in{background:#F7F8FA;border:1px solid var(--line)}
+  html.av-light #av12card .c-in input{background:transparent;color:var(--tx)}
+  html.av-light #av12card .c-btn button,html.av-light #av12card .c-btn2 button{background:#F7F8FA;border:1px solid var(--line);color:var(--tx2)}
+  html.av-light #av12card .c-btn button:hover,html.av-light #av12card .c-btn2 button:hover{border-color:var(--acc);color:var(--acc)}
+  html.av-light #av12card .c-hint{color:var(--tx3)}
+  html.av-light #av12card .tag{background:var(--avSoft);color:var(--acc)}
+  html.av-light #av12card #av12clock{background:#F7F8FA !important;border:1px solid var(--line) !important;color:var(--tx2)}
+  html.av-light #av12modal{background:rgba(17,24,39,.34)}
+  html.av-light #av12modal .m{background:#fff;border:1px solid var(--line2);box-shadow:0 30px 80px rgba(17,24,39,.22)}
+  html.av-light #av12modal .m-h{border-bottom:1px solid var(--line)}
+  html.av-light #av12modal .m-f{border-top:1px solid var(--line);background:#FAFAFB}
+  html.av-light #av12modal .grid4 button,html.av-light #av12modal .btn{background:#F7F8FA;border:1px solid var(--line);color:var(--tx)}
+  html.av-light #av12modal .grid4 button:hover{background:#fff;border-color:var(--acc);color:var(--acc)}
+  html.av-light #av12modal .grid4 button.on{background:var(--avSoft);border-color:var(--acc);color:var(--acc)}
+  html.av-light #av12modal .btn.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+  html.av-light #av12modal .preview{background:#F4F5F7;border:1px solid var(--line)}
+  html.av-light .av12-toast{background:#fff;border:1px solid var(--line2);color:var(--tx);box-shadow:0 12px 32px rgba(17,24,39,.16)}
+  html.av-light .av12-toast.ok{border-color:#B7E6D2;background:#F1FBF6}
+  html.av-light .av12-toast.err{border-color:#F6C9C5;background:#FDF2F1}
+
+  /* brand palette panel */
+  #av14brand .bgrid{display:grid;grid-template-columns:repeat(10,1fr);gap:6px;margin:6px 0 2px}
+  #av14brand .bsw{height:44px;border-radius:8px;border:1px solid rgba(17,24,39,.09);cursor:pointer;position:relative;transition:transform .12s}
+  #av14brand .bsw:hover{transform:translateY(-2px)}
+  #av14brand .bsw b{position:absolute;bottom:3px;left:0;right:0;text-align:center;font:700 8.5px/1 ui-monospace,monospace;opacity:.85}
+  #av14brand .brow{display:flex;align-items:center;gap:10px;margin:12px 0 2px}
+  #av14brand .brow .lbl{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--tx3);min-width:76px}
+  #av14brand .bhead{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  #av14brand .bcard{flex:1;min-width:150px;border:1px solid var(--line);border-radius:10px;padding:9px 11px;background:#FAFAFB}
+  #av14brand .bcard small{display:block;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--tx3);font-weight:800}
+  #av14brand .bcard b{font:700 14px/1.5 ui-monospace,monospace}
+  #av14brand .bacts{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+  #av14brand .bacts button{flex:1;min-width:120px;height:34px;border-radius:9px;border:1px solid var(--line2);background:#fff;font-weight:700;font-size:12px;color:var(--tx)}
+  #av14brand .bacts button:hover{border-color:var(--acc);color:var(--acc)}
+  #av14brand .bacts button.pri{background:var(--acc);border-color:var(--acc);color:#fff}
+  #av14brand .bharm{display:flex;gap:6px;flex-wrap:wrap}
+  #av14brand .bharm button{height:30px;padding:0 11px;border-radius:999px;border:1px solid var(--line2);background:#fff;font-size:11.5px;font-weight:700;color:var(--tx2)}
+  #av14brand .bharm button.on{background:var(--avSoft);border-color:var(--acc);color:var(--acc)}
+  #av14brand input[type=color]{width:44px;height:34px;border:1px solid var(--line2);border-radius:8px;background:#fff;padding:2px;cursor:pointer}
+  #av14brand .bhint{font-size:11.5px;color:var(--tx3);margin-top:10px;line-height:1.55}
+
+  @media (max-width:1100px){
+    #av12card{right:12px;bottom:150px}
+    #av12bar{left:calc(50% + 24px);max-width:calc(100vw - 76px)}
+  }
+  @media (max-width:760px){
+    #av12bar{bottom:72px;padding:4px;left:8px;right:8px;transform:none;max-width:none;border-radius:12px}
+    #av12bar button{height:34px;padding:0 8px;font-size:10.5px}
+    #av12bar button .t{display:none}
+    #av12card{right:8px;left:8px;width:auto;max-width:none;bottom:132px;z-index:9989}
+    #av12card .c-btn2 button{font-size:10.5px;padding:0 6px}
+    #av12card .c-h{padding:7px 10px}
+    #av12card .c-b{padding:8px 10px 9px;gap:6px}
+    #av12card .c-hint{display:none}
+    #av12card .c-btn button{height:30px}
+    .av12-toast{bottom:auto;top:74px;max-width:calc(100vw - 24px);text-align:center}
+    #toolrail{padding-bottom:6px}
+    #toasts{bottom:auto!important;top:62px!important;align-items:flex-start!important}
+  }
+  `;
+  function injectCSS() {
+    const s = document.createElement('style');
+    s.id = 'av12-style';
+    s.textContent = CSS;
+    document.head.appendChild(s);
+  }
+
+  /* ============================================================
+     2. icons
+     ============================================================ */
+  const I = {
+    scissors: '<path d="M6 6l12 12M18 6L6 18" stroke-width="1.7"/><circle cx="5" cy="6" r="2.4"/><circle cx="5" cy="18" r="2.4"/>',
+    wand: '<path d="M4 20L15 9"/><path d="M15 4l1 2.6L18.6 8l-2.6 1L15 11.6l-1-2.6L11.4 8l2.6-1.4z"/><path d="M6 4l.6 1.4L8 6l-1.4.6L6 8l-.6-1.4L4 6l1.4-.6z"/>',
+    resize: '<path d="M4 9V4h5M20 15v5h-5"/><path d="M4 4l6 6M20 20l-6-6"/><path d="M14 4h6v6M10 20H4v-6"/>',
+    fit: '<path d="M4 9V5a1 1 0 011-1h4M20 9V5a1 1 0 00-1-1h-4M4 15v4a1 1 0 001 1h4M20 15v4a1 1 0 01-1 1h-4"/>',
+    center: '<rect x="3" y="4" width="18" height="16" rx="1" stroke-dasharray="3 3"/><rect x="9" y="8" width="6" height="8" rx="1"/>',
+    copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 00-1-1H5a1 1 0 00-1 1v10a1 1 0 001 1h3"/>',
+    trash: '<path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/>',
+    download: '<path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/>',
+    filter: '<path d="M4 5h16l-6 7v7l-4-3v-4z"/>',
+    text: '<path d="M5 6h14M12 6v13M9 19h6"/>',
+    fliph: '<path d="M12 3v18"/><path d="M8 7L4 12l4 5zM16 7l4 5-4 5z"/>',
+    flipv: '<path d="M3 12h18"/><path d="M7 8l5-4 5 4zM7 16l5 4 5-4z"/>',
+    rot: '<path d="M20 12a8 8 0 11-3-6.2"/><path d="M20 4v5h-5"/>',
+    check: '<path d="M5 12.5l5 5L19 7"/>',
+    x: '<path d="M6 6l12 12M18 6L6 18"/>',
+    sparkle: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M18.5 15l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/>',
+    lock: '<rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/>',
+    unlock: '<rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 017.5-2"/>',
+    mask: '<circle cx="12" cy="12" r="8"/><path d="M12 4v16a8 8 0 000-16z" fill="currentColor" stroke="none"/>',
+    cut: '<circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><path d="M8 7.5L20 18M8 16.5L20 6"/>',
+    layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/>',
+    select: '<path d="M5.5 3.2l13 7.8-6 1.4-2.6 6.2z"/>',
+    sun: '<circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.2 5.2l1.6 1.6M17.2 17.2l1.6 1.6M18.8 5.2l-1.6 1.6M6.8 17.2l-1.6 1.6"/>',
+    moon: '<path d="M20 14.4A8.4 8.4 0 1 1 9.6 4a6.8 6.8 0 0 0 10.4 10.4z"/>',
+    palette: '<path d="M12 3a9 9 0 1 0 0 18c1.4 0 1.9-1 1.4-1.9-.6-1.1.2-2.3 1.6-2.3H17a4 4 0 0 0 4-4c0-5.3-4-9.8-9-9.8z"/><circle cx="7.6" cy="11" r="1.15" fill="currentColor" stroke="none"/><circle cx="10.4" cy="7.3" r="1.15" fill="currentColor" stroke="none"/><circle cx="15" cy="7.6" r="1.15" fill="currentColor" stroke="none"/>',
+    crop: '<path d="M6.4 2.6v15h15"/><path d="M2.6 6.4h15v15"/>',
+    open: '<path d="M3 7.5A1.5 1.5 0 014.5 6H9l1.8 2.2h8.7A1.5 1.5 0 0121 9.7v8.8A1.5 1.5 0 0119.5 20h-15A1.5 1.5 0 013 18.5z"/>',
+    star: '<path d="M12 3.4l2.6 5.5 6 .8-4.4 4.2 1.1 6-5.3-2.9-5.3 2.9 1.1-6L3.4 9.7l6-.8z"/>',
+    question: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 114 2c-.9.7-1.5 1.2-1.5 2.5"/><path d="M12 17.2v.1"/>',
+  };
+  const svg = (k, s = 16) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${I[k] || I.question}</svg>`;
+
+  function avToast(msg, cls = '', ms = 2200) {
+    const t = document.createElement('div');
+    t.className = 'av12-toast ' + cls;
+    t.textContent = msg;
+    document.body.appendChild(t);
+    requestAnimationFrame(() => t.classList.add('on'));
+    setTimeout(() => { t.classList.remove('on'); setTimeout(() => t.remove(), 300); }, ms);
+  }
+
+  /* ============================================================
+     3. app bridges (purane app ke functions)
+     ============================================================ */
+  const A = {}; // resolved host functions
+  function bindHost() {
+    A.doc = () => doc;
+    A.layers = () => (typeof allLayersFlat === 'function' ? allLayersFlat() : doc.layers);
+    A.active = () => (typeof activeLayer === 'function' ? activeLayer() : doc.layers[doc.layers.length - 1]);
+    A.mkCanvas = mkCanvas;
+    A.need = () => { needRender = true; };
+    A.undoPush = (label) => { try { pushUndo(); } catch (e) { } };
+    A.ui = () => { try { uiLayers(); uiProps(); } catch (e) { } try { uiLayersRefresh(); } catch (e) { } try { syncCard(); } catch (e) { } };
+    A.toast = (m, c, ms) => { try { toast(m, c, ms); } catch (e) { avToast(m, c, ms); } };
+    A.bake = (L) => { try { bakeOffset(L); } catch (e) { } };
+    A.bump = (L) => { try { layerVerBump(L); } catch (e) { L.ver = (L.ver || 0) + 1; L.thumbDirty = true; } };
+    A.zoom = () => zoom;
+    A.pan = () => ({ x: panX, y: panY });
+  }
+
+  /* raster layer bbox (alpha > 8) */
+  /* replace a raster layer's canvas (undo-safe: snapshot holds the old object) */
+  function replaceCanvas(L, painter) {
+    const c = mkCanvas(doc.w, doc.h);
+    const g = c.getContext('2d', { willReadFrequently: true });
+    painter(g, c);
+    L.canvas = c; L.offset = { x: 0, y: 0 };
+    A.bump(L); docDirty = true; needRender = true;
+    try { uiLayersRefresh(); } catch (e) { }
+    A.ui();
+  }
+
+  function rasterBBox(L) {
+    const w = doc.w, h = doc.h;
+    let x0 = w, y0 = h, x1 = -1, y1 = -1;
+    let d;
+    try {
+      d = L.canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, h).data;
+    } catch (e) { return { x: 0, y: 0, w, h }; }
+    for (let y = 0; y < h; y++) {
+      const row = y * w;
+      for (let x = 0; x < w; x++) {
+        if (d[(row + x) * 4 + 3] > 8) {
+          if (x < x0) x0 = x; if (x > x1) x1 = x;
+          if (y < y0) y0 = y; if (y > y1) y1 = y;
+        }
+      }
+    }
+    if (x1 < 0) return null;
+    return { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+  }
+  function alphaAt(L, p) {
+    if (L.type !== 'raster' || !L.canvas) return 0;
+    const ox = L.offset ? L.offset.x : 0, oy = L.offset ? L.offset.y : 0;
+    const x = Math.floor(p.x - ox), y = Math.floor(p.y - oy);
+    if (x < 0 || y < 0 || x >= doc.w || y >= doc.h) return 0;
+    try {
+      return L.canvas.getContext('2d', { willReadFrequently: true }).getImageData(x, y, 1, 1).data[3];
+    } catch (e) { return 0; }
+  }
+  function pickLayerAt(p) {
+    const ls = A.layers();
+    for (let i = ls.length - 1; i >= 0; i--) {
+      const L = ls[i];
+      if (!L.visible || L.locked) continue;
+      if (L.type === 'raster' && alphaAt(L, p) > 12) return L;
+      if (L.type === 'vector' && Array.isArray(L.shapes) && L.shapes.length) {
+        // cheap bbox test
+        let minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
+        for (const s of L.shapes) {
+          if (!s) continue;
+          try {
+            const b = shapeBBoxDoc ? shapeBBoxDoc(s) : null;
+            if (b) { minX = Math.min(minX, b.x); minY = Math.min(minY, b.y); maxX = Math.max(maxX, b.x2); maxY = Math.max(maxY, b.y2); }
+          } catch (e) { }
+        }
+        if (maxX > minX && p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY) return L;
+      }
+    }
+    return null;
+  }
+
+  /* composite of all visible layers (for sampling) */
+  function compositeData() {
+    const c = mkCanvas(doc.w, doc.h);
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, c.height);
+    for (const L of A.layers()) {
+      if (!L.visible) continue;
+      if (L.type === 'raster' && L.canvas) {
+        g.globalAlpha = L.opacity == null ? 1 : L.opacity;
+        g.drawImage(L.canvas, (L.offset && L.offset.x) || 0, (L.offset && L.offset.y) || 0);
+      } else if (L.type === 'vector' && typeof drawShape === 'function') {
+        try { for (const s of (L.shapes || [])) drawShape(g, s); } catch (e) { }
+      }
+    }
+    g.globalAlpha = 1;
+    return g.getImageData(0, 0, doc.w, doc.h).data;
+  }
+
+  /* ============================================================
+     4. MAGIC WAND v12 (works on what you see)
+     ============================================================ */
+  function wandMaskV12(p, tolPct, contiguous) {
+    const w = doc.w, h = doc.h;
+    const pix = compositeData();
+    const x0 = Math.round(p.x), y0 = Math.round(p.y);
+    if (x0 < 0 || y0 < 0 || x0 >= w || y0 >= h) return null;
+    const si = (y0 * w + x0) * 4;
+    const r0 = pix[si], g0 = pix[si + 1], b0 = pix[si + 2];
+    const tol = 4 + (tolPct / 100) * 130;
+    const mask = new Uint8Array(w * h);
+    const match = i => cdist(pix[i * 4], pix[i * 4 + 1], pix[i * 4 + 2], r0, g0, b0) <= tol;
+    if (!contiguous) {
+      for (let i = 0; i < w * h; i++) if (match(i)) mask[i] = 255;
+    } else {
+      const stack = [y0 * w + x0];
+      const seen = new Uint8Array(w * h);
+      seen[stack[0]] = 1;
+      let guard = 0;
+      while (stack.length && guard++ < w * h * 4) {
+        const i = stack.pop();
+        if (!match(i)) { continue; }
+        mask[i] = 255;
+        const x = i % w, y = (i / w) | 0;
+        const nb = [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, y > 0 ? i - w : -1, y < h - 1 ? i + w : -1];
+        for (const k of nb) if (k >= 0 && !seen[k]) { seen[k] = 1; stack.push(k); }
+      }
+    }
+    return mask;
+  }
+
+  /* ============================================================
+     5. BACKGROUND REMOVE v12 (border-seed smart cutout)
+     ============================================================ */
+  function bgSeeds(pix, w, h, band = 0.022) {
+    const b = Math.max(1, Math.round(Math.min(w, h) * band));
+    const map = new Map();
+    const add = (x, y, edge) => {
+      const i = (y * w + x) * 4;
+      if (pix[i + 3] < 8) return;
+      const key = ((pix[i] >> 3) << 10) | ((pix[i + 1] >> 3) << 5) | (pix[i + 2] >> 3);
+      let e = map.get(key);
+      if (!e) { e = { n: 0, r: 0, g: 0, b: 0, edges: [0, 0, 0, 0] }; map.set(key, e); }
+      e.n++; e.r += pix[i]; e.g += pix[i + 1]; e.b += pix[i + 2]; e.edges[edge]++;
+    };
+    for (let x = 0; x < w; x++) for (let y = 0; y < b; y++) { add(x, y, 0); add(x, h - 1 - y, 2); }
+    for (let y = 0; y < h; y++) for (let x = 0; x < b; x++) { add(x, y, 3); add(w - 1 - x, y, 1); }
+    const per = [w * b, h * b, w * b, h * b];
+    const list = Array.from(map.values()).map(e => {
+      let edges = 0;
+      for (let i = 0; i < 4; i++) if (e.edges[i] / Math.max(1, per[i]) > 0.06) edges++;
+      return { n: e.n, r: e.r / e.n, g: e.g / e.n, b: e.b / e.n, edges };
+    });
+    const multi = list.filter(e => e.edges >= 2).sort((a, b2) => b2.n - a.n);
+    const pool = multi.length ? multi : list.sort((a, b2) => b2.n - a.n);
+    return pool.slice(0, 4);
+  }
+
+  /**
+   * @returns {ImageData} cut-out result (same size as doc)
+   */
+  function cutoutData(opts) {
+    const o = Object.assign({ tol: 34, feather: 2, mode: 'auto', color: null, keepMain: true,
+      decontaminate: true, invert: false, contiguous: true }, opts || {});
+    const W = doc.w, H = doc.h;
+    const L = A.active();
+    if (!L || L.type !== 'raster') return null;
+    A.bake(L);
+    const g0 = L.canvas.getContext('2d', { willReadFrequently: true });
+    const full = g0.getImageData(0, 0, W, H);
+    const srcData = full.data;
+
+    /* --- content bbox: cutout sirf content par chalta hai --- */
+    let x0 = W, y0 = H, x1 = -1, y1 = -1;
+    for (let y = 0; y < H; y++) {
+      const row = y * W;
+      for (let x = 0; x < W; x++) {
+        if (srcData[(row + x) * 4 + 3] > 8) {
+          if (x < x0) x0 = x; if (x > x1) x1 = x;
+          if (y < y0) y0 = y; if (y > y1) y1 = y;
+        }
+      }
+    }
+    if (x1 < 0) return null;
+    const w = x1 - x0 + 1, h = y1 - y0 + 1;
+
+    // sub-rect copy
+    const pix = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++) {
+      const srow = ((y0 + y) * W + x0) * 4;
+      pix.set(srcData.subarray(srow, srow + w * 4), y * w * 4);
+    }
+
+    let seeds = (o.mode === 'click' && o.color)
+      ? [Object.assign({ n: 1, edges: 4 }, hexToRgb(o.color))]
+      : bgSeeds(pix, w, h);
+    if (!seeds.length) {
+      // fallback: sabse common colour (logo / flat background ke liye)
+      const map = new Map();
+      for (let i = 0, p4 = 0; i < w * h; i++, p4 += 4) {
+        if (pix[p4 + 3] < 8) continue;
+        const key = ((pix[p4] >> 3) << 10) | ((pix[p4 + 1] >> 3) << 5) | (pix[p4 + 2] >> 3);
+        let e = map.get(key);
+        if (!e) { e = { n: 0, r: 0, g: 0, b: 0 }; map.set(key, e); }
+        e.n++; e.r += pix[p4]; e.g += pix[p4 + 1]; e.b += pix[p4 + 2];
+      }
+      const arr = Array.from(map.values()).sort((a, b2) => b2.n - a.n).slice(0, 2);
+      seeds = arr.map(e => ({ n: e.n, r: e.r / e.n, g: e.g / e.n, b: e.b / e.n }));
+    }
+    if (!seeds.length) return null;
+
+    const tolPx = 6 + (o.tol / 100) * 110;
+    const band0 = tolPx * 0.72, band1 = tolPx * 1.28;
+
+    // distance to nearest seed colour
+    const dist = new Float32Array(w * h);
+    const nearest = new Uint8Array(w * h);
+    for (let i = 0, p4 = 0; i < w * h; i++, p4 += 4) {
+      let best = 1e9, bi = 0;
+      for (let k = 0; k < seeds.length; k++) {
+        const d = cdist(pix[p4], pix[p4 + 1], pix[p4 + 2], seeds[k].r, seeds[k].g, seeds[k].b);
+        if (d < best) { best = d; bi = k; }
+      }
+      dist[i] = best; nearest[i] = bi;
+    }
+
+    // background mask
+    const bg = new Uint8Array(w * h);
+    for (let i = 0; i < w * h; i++) if (pix[i * 4 + 3] < 8) bg[i] = 1;   // already transparent
+    if (o.mode === 'global' || o.mode === 'click') {
+      for (let i = 0; i < w * h; i++) if (dist[i] <= band1) bg[i] = 1;
+    } else {
+      const stack = new Int32Array(w * h);
+      let sp = 0;
+      const push = i => { if (!bg[i] && dist[i] <= band1) { bg[i] = 1; stack[sp++] = i; } };
+      for (let x = 0; x < w; x++) { push(x); push((h - 1) * w + x); }
+      for (let y = 0; y < h; y++) { push(y * w); push(y * w + w - 1); }
+      while (sp > 0) {
+        const i = stack[--sp];
+        const x = i % w, y = (i / w) | 0;
+        if (x > 0) push(i - 1);
+        if (x < w - 1) push(i + 1);
+        if (y > 0) push(i - w);
+        if (y < h - 1) push(i + w);
+      }
+    }
+
+    // keep only the main subject
+    if (o.keepMain && o.mode !== 'global') {
+      const seen = new Uint8Array(w * h);
+      const comps = [];
+      for (let i = 0; i < w * h; i++) {
+        if (bg[i] || seen[i]) continue;
+        let size = 0, cx = 0, cy = 0;
+        const st = [i]; seen[i] = 1; const idx = [];
+        while (st.length) {
+          const j = st.pop(); size++; idx.push(j);
+          const x = j % w, y = (j / w) | 0;
+          cx += x; cy += y;
+          if (x > 0 && !seen[j - 1] && !bg[j - 1]) { seen[j - 1] = 1; st.push(j - 1); }
+          if (x < w - 1 && !seen[j + 1] && !bg[j + 1]) { seen[j + 1] = 1; st.push(j + 1); }
+          if (y > 0 && !seen[j - w] && !bg[j - w]) { seen[j - w] = 1; st.push(j - w); }
+          if (y < h - 1 && !seen[j + w] && !bg[j + w]) { seen[j + w] = 1; st.push(j + w); }
+        }
+        comps.push({ size, cx: cx / size, cy: cy / size, idx });
+      }
+      comps.sort((a, b2) => b2.size - a.size);
+      if (comps.length) {
+        const big = comps[0].size;
+        for (let ci = 1; ci < comps.length; ci++) {
+          const c = comps[ci];
+          const central = c.cx > w * .18 && c.cx < w * .82 && c.cy > h * .18 && c.cy < h * .82;
+          if (c.size < big * 0.12 || !central) for (const j of c.idx) bg[j] = 1;
+        }
+      }
+    }
+
+    // alpha + colour decontamination
+    const outSub = new Uint8ClampedArray(pix);
+    for (let i = 0, p4 = 0; i < w * h; i++, p4 += 4) {
+      if (pix[p4 + 3] < 8) { outSub[p4 + 3] = 0; continue; }
+      const d = dist[i];
+      let a = 1;
+      if (bg[i]) a = 0;
+      else if (d < band1) a = clamp((d - band0) / Math.max(1e-3, band1 - band0), 0, 1);
+      if (o.invert) a = 1 - a;
+      outSub[p4 + 3] = Math.round(pix[p4 + 3] * a);
+      if (a > .02 && a < .98 && o.decontaminate) {
+        const s = seeds[nearest[i]] || seeds[0];
+        if (s) {
+          outSub[p4] = clamp((pix[p4] - s.r * (1 - a)) / a, 0, 255);
+          outSub[p4 + 1] = clamp((pix[p4 + 1] - s.g * (1 - a)) / a, 0, 255);
+          outSub[p4 + 2] = clamp((pix[p4 + 2] - s.b * (1 - a)) / a, 0, 255);
+        }
+      }
+      if (outSub[p4 + 3] < 6) outSub[p4 + 3] = 0;
+    }
+
+    // paste the sub-rect back into a full-size ImageData
+    const id = new ImageData(W, H);
+    id.data.set(srcData);
+    for (let y = 0; y < h; y++) {
+      const drow = ((y0 + y) * W + x0) * 4;
+      id.data.set(outSub.subarray(y * w * 4, (y + 1) * w * 4), drow);
+    }
+    if (o.feather > 0) {
+      const f = featherImageData(id, o.feather);
+      // feathering blurs RGB too — restore original RGB where alpha > 0
+      for (let i = 0; i < f.data.length; i += 4) {
+        if (f.data[i + 3] > 0) {
+          f.data[i] = id.data[i]; f.data[i + 1] = id.data[i + 1]; f.data[i + 2] = id.data[i + 2];
+        }
+      }
+      return f;
+    }
+    return id;
+  }
+
+  function featherImageData(id, r) {
+    const c = mkCanvas(id.width, id.height);
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.putImageData(id, 0, 0);
+    const c2 = mkCanvas(id.width, id.height);
+    const g2 = c2.getContext('2d', { willReadFrequently: true });
+    g2.filter = `blur(${r}px)`;
+    g2.drawImage(c, 0, 0);
+    const d = g2.getImageData(0, 0, id.width, id.height);
+    for (let i = 3; i < d.data.length; i += 4) if (d.data[i] < 10) d.data[i] = 0;
+    return d;
+  }
+
+  function applyCutout(id, label) {
+    const L = A.active();
+    if (!L || L.type !== 'raster') { A.toast('Pehle bitmap layer select karo', 'err'); return false; }
+    A.bake(L);
+    A.undoPush();
+    replaceCanvas(L, g => g.putImageData(id, 0, 0));
+    A.toast(label || 'Background removed', 'ok', 2200);
+    return true;
+  }
+
+  /* public: one-click background remove (also replaces Image ▸ Remove Background) */
+  function bgRemoveV12() {
+    const L = A.active();
+    if (!L || L.type !== 'raster') {
+      A.toast('Pehle image / bitmap layer par click karo', 'err', 2600);
+      return;
+    }
+    const t0 = performance.now();
+    // how much is opaque right now? (safety rail against wiping the whole layer)
+    let before = 0, total = 0;
+    try {
+      const d = L.canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, doc.w, doc.h).data;
+      for (let i = 3; i < d.length; i += 4) { if (d[i] > 16) before++; total++; }
+    } catch (e) { }
+    if (!before) { A.toast('Layer khali hai — pehle image import karo', 'err', 2400); return; }
+    const id = cutoutData({ tol: 34, feather: 2, mode: 'auto' });
+    if (!id) { A.toast('Cutout fail — layer khali lagti hai', 'err'); return; }
+    let after = 0;
+    for (let i = 3; i < id.data.length; i += 4) if (id.data[i] > 16) after++;
+    const kept = after / Math.max(1, before);
+    if (kept < 0.06) {
+      A.toast('Background detect nahi hui — Subject button ya Wand se manually select karo', 'err', 4200);
+      return;
+    }
+    if (kept > 0.995) {
+      A.toast('Kuch remove nahi hua — Filters ▸ Wand se try karo (image ka background uniform nahi hai)', 'err', 4200);
+      return;
+    }
+    applyCutout(id, `Background removed · ${Math.round(performance.now() - t0)} ms`);
+  }
+
+  /* ============================================================
+     6. layer resize / transform helpers
+     ============================================================ */
+  /* ---------- vector / group layer geometry (v13 fix) ---------- */
+  function shapesOf(L) {
+    if (!L) return [];
+    if (L.type === 'vector') return L.shapes || [];
+    if (L.type === 'group') { const out = []; for (const c of (L.children || [])) out.push(...shapesOf(c)); return out; }
+    return [];
+  }
+  function vectorBBox(L) {
+    let x = 1e9, y = 1e9, x2 = -1e9, y2 = -1e9, any = false;
+    for (const s of shapesOf(L)) {
+      let bb = null;
+      try { bb = (typeof shapeBBoxDoc === 'function') ? shapeBBoxDoc(s) : null; } catch (e) { bb = null; }
+      if (!bb || !isFinite(bb.x) || !isFinite(bb.x2)) continue;
+      any = true;
+      x = Math.min(x, bb.x); y = Math.min(y, bb.y);
+      x2 = Math.max(x2, bb.x2); y2 = Math.max(y2, bb.y2);
+    }
+    if (!any || x2 <= x) return null;
+    return { x, y, w: Math.max(0.01, x2 - x), h: Math.max(0.01, y2 - y) };
+  }
+  /* bbox of any layer type — used by the size card (cached per layer version) */
+  const _bbCache = new WeakMap();
+  function layerBBox(L, useCache) {
+    if (!L) return null;
+    if (L.type === 'raster') {
+      if (useCache) {
+        const key = (L.ver || 0) + ':' + doc.w + 'x' + doc.h;
+        const hit = _bbCache.get(L);
+        if (hit && hit.key === key) return hit.bb;
+        const bb = rasterBBox(L);
+        _bbCache.set(L, { key, bb });
+        return bb;
+      }
+      return rasterBBox(L);
+    }
+    return vectorBBox(L);
+  }
+  function hasRasterChild(L) {
+    if (!L) return false;
+    if (L.type === 'raster') return true;
+    if (L.type === 'group') return (L.children || []).some(hasRasterChild);
+    return false;
+  }
+  /* apply a doc-space matrix to every shape of a vector/group layer */
+  function xformVectorLayer(L, mat) {
+    const shapes = shapesOf(L);
+    if (!shapes.length) return false;
+    for (const s of shapes) { s.t = M.mul(mat, s.t || M.id()); s._dirty = true; }
+    A.bump(L);
+    docDirty = true; needRender = true;
+    A.ui();
+    return true;
+  }
+  function resizeVectorLayer(L, w, h) {
+    const bb = vectorBBox(L);
+    if (!bb) { A.toast('Is layer me koi shape nahi hai', 'err', 2000); return; }
+    A.undoPush();
+    xformVectorLayer(L, M.tScaleAbout(bb.x, bb.y, Math.max(0.01, w) / bb.w, Math.max(0.01, h) / bb.h));
+  }
+  /* ---------- generic (raster + vector) layer ops ---------- */
+  function resizeLayer(L, w, h) {
+    if (!L) return;
+    if (L.type === 'raster') return resizeRasterLayer(L, w, h);
+    if (hasRasterChild(L)) { A.toast('Group me bitmap layer hai — us layer ko alag resize karo', 'err', 2600); return; }
+    return resizeVectorLayer(L, w, h);
+  }
+  function fitLayer(L, mode) {
+    if (!L) return;
+    if (L.type === 'raster') return fitRasterLayer(L, mode);
+    const bb = vectorBBox(L);
+    if (!bb) { A.toast('Is layer me koi shape nahi hai', 'err', 2000); return; }
+    if (hasRasterChild(L)) { A.toast('Group me bitmap layer hai', 'err', 2400); return; }
+    const s = mode === 'fill' ? Math.max(doc.w / bb.w, doc.h / bb.h) : Math.min(doc.w / bb.w, doc.h / bb.h);
+    const w = bb.w * s, h = bb.h * s;
+    A.undoPush();
+    sharedXform(L, M.mul(M.translate((doc.w - w) / 2 - bb.x, (doc.h - h) / 2 - bb.y),
+      M.tScaleAbout(bb.x, bb.y, s, s)));
+    A.toast(mode === 'fill' ? 'Fill canvas' : 'Canvas me fit ✓', 'ok', 1600);
+  }
+  function centerLayer(L) {
+    if (!L) return;
+    if (L.type === 'raster') return centerRasterLayer(L);
+    const bb = vectorBBox(L);
+    if (!bb) { A.toast('Is layer me koi shape nahi hai', 'err', 2000); return; }
+    if (hasRasterChild(L)) { A.toast('Group me bitmap layer hai', 'err', 2400); return; }
+    A.undoPush();
+    sharedXform(L, M.translate((doc.w - bb.w) / 2 - bb.x, (doc.h - bb.h) / 2 - bb.y));
+    A.toast('Center ✓', 'ok', 1400);
+  }
+  function rotateLayer90(L, dir = 1) {
+    if (!L) return;
+    if (L.type === 'raster') return rotRasterLayer90(L, dir);
+    const bb = vectorBBox(L);
+    if (!bb) { A.toast('Is layer me koi shape nahi hai', 'err', 2000); return; }
+    if (hasRasterChild(L)) { A.toast('Group me bitmap layer hai', 'err', 2400); return; }
+    A.undoPush();
+    sharedXform(L, M.tRotAbout(doc.w / 2, doc.h / 2, dir * Math.PI / 2));
+    A.toast('90° rotate ✓', 'ok', 1400);
+  }
+  function flipLayer(L, axis) {
+    if (!L) return;
+    if (L.type === 'raster') return flipRasterLayer(L, axis);
+    const bb = vectorBBox(L);
+    if (!bb) { A.toast('Is layer me koi shape nahi hai', 'err', 2000); return; }
+    if (hasRasterChild(L)) { A.toast('Group me bitmap layer hai', 'err', 2400); return; }
+    A.undoPush();
+    sharedXform(L, M.tScaleAbout(bb.x + bb.w / 2, bb.y + bb.h / 2,
+      axis === 'h' ? -1 : 1, axis === 'v' ? -1 : 1));
+    A.toast(axis === 'h' ? 'Flip horizontal ✓' : 'Flip vertical ✓', 'ok', 1400);
+  }
+  /* undo was already pushed by the caller */
+  function sharedXform(L, mat) { xformVectorLayer(L, mat); }
+
+  /* ---------- one-click "select subject" (click-first) ---------- */
+  function selectSubject(invert) {
+    let L = A.active();
+    if (!L || L.type !== 'raster') {
+      const rs = A.layers().filter(l => l.type === 'raster' && l.visible);
+      L = rs[rs.length - 1] || null;
+      if (!L) { A.toast('Pehle image import karo (File ▸ Open)', 'err', 2600); return; }
+      try { doc.activeId = L.id; A.ui(); } catch (e) { }
+    }
+    const t0 = performance.now();
+    const id = cutoutData({ tol: 34, feather: 1, mode: 'auto' });
+    if (!id) { A.toast('Subject nahi mila', 'err', 2000); return; }
+    const n = doc.w * doc.h;
+    const mask = new Uint8Array(n);
+    let count = 0;
+    for (let i = 0; i < n; i++) {
+      const a = id.data[i * 4 + 3];
+      const on = (a > 24) !== !!invert;
+      if (on) { mask[i] = 255; count++; }
+    }
+    if (count < n * 0.002) { A.toast('Subject nahi mila — layer khali hai ya image bahut chhoti', 'err', 2800); return; }
+    try {
+      if (typeof combineSelMask === 'function') combineSelMask(mask, false, false);
+      else if (typeof setPixSel === 'function') setPixSel(mask);
+      needRender = true; A.ui();
+      A.toast((invert ? 'Background select ✓' : 'Subject select ✓') + ' · ' + Math.round(performance.now() - t0) + ' ms', 'ok', 2200);
+    } catch (e) { A.toast('Select fail: ' + e.message, 'err', 2600); }
+  }
+
+  function resizeRasterLayer(L, w, h, anchorCenter = true) {
+    if (!L || L.type !== 'raster') { A.toast('Sirf bitmap layer resize hoti hai', 'err', 2000); return; }
+    A.bake(L);
+    const bb = rasterBBox(L) || { x: 0, y: 0, w: doc.w, h: doc.h };
+    const out = mkCanvas(doc.w, doc.h);
+    const g = out.getContext('2d');
+    g.imageSmoothingQuality = 'high';
+    const cx = bb.x + bb.w / 2, cy = bb.y + bb.h / 2;
+    const dx = anchorCenter ? Math.round(cx - w / 2) : bb.x;
+    const dy = anchorCenter ? Math.round(cy - h / 2) : bb.y;
+    A.undoPush();
+    g.drawImage(L.canvas, bb.x, bb.y, bb.w, bb.h, dx, dy, Math.max(1, Math.round(w)), Math.max(1, Math.round(h)));
+    L.canvas = out; L.offset = { x: 0, y: 0 };
+    A.bump(L); docDirty = true; needRender = true;
+    try { uiLayersRefresh(); } catch (e) { }
+    A.ui();
+  }
+  function fitRasterLayer(L, mode) {
+    if (!L || L.type !== 'raster') { A.toast('Bitmap layer par kaam karta hai', 'err', 1800); return; }
+    A.bake(L);
+    const bb = rasterBBox(L); if (!bb) return;
+    const s = mode === 'fill' ? Math.max(doc.w / bb.w, doc.h / bb.h) : Math.min(doc.w / bb.w, doc.h / bb.h);
+    // scale + center using the same helper (fit keeps centring)
+    const w = Math.round(bb.w * s), h = Math.round(bb.h * s);
+    A.undoPush();
+    const out = mkCanvas(doc.w, doc.h);
+    const g = out.getContext('2d');
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(L.canvas, bb.x, bb.y, bb.w, bb.h, Math.round((doc.w - w) / 2), Math.round((doc.h - h) / 2), w, h);
+    L.canvas = out; L.offset = { x: 0, y: 0 };
+    A.bump(L); docDirty = true; needRender = true;
+    try { uiLayersRefresh(); } catch (e) { }
+    A.ui();
+  }
+  function centerRasterLayer(L) {
+    if (!L) return;
+    if (L.type === 'raster') {
+      A.bake(L);
+      const bb = rasterBBox(L); if (!bb) return;
+      A.undoPush();
+      const out = mkCanvas(doc.w, doc.h);
+      out.getContext('2d').drawImage(L.canvas, bb.x, bb.y, bb.w, bb.h,
+        Math.round((doc.w - bb.w) / 2), Math.round((doc.h - bb.h) / 2), bb.w, bb.h);
+      L.canvas = out; L.offset = { x: 0, y: 0 }; A.bump(L);
+    } else A.toast('Vector layer ke liye Select (V) tool use karo', '', 1800);
+    docDirty = true; needRender = true; A.ui();
+  }
+  function rotRasterLayer90(L, dir = 1) {
+    if (!L || L.type !== 'raster') { A.toast('Bitmap layer rotate hoti hai', 'err', 1800); return; }
+    A.bake(L);
+    const bb = rasterBBox(L) || { x: 0, y: 0, w: doc.w, h: doc.h };
+    const sw = bb.w, sh = bb.h;
+    const tmp = mkCanvas(sw, sh);
+    tmp.getContext('2d').drawImage(L.canvas, bb.x, bb.y, sw, sh, 0, 0, sw, sh);
+    const rot = mkCanvas(sw, sh);
+    const rg = rot.getContext('2d');
+    rg.translate(sw / 2, sh / 2);
+    rg.rotate(dir * Math.PI / 2);
+    rg.drawImage(tmp, -sw / 2, -sh / 2);
+    A.undoPush();
+    const out = mkCanvas(doc.w, doc.h);
+    out.getContext('2d').drawImage(rot, Math.round(bb.x + sw / 2 - sw / 2), Math.round(bb.y + sh / 2 - sh / 2));
+    L.canvas = out; L.offset = { x: 0, y: 0 }; A.bump(L);
+    docDirty = true; needRender = true; A.ui();
+  }
+  function flipRasterLayer(L, axis) {
+    if (!L || L.type !== 'raster') { A.toast('Bitmap layer flip hoti hai', 'err', 1600); return; }
+    A.bake(L);
+    const bb = rasterBBox(L) || { x: 0, y: 0, w: doc.w, h: doc.h };
+    const tmp = mkCanvas(bb.w, bb.h);
+    tmp.getContext('2d').drawImage(L.canvas, bb.x, bb.y, bb.w, bb.h, 0, 0, bb.w, bb.h);
+    A.undoPush();
+    const out = mkCanvas(doc.w, doc.h);
+    const g = out.getContext('2d');
+    g.save();
+    g.translate(bb.x + bb.w / 2, bb.y + bb.h / 2);
+    g.scale(axis === 'h' ? -1 : 1, axis === 'v' ? -1 : 1);
+    g.drawImage(tmp, -bb.w / 2, -bb.h / 2);
+    g.restore();
+    L.canvas = out; L.offset = { x: 0, y: 0 }; A.bump(L);
+    docDirty = true; needRender = true; A.ui();
+  }
+  /* lock layer alpha / mask from selection */
+  function maskFromSelection() {
+    const L = A.active();
+    if (!L || L.type !== 'raster' || typeof pixSel === 'undefined' || !pixSel) {
+      A.toast('Pehle selection banao (W = magic wand)', 'err', 2000); return;
+    }
+    A.bake(L);
+    const g = L.canvas.getContext('2d');
+    const keep = mkCanvas(doc.w, doc.h);
+    const kg = keep.getContext('2d', { willReadFrequently: true });
+    const id = kg.createImageData(doc.w, doc.h);
+    for (let i = 0; i < pixSel.mask.length; i++) {
+      id.data[i * 4] = 255; id.data[i * 4 + 1] = 255; id.data[i * 4 + 2] = 255;
+      id.data[i * 4 + 3] = pixSel.mask[i] ? 255 : 0;
+    }
+    kg.putImageData(id, 0, 0);
+    A.undoPush();
+    const old = L.canvas;
+    replaceCanvas(L, gg => {
+      gg.drawImage(old, 0, 0);
+      gg.globalCompositeOperation = 'destination-in';
+      gg.drawImage(keep, 0, 0);
+      gg.globalCompositeOperation = 'source-over';
+    });
+    A.toast('Selection ke bahar ka area hata diya ✂', 'ok');
+  }
+  /* delete / cut selected pixels */
+  function deleteSelectionPixels(cutToLayer) {
+    const L = A.active();
+    if (!L || !pixSel) { A.toast('Selection nahi hai', '', 1500); return; }
+    A.bake(L);
+    const g = L.canvas.getContext('2d');
+    const mc = mkCanvas(doc.w, doc.h);
+    const mg = mc.getContext('2d', { willReadFrequently: true });
+    const id = mg.createImageData(doc.w, doc.h);
+    for (let i = 0; i < pixSel.mask.length; i++) {
+      id.data[i * 4] = 255; id.data[i * 4 + 1] = 255; id.data[i * 4 + 2] = 255;
+      id.data[i * 4 + 3] = pixSel.mask[i] ? 255 : 0;
+    }
+    mg.putImageData(id, 0, 0);
+    A.undoPush();
+    if (cutToLayer) {
+      const bb = pixSel.bbox;
+      const cutC = mkCanvas(bb.x2 - bb.x + 1, bb.y2 - bb.y + 1);
+      const cg = cutC.getContext('2d');
+      cg.drawImage(L.canvas, -bb.x, -bb.y);
+      cg.globalCompositeOperation = 'destination-in';
+      cg.drawImage(mc, -bb.x, -bb.y);
+      // new layer from cutout
+      try {
+        const NL = newRasterLayer('Cutout');
+        NL.canvas.getContext('2d').drawImage(cutC, bb.x, bb.y);
+        NL.offset = { x: 0, y: 0 };
+        insertLayer(NL, L);
+        uiLayers(); uiLayersRefresh();
+      } catch (e) { console.warn(e); }
+    }
+    const oldC = L.canvas;
+    replaceCanvas(L, gg => {
+      gg.drawImage(oldC, 0, 0);
+      gg.globalCompositeOperation = 'destination-out';
+      gg.drawImage(mc, 0, 0);
+      gg.globalCompositeOperation = 'source-over';
+    });
+    A.toast(cutToLayer ? 'Cutout naye layer me ✂' : 'Selection delete ho gaya', 'ok');
+  }
+
+  /* ============================================================
+     7. UI — quick bar
+     ============================================================ */
+  let bar = null;
+  function buildBar() {
+    if (bar) return;
+    bar = document.createElement('div');
+    bar.id = 'av12bar';
+    bar.innerHTML = `
+      <button data-a="bg" class="primary" title="Background remove (ek click)">${svg('scissors')}<span class="t">Remove BG</span></button>
+      <button data-a="wand" title="Magic Wand — image ke colour par click karo">${svg('wand')}<span class="t">Magic Wand</span></button>
+      <button data-a="subject" title="Select subject — ek click me subject select">${svg('select')}<span class="t">Subject</span></button>
+      <button data-a="selinv" title="Selection invert">${svg('mask')}</button>
+      <button data-a="selnone" title="Selection clear (deselect)">${svg('x')}</button>
+      <button data-a="selcut" title="Selection cut — andar ka hissa transparent">${svg('cut')}</button>
+      <div class="av-sep"></div>
+      <button data-a="sizecard" title="Layer size / resize">${svg('resize')}<span class="t">Resize</span></button>
+      <button data-a="fit" title="Canvas me fit karo">${svg('fit')}<span class="t">Fit</span></button>
+      <button data-a="center" title="Center karo">${svg('center')}</button>
+      <button data-a="rot" title="90° rotate">${svg('rot')}</button>
+      <button data-a="fliph" title="Flip horizontal">${svg('fliph')}</button>
+      <div class="av-sep"></div>
+      <button data-a="dup" title="Layer duplicate">${svg('copy')}<span class="t">Duplicate</span></button>
+      <button data-a="text" title="Text add karo">${svg('text')}<span class="t">Text</span></button>
+      <button data-a="crop" title="Crop to selection">${svg('crop')}</button>
+      <button data-a="more" title="All quick actions (crop, undo, export, layers…)">${svg('layers')}<span class="t">More</span></button>
+      <button data-a="filter" title="Filters / enhance">${svg('filter')}<span class="t">Filters</span></button>
+      <button data-a="brand" title="Brand & palette — primary + secondary colour theory">${svg('palette')}<span class="t">Brand</span><i style="width:8px;height:8px;border-radius:50%;background:${state.brand};box-shadow:0 0 0 2px #fff inset"></i></button>
+      <button data-a="theme" title="Light / dark theme">${svg('sun')}</button>
+      <button data-a="export" title="PNG export">${svg('download')}<span class="t">Export</span></button>
+      <button data-a="del" class="danger" title="Layer delete">${svg('trash')}</button>
+      <div class="av-sep"></div>
+      <button data-a="help" title="Help">${svg('question')}</button>`;
+    document.body.appendChild(bar);
+    bar.addEventListener('click', e => {
+      const b = e.target.closest('[data-a]'); if (!b) return;
+      const a = b.dataset.a;
+      const L = A.active();
+      switch (a) {
+        case 'bg': bgRemoveV12(); break;
+        case 'wand': pickTool('wand'); break;
+        case 'subject': selectSubject(false); break;
+        case 'selinv': selectSubject(true); break;
+        case 'selnone': try { clearPixSel(); needRender = true; A.ui(); A.toast('Selection clear', '', 1200); } catch (e) { } break;
+        case 'selcut':
+          if (typeof pixSel === 'undefined' || !pixSel) { A.toast('Pehle selection banao (Subject / Wand)', 'err', 2200); break; }
+          deleteSelectionPixels(false); break;
+        case 'sizecard': toggleCard(true); break;
+        case 'fit': if (L) fitLayer(L, 'fit'); else A.toast('Pehle layer select karo', 'err', 1600); break;
+        case 'center': if (L) centerLayer(L); else A.toast('Pehle layer select karo', 'err', 1600); break;
+        case 'rot': if (L) rotateLayer90(L, 1); else A.toast('Pehle layer select karo', 'err', 1600); break;
+        case 'fliph': if (L) flipLayer(L, 'h'); else A.toast('Pehle layer select karo', 'err', 1600); break;
+        case 'dup': try { duplicateLayer(); } catch (e) { A.toast('Duplicate fail', 'err'); } break;
+        case 'text': pickTool('text'); break;
+        case 'filter': openFilterDialog(); break;
+        case 'crop':
+          try {
+            if (typeof pixSel === 'undefined' || !pixSel) { A.toast('Pehle selection banao (Subject / Wand / Marquee)', 'err', 2400); break; }
+            cropToSelection();
+          } catch (e) { A.toast('Crop fail: ' + e.message, 'err', 2400); }
+          break;
+        case 'more': openMorePanel(); break;
+        case 'brand': openBrandPanel(); break;
+        case 'theme': toggleTheme(); break;
+        case 'export': try { exportImage('png', 1, 95); } catch (e) { A.toast('Export fail: ' + e.message, 'err'); } break;
+        case 'del': try { deleteLayer(); } catch (e) { } break;
+        case 'help': openHelp(); break;
+      }
+      syncBarState();
+    });
+    syncBarState();
+  }
+  function pickTool(id) {
+    try { setTool(id); } catch (e) { }
+    syncBarState();
+    const hints = { wand: 'Magic wand: image ke colour par click karo · Shift = add · Alt = subtract',
+      text: 'Text: canvas par click karo aur type karo' };
+    if (hints[id]) A.toast(hints[id], '', 2600);
+  }
+  function syncBarState() {
+    if (!bar) return;
+    const t = (typeof curTool !== 'undefined') ? curTool : '';
+    const w = bar.querySelector('[data-a="wand"]');
+    if (w) w.classList.toggle('on', t === 'wand');
+    const th = bar.querySelector('[data-a="theme"]');
+    if (th) {
+      th.innerHTML = svg(state.theme === 'light' ? 'moon' : 'sun');
+      th.title = state.theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme';
+    }
+    const br = bar.querySelector('[data-a="brand"]');
+    if (br) {
+      const dot = br.querySelector('i');
+      if (dot) dot.style.background = state.brand;
+    }
+  }
+
+  /* ============================================================
+     8. UI — layer size card
+     ============================================================ */
+  let card = null, cardOpen = true;
+  function toggleCard(force) {
+    cardOpen = force == null ? !cardOpen : force;
+    if (card) card.classList.toggle('on', cardOpen);
+    if (cardOpen) syncCard(true);
+  }
+  function buildCard() {
+    if (card) return;
+    card = document.createElement('div');
+    card.id = 'av12card';
+    card.innerHTML = `
+      <div class="c-h">
+        <b id="av12cname">Layer</b>
+        <span class="tag" id="av12ctype">raster</span>
+        <button class="x" id="av12cclose">${svg('x', 12)}</button>
+      </div>
+      <div class="c-b">
+        <div class="c-row">
+          <div class="c-in"><span>W</span><input type="number" id="av12cw" min="1"></div>
+          <div class="c-in"><span>H</span><input type="number" id="av12ch" min="1"></div>
+          <button class="c-btn" style="display:grid;grid-template-columns:1fr;width:30px;flex:none;background:#1c2230;border:1px solid #28313f;border-radius:8px;height:28px" id="av12clock">${svg('unlock', 13)}</button>
+        </div>
+        <div class="c-slider"><label style="width:38px">Scale</label><input type="range" id="av12cscale" min="5" max="400" value="100"><b id="av12cscalev" style="width:34px;text-align:right;font-size:10.5px">100%</b></div>
+        <div class="c-btn">
+          <button data-c="fliph" title="Flip H">${svg('fliph')}</button>
+          <button data-c="flipv" title="Flip V">${svg('flipv')}</button>
+          <button data-c="rot" title="Rotate 90°">${svg('rot')}</button>
+          <button data-c="center" title="Center">${svg('center')}</button>
+        </div>
+        <div class="c-btn2">
+          <button data-c="fit">${svg('fit')} Fit</button>
+          <button data-c="fill">${svg('resize')} Fill</button>
+        </div>
+        <div class="c-btn2">
+          <button data-c="mask">${svg('mask')} Selection mask</button>
+          <button data-c="cut">${svg('cut')} Cutout</button>
+        </div>
+        <div class="c-hint">Handles se bhi drag kar sakte ho. W/H likho = us size me resize.</div>
+      </div>`;
+    document.body.appendChild(card);
+    const W = card.querySelector('#av12cw'), H = card.querySelector('#av12ch');
+    let lock = false, lockRatio = 1;
+    card.querySelector('#av12clock').onclick = () => {
+      lock = !lock;
+      card.querySelector('#av12clock').innerHTML = svg(lock ? 'lock' : 'unlock', 13);
+      card.querySelector('#av12clock').style.color = lock ? '#7c5cff' : '';
+      const bb = layerBBox(A.active());
+      if (lock && bb && bb.w) lockRatio = bb.h / bb.w;
+      A.toast(lock ? 'Aspect ratio lock ON' : 'Aspect ratio lock OFF', '', 1300);
+    };
+    const apply = () => {
+      const L = A.active();
+      if (!L) { A.toast('Pehle layer select karo', 'err', 1600); return; }
+      const bb = layerBBox(L);
+      if (!bb) { A.toast('Layer khali hai — resize nahi ho sakti', 'err', 2000); return; }
+      let w = Math.max(1, +W.value || bb.w), h = Math.max(1, +H.value || bb.h);
+      if (lock && lockRatio > 0) h = Math.max(1, Math.round(w * lockRatio));
+      resizeLayer(L, w, h);
+      syncCard(true);
+    };
+    W.addEventListener('change', apply);
+    H.addEventListener('change', apply);
+    W.addEventListener('keydown', e => { if (e.key === 'Enter') apply(); });
+    H.addEventListener('keydown', e => { if (e.key === 'Enter') apply(); });
+    card.querySelector('#av12cscale').addEventListener('input', e => {
+      const pct = +e.target.value;
+      card.querySelector('#av12cscalev').textContent = pct + '%';
+      const bb = layerBBox(A.active());
+      if (!bb) return;
+      W.value = Math.max(1, Math.round(bb.w * pct / 100));
+      H.value = Math.max(1, Math.round(bb.h * pct / 100));
+    });
+    card.querySelector('#av12cscale').addEventListener('change', apply);
+    card.querySelector('#av12cclose').onclick = () => toggleCard(false);
+    card.querySelectorAll('[data-c]').forEach(b => b.onclick = () => {
+      const L = A.active(); if (!L) return;
+      const c = b.dataset.c;
+      if (c === 'fliph') flipLayer(L, 'h');
+      if (c === 'flipv') flipLayer(L, 'v');
+      if (c === 'rot') rotateLayer90(L, 1);
+      if (c === 'center') centerLayer(L);
+      if (c === 'fit') fitLayer(L, 'fit');
+      if (c === 'fill') fitLayer(L, 'fill');
+      if (c === 'mask') maskFromSelection();
+      if (c === 'cut') deleteSelectionPixels(true);
+      syncCard(true);
+    });
+    toggleCard(true);
+    // keep the card in sync when the user picks another layer in the panel
+    setInterval(() => { try { syncCard(); } catch (e) { } }, 700);
+  }
+  function overlayOpen() {
+    try {
+      const h = document.querySelector('.homebox');
+      if (h && h.getBoundingClientRect().width > 0) return true;
+      const ov = document.querySelector('.modal-ov');
+      if (ov && ov.getBoundingClientRect().width > 0) return true;
+    } catch (e) { }
+    return false;
+  }
+  function syncCard(force) {
+    if (!card) return;
+    const busy = overlayOpen();
+    if (bar) bar.style.display = busy ? 'none' : '';
+    if (busy) { card.style.display = 'none'; return; }
+    if (!cardOpen) { card.style.display = 'none'; return; }
+    const L = A.active();
+    if (!L) { card.style.display = 'none'; return; }
+    card.style.display = 'block';
+    card.querySelector('#av12cname').textContent = L.name || 'Layer';
+    card.querySelector('#av12ctype').textContent = L.type === 'raster' ? 'bitmap' : 'vector';
+    if (document.activeElement !== card.querySelector('#av12cw') &&
+        document.activeElement !== card.querySelector('#av12ch')) {
+      const bb = layerBBox(L, true);
+      if (bb) {
+        card.querySelector('#av12cw').value = Math.round(bb.w);
+        card.querySelector('#av12ch').value = Math.round(bb.h);
+      }
+    }
+    // keep the card clear of the side panel
+    const side = document.querySelector('#side, #right, #panelR');
+    if (side) document.documentElement.style.setProperty('--avSideW', side.getBoundingClientRect().width + 'px');
+  }
+
+  /* ============================================================
+     9. dialogs
+     ============================================================ */
+  function modal(title, bodyHTML, footerHTML, onMount) {
+    let host = document.getElementById('av12modal');
+    if (!host) { host = document.createElement('div'); host.id = 'av12modal'; document.body.appendChild(host); }
+    host.innerHTML = `<div class="m"><div class="m-h"><h3>${title}</h3><button class="x">${svg('x', 14)}</button></div>
+      <div class="m-b">${bodyHTML}</div>${footerHTML ? `<div class="m-f">${footerHTML}</div>` : ''}</div>`;
+    host.classList.add('on');
+    host.onclick = e => { if (e.target === host || e.target.closest('.m-h .x') || e.target.closest('[data-close]')) closeModal(); };
+    if (onMount) onMount(host);
+    return host;
+  }
+  function closeModal() { const h = document.getElementById('av12modal'); if (h) { h.classList.remove('on'); h.innerHTML = ''; } }
+
+  /* ---- background remove dialog with live preview ---- */
+  function openBgDialog() {
+    const L = A.active();
+    if (!L || L.type !== 'raster') { A.toast('Pehle image layer par click karo', 'err', 2600); return; }
+    const body = `
+      <div>Local (offline) smart cutout — plain background, product photo, logo par best chalta hai.
+      Live preview dekho, phir Apply dabao.</div>
+      <div class="grid2">
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <label style="font-size:11px;color:var(--tx3);font-weight:700">Mode
+            <select id="av12bgMode" style="margin-top:4px">
+              <option value="auto">Smart Auto (border se detect)</option>
+              <option value="global">Global colour</option>
+              <option value="click">Specific colour</option>
+            </select></label>
+          <div><label style="font-size:11px;color:var(--tx3);font-weight:700">Tolerance <b id="av12bgTolV">34</b></label>
+            <input type="range" id="av12bgTol" min="5" max="90" value="34"></div>
+          <div><label style="font-size:11px;color:var(--tx3);font-weight:700">Edge feather <b id="av12bgFthV">2</b></label>
+            <input type="range" id="av12bgFth" min="0" max="10" value="2"></div>
+          <div class="row" id="av12bgColorRow" style="display:none"><input type="color" id="av12bgColor" value="#ffffff"><span style="font-size:11px">Background colour</span></div>
+          <label class="row" style="font-size:11.5px"><input type="checkbox" id="av12bgKeep" checked> Sirf main subject rakho</label>
+          <label class="row" style="font-size:11.5px"><input type="checkbox" id="av12bgInv"> Invert</label>
+        </div>
+        <div class="preview"><canvas id="av12bgPrev"></canvas></div>
+      </div>
+      <div style="font-size:11px;color:var(--tx3)" id="av12bgMs">calculating…</div>`;
+    modal('Remove background — ' + (L.name || 'layer'), body,
+      `<button class="btn" data-close>Cancel</button><button class="btn primary" id="av12bgApply">${svg('check', 14)} Apply</button>`,
+      host => {
+        const prev = host.querySelector('#av12bgPrev');
+        const ms = host.querySelector('#av12bgMs');
+        const opts = () => ({
+          tol: +host.querySelector('#av12bgTol').value,
+          feather: +host.querySelector('#av12bgFth').value,
+          mode: host.querySelector('#av12bgMode').value,
+          keepMain: host.querySelector('#av12bgKeep').checked,
+          invert: host.querySelector('#av12bgInv').checked,
+          color: host.querySelector('#av12bgColor').value,
+        });
+        let timer = null, lastId = null;
+        const render = () => {
+          clearTimeout(timer);
+          timer = setTimeout(() => {
+            const t0 = performance.now();
+            try {
+              lastId = cutoutData(opts());
+              if (!lastId) { ms.textContent = 'cutout fail'; return; }
+              const sc = Math.min(1, 320 / Math.max(lastId.width, lastId.height));
+              prev.width = Math.round(lastId.width * sc);
+              prev.height = Math.round(lastId.height * sc);
+              const tmp = mkCanvas(lastId.width, lastId.height);
+              tmp.getContext('2d').putImageData(lastId, 0, 0);
+              const g = prev.getContext('2d');
+              g.clearRect(0, 0, prev.width, prev.height);
+              g.drawImage(tmp, 0, 0, prev.width, prev.height);
+              ms.textContent = `${Math.round(performance.now() - t0)} ms · ${lastId.width}×${lastId.height}`;
+            } catch (e) { ms.textContent = 'error: ' + e.message; console.error(e); }
+          }, 150);
+        };
+        host.querySelectorAll('#av12bgTol,#av12bgFth,#av12bgKeep,#av12bgInv,#av12bgColor').forEach(el => {
+          el.addEventListener('input', () => {
+            if (el.id === 'av12bgTol') host.querySelector('#av12bgTolV').textContent = el.value;
+            if (el.id === 'av12bgFth') host.querySelector('#av12bgFthV').textContent = el.value;
+            render();
+          });
+        });
+        host.querySelector('#av12bgMode').addEventListener('change', e => {
+          host.querySelector('#av12bgColorRow').style.display = e.target.value === 'click' ? 'flex' : 'none';
+          render();
+        });
+        host.querySelector('#av12bgApply').onclick = () => {
+          if (!lastId) return;
+          closeModal();
+          applyCutout(lastId);
+        };
+        render();
+      });
+  }
+
+  /* ---- filters / enhance dialog ---- */
+  function openFilterDialog() {
+    const L = A.active();
+    if (!L || L.type !== 'raster') { A.toast('Image layer par click karo', 'err', 2000); return; }
+    const presets = [
+      { id: 'original', n: 'Original' },
+      { id: 'pop', n: 'Pop', b: 5, c: 14, s: 26 },
+      { id: 'cinema', n: 'Cinematic', b: 0, c: 22, s: -8, w: -10, f: 10 },
+      { id: 'warm', n: 'Warm', b: 4, c: 6, s: 12, w: 24 },
+      { id: 'cool', n: 'Cool', b: 2, c: 8, s: 8, w: -22 },
+      { id: 'bw', n: 'B & W', b: 0, c: 14, s: -100 },
+      { id: 'vivid', n: 'Vivid', b: 2, c: 16, s: 42 },
+      { id: 'vintage', n: 'Vintage', b: 4, c: -8, s: -16, w: 18, f: 22 },
+      { id: 'noir', n: 'Noir', b: -6, c: 36, s: -100 },
+      { id: 'dream', n: 'Dream', b: 8, c: -4, s: 16, f: 18 },
+      { id: 'punch', n: 'Punch', b: 0, c: 28, s: 18 },
+      { id: 'moody', n: 'Moody', b: -12, c: 18, s: -18, w: -8 },
+    ];
+    const body = `
+      <div class="grid4" id="av12fgrid">${presets.map(p => `<button class="btn" data-f="${p.id}">${p.n}</button>`).join('')}</div>
+      <div class="grid2">
+        <div><label style="font-size:11px;color:var(--tx3);font-weight:700">Brightness <b id="av12fbV">0</b></label><input type="range" id="av12fb" min="-100" max="100" value="0"></div>
+        <div><label style="font-size:11px;color:var(--tx3);font-weight:700">Contrast <b id="av12fcV">0</b></label><input type="range" id="av12fc" min="-100" max="100" value="0"></div>
+        <div><label style="font-size:11px;color:var(--tx3);font-weight:700">Saturation <b id="av12fsV">0</b></label><input type="range" id="av12fs" min="-100" max="100" value="0"></div>
+        <div><label style="font-size:11px;color:var(--tx3);font-weight:700">Warmth <b id="av12fwV">0</b></label><input type="range" id="av12fw" min="-100" max="100" value="0"></div>
+        <div><label style="font-size:11px;color:var(--tx3);font-weight:700">Fade <b id="av12ffV">0</b></label><input type="range" id="av12ff" min="0" max="100" value="0"></div>
+        <div><label style="font-size:11px;color:var(--tx3);font-weight:700">Blur <b id="av12fblV">0</b></label><input type="range" id="av12fbl" min="0" max="20" value="0"></div>
+      </div>
+      <div class="preview"><canvas id="av12fprev"></canvas></div>`;
+    modal('Filters & enhance', body,
+      `<button class="btn" data-close>Cancel</button><button class="btn primary" id="av12fapply">${svg('check', 14)} Apply</button>`,
+      host => {
+        const get = () => ({
+          b: +host.querySelector('#av12fb').value, c: +host.querySelector('#av12fc').value,
+          s: +host.querySelector('#av12fs').value, w: +host.querySelector('#av12fw').value,
+          f: +host.querySelector('#av12ff').value, bl: +host.querySelector('#av12fbl').value,
+        });
+        const prev = host.querySelector('#av12fprev');
+        const base = (() => {
+          const c = mkCanvas(Math.min(360, doc.w), Math.round(Math.min(360, doc.w) * doc.h / doc.w));
+          const g = c.getContext('2d');
+          g.drawImage(L.canvas, 0, 0, c.width, c.height);
+          return g.getImageData(0, 0, c.width, c.height);
+        })();
+        let timer = null;
+        const renderPrev = () => {
+          clearTimeout(timer);
+          timer = setTimeout(() => {
+            const o = get();
+            const out = applyFilterToImageData(base, o);
+            prev.width = out.width; prev.height = out.height;
+            prev.getContext('2d').putImageData(out, 0, 0);
+          }, 60);
+        };
+        host.querySelectorAll('input[type=range]').forEach(el => el.addEventListener('input', () => {
+          host.querySelector('#av12fbV').textContent = host.querySelector('#av12fb').value;
+          host.querySelector('#av12fcV').textContent = host.querySelector('#av12fc').value;
+          host.querySelector('#av12fsV').textContent = host.querySelector('#av12fs').value;
+          host.querySelector('#av12fwV').textContent = host.querySelector('#av12fw').value;
+          host.querySelector('#av12ffV').textContent = host.querySelector('#av12ff').value;
+          host.querySelector('#av12fblV').textContent = host.querySelector('#av12fbl').value;
+          renderPrev();
+        }));
+        host.querySelectorAll('[data-f]').forEach(b => b.onclick = () => {
+          const p = presets.find(x => x.id === b.dataset.f);
+          host.querySelector('#av12fb').value = p.b || 0;
+          host.querySelector('#av12fc').value = p.c || 0;
+          host.querySelector('#av12fs').value = p.s || 0;
+          host.querySelector('#av12fw').value = p.w || 0;
+          host.querySelector('#av12ff').value = p.f || 0;
+          host.querySelector('#av12fbl').value = 0;
+          host.querySelectorAll('input[type=range]').forEach(el => el.dispatchEvent(new Event('input')));
+          renderPrev();
+        });
+        host.querySelector('#av12fapply').onclick = () => {
+          const o = get();
+          A.bake(L);
+          A.undoPush();
+          const g = L.canvas.getContext('2d', { willReadFrequently: true });
+          const img = g.getImageData(0, 0, doc.w, doc.h);
+          const out = applyFilterToImageData(img, o);
+          replaceCanvas(L, gg => gg.putImageData(out, 0, 0));
+          closeModal();
+          A.toast('Filter lag gaya ✨', 'ok');
+        };
+        renderPrev();
+      });
+  }
+  function applyFilterToImageData(img, o) {
+    const w = img.width, h = img.height;
+    const d = new Uint8ClampedArray(img.data);
+    const br = o.b * 2.2, ct = (259 * (o.c + 255)) / (255 * (259 - o.c)), sat = 1 + o.s / 100;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] === 0) continue;
+      let r = d[i], g = d[i + 1], b = d[i + 2];
+      // brightness
+      r += br; g += br; b += br;
+      // contrast
+      r = ct * (r - 128) + 128; g = ct * (g - 128) + 128; b = ct * (b - 128) + 128;
+      // saturation
+      const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      r = lum + (r - lum) * sat; g = lum + (g - lum) * sat; b = lum + (b - lum) * sat;
+      // warmth
+      const wm = o.w * 0.9;
+      r += wm; b -= wm;
+      // fade
+      if (o.f) {
+        const f = o.f / 100;
+        r = r * (1 - f * .45) + 118 * f * .45;
+        g = g * (1 - f * .45) + 118 * f * .45;
+        b = b * (1 - f * .45) + 118 * f * .45;
+      }
+      d[i] = clamp(r, 0, 255); d[i + 1] = clamp(g, 0, 255); d[i + 2] = clamp(b, 0, 255);
+    }
+    let out = new ImageData(d, w, h);
+    if (o.bl > 0) {
+      const c = mkCanvas(w, h); const g = c.getContext('2d');
+      g.putImageData(out, 0, 0);
+      const c2 = mkCanvas(w, h); const g2 = c2.getContext('2d');
+      g2.filter = `blur(${o.bl}px)`;
+      g2.drawImage(c, 0, 0);
+      out = g2.getImageData(0, 0, w, h);
+    }
+    return out;
+  }
+
+  /* ---- help ---- */
+  function openHelp() {
+    modal('ArtViSiON v12 — click-first guide', `
+      <div><b style="color:#fff">Sab kuch click se:</b> neeche wali bar (Remove BG · Magic Wand · Resize · Fit · Center · Duplicate · Text · Filters · Export) — koi hidden menu nahi.</div>
+      <div style="border-top:1px solid #28313f;padding-top:9px">
+        <b style="color:#fff">1. Background remove</b> — image layer select karo → <b>Remove BG</b> → live preview me tolerance adjust karo → Apply. Edges ke liye Eraser use karo.
+      </div>
+      <div><b style="color:#fff">2. Layer resize</b> — Select tool (V) se layer par click karo → purple handles aayenge → corner drag karo (Shift = ratio, Alt = center se). Ya <b>Resize</b> card me W/H likho.</div>
+      <div><b style="color:#fff">3. Magic Wand</b> — <b>Magic Wand</b> dabao → jo colour select karna hai us par click. Shift = add, Alt = subtract. Phir card se <b>Selection mask</b> ya <b>Cutout</b>.</div>
+      <div><b style="color:#fff">4. Filters</b> — <b>Filters</b> button → 12 presets + manual sliders.</div>
+      <div style="font-size:11px;color:#6f7b91;border-top:1px solid #28313f;padding-top:9px">
+        Shortcuts: V select · W wand · M marquee · L lasso · B brush · E eraser · T text · C crop · Space pan · Ctrl+Z undo · Ctrl+J duplicate · Ctrl+S export</div>`,
+      `<button class="btn primary" data-close>Samajh gaya</button>`);
+  }
+
+  /* ============================================================
+     10. patch the host tools (click-to-select + wand + auto card)
+     ============================================================ */
+  function patchTools() {
+    // ---- click-to-select any raster layer and show transform handles ----
+    if (typeof TOOLS !== 'undefined' && TOOLS.move) {
+      const origDown = TOOLS.move.down;
+      TOOLS.move.down = function (p, e) {
+        try {
+          const hasRT = (typeof RT !== 'undefined' && RT);
+          if (!hasRT && !e.altKey) {
+            const hit = pickLayerAt(p);
+            if (hit && hit.id !== doc.activeId) {
+              setActiveLayer(hit.id);
+            }
+            if (hit && hit.type === 'raster' && typeof enterRT === 'function') {
+              enterRT();
+              syncCard();
+            }
+          }
+        } catch (err) { console.warn('[AV12]', err); }
+        return origDown.apply(this, arguments);
+      };
+    }
+
+    // ---- magic wand v12: sample what you see, respect active layer ----
+    if (typeof TOOLS !== 'undefined') {
+      TOOLS.wand = {
+        cursor: 'crosshair',
+        down(p, e) {
+          try {
+            if (typeof commitFloat === 'function') commitFloat();
+            const tolPct = (typeof opts !== 'undefined' && opts.wandTol != null) ? clamp(opts.wandTol, 1, 128) / 128 * 100 : 28;
+            const m = wandMaskV12(p, tolPct, true);
+            if (!m) { A.toast('Canvas ke andar click karo', 'err', 1500); return; }
+            if (typeof combineSelMask === 'function') combineSelMask(m, e.shiftKey, e.altKey);
+            else if (typeof setPixSel === 'function') setPixSel(m);
+            needRender = true;
+            A.ui();
+          } catch (err) { console.error('[AV12] wand', err); A.toast('Wand error: ' + err.message, 'err', 2400); }
+        },
+        move() { }, up() { }
+      };
+    }
+
+    // ---- replace Image ▸ Remove Background with the smarter one ----
+    try { bgRemoveAuto = bgRemoveV12; } catch (e) { }
+    // keep the BG button of the app's own UI pointing at the new dialog
+    document.addEventListener('click', (e) => {
+      const t = e.target.closest('button, .mi, .act, li, div[data-a]');
+      if (!t) return;
+      const label = (t.textContent || '').toLowerCase();
+      if (/background remove|remove background|ai cutout/.test(label) && label.length < 60) {
+        // only intercept our own targets if the app opens its own dialog — we let it be,
+        // the app's dialog is fine; but ensure our smarter version is available too.
+      }
+    }, true);
+
+    // ---- keep the card in sync with the current layer ----
+    setInterval(() => { try { syncCard(); syncBarState(); } catch (e) { } }, 700);
+  }
+
+
+
+  /* ============================================================
+     13. canvas chrome for the light theme (stage, rulers, checker)
+     ============================================================ */
+  const CHROME_MAP_LIGHT = {
+    '#131418': '#EDEEF1',          // stage backdrop
+    '#101116': '#FFFFFF',          // artboard plate
+    'rgba(0,0,0,.55)': 'rgba(17,24,39,.16)',
+    'rgba(24,26,32,.94)': 'rgba(255,255,255,.97)',   // rulers
+    '#3f4553': '#D9DEE6',          // ruler ticks
+    '#8d93a5': '#6B7385',          // ruler labels
+    '#5b8cff': null,               // accent overlays → brand
+    'rgba(91,140,255,.8)': null,
+    'rgba(91,140,255,.12)': null,
+  };
+  let _mapDepth = 0;
+  function isLight() { return state.theme === 'light'; }
+  function mapChrome(v) {
+    if (_mapDepth <= 0 || !isLight()) return v;
+    const key = String(v).trim().toLowerCase();
+    if (!(key in CHROME_MAP_LIGHT)) return v;
+    const mapped = CHROME_MAP_LIGHT[key];
+    if (mapped === null) return state.brand;   // brand accent
+    return mapped;
+  }
+  function installChromeMapper() {
+    try {
+      const proto = CanvasRenderingContext2D.prototype;
+      ['fillStyle', 'strokeStyle'].forEach(prop => {
+        const d = Object.getOwnPropertyDescriptor(proto, prop);
+        if (!d || !d.set) return;
+        Object.defineProperty(proto, prop, {
+          configurable: true,
+          get() { return d.get.call(this); },
+          set(v) { d.set.call(this, mapChrome(v)); }
+        });
+      });
+    } catch (e) { console.warn('[AV14] chrome map', e); }
+  }
+  function withChromeMap(fn) {
+    return function () {
+      _mapDepth++;
+      try { return fn.apply(this, arguments); }
+      finally { _mapDepth--; }
+    };
+  }
+  function rebuildChecker() {
+    try {
+      const c = mkCanvas(16, 16), g = c.getContext('2d');
+      if (isLight()) {
+        g.fillStyle = '#FFFFFF'; g.fillRect(0, 0, 16, 16);
+        g.fillStyle = '#F1F2F5'; g.fillRect(0, 0, 8, 8); g.fillRect(8, 8, 8, 8);
+      } else {
+        g.fillStyle = '#262932'; g.fillRect(0, 0, 16, 16);
+        g.fillStyle = '#1e2027'; g.fillRect(0, 0, 8, 8); g.fillRect(8, 8, 8, 8);
+      }
+      checkerPat = ctx.createPattern(c, 'repeat');
+      needRender = true;
+    } catch (e) { }
+  }
+  function patchCanvasChrome() {
+    installChromeMapper();
+    try { if (typeof render === 'function') window.render = withChromeMap(render); } catch (e) { }
+    try { if (typeof drawRulers === 'function') window.drawRulers = withChromeMap(drawRulers); } catch (e) { }
+    try { if (typeof drawOverlay === 'function') window.drawOverlay = withChromeMap(drawOverlay); } catch (e) { }
+    rebuildChecker();
+  }
+
+
+  /* ============================================================
+     14. "More tools" — one visible place for every quick action
+     ============================================================ */
+  function runSafe(fn, label) {
+    try { fn(); }
+    catch (e) { A.toast((label || 'Action') + ' fail: ' + e.message, 'err', 3000); }
+  }
+  function toolById(id) { try { setTool(id); A.toast('Tool: ' + id, '', 1200); } catch (e) { } }
+  function openMorePanel() {
+    const groups = [
+      {
+        h: 'Selection', items: [
+          ['Subject select', 'select', () => selectSubject(false)],
+          ['Invert', 'mask', () => av14Sel('invert')],
+          ['Deselect', 'x', () => av14Sel('none')],
+          ['Select all', 'mask', () => av14Sel('all')],
+          ['Feather +', 'sparkle', () => av14Sel('feather')],
+          ['Grow', 'resize', () => av14Sel('grow')],
+          ['Shrink', 'resize', () => av14Sel('shrink')],
+        ]
+      },
+      {
+        h: 'Layer', items: [
+          ['Duplicate', 'copy', () => duplicateLayer()],
+          ['Delete', 'trash', () => deleteLayer()],
+          ['Rasterize', 'layers', () => rasterizeLayer()],
+          ['Merge down', 'layers', () => mergeDown()],
+          ['Group below', 'layers', () => groupWithBelow()],
+          ['Ungroup', 'layers', () => ungroupActive()],
+          ['Selection → layer', 'cut', () => selectionToLayer()],
+        ]
+      },
+      {
+        h: 'Canvas', items: [
+          ['Crop to sel.', 'crop', () => cropToSelection()],
+          ['Rotate 90°', 'rot', () => rotateDoc(true)],
+          ['Fit view', 'fit', () => fitView()],
+          ['Scale image…', 'resize', () => scaleImageDialog()],
+          ['Resize canvas…', 'resize', () => colorDialogFallback()],
+          ['Guides on/off', 'mask', () => { opts.rulersOn = !opts.rulersOn; needRender = true; A.toast('Rulers ' + (opts.rulersOn ? 'ON' : 'OFF'), '', 1400); }],
+          ['Grid on/off', 'mask', () => { opts.gridOn = !opts.gridOn; needRender = true; A.toast('Grid ' + (opts.gridOn ? 'ON' : 'OFF'), '', 1400); }],
+        ]
+      },
+      {
+        h: 'Project', items: [
+          ['Undo', 'rot', () => undo()],
+          ['Redo', 'rot', () => redo()],
+          ['Save project', 'download', () => saveProject()],
+          ['Export PNG', 'download', () => exportImage('png', 1, 95)],
+          ['History panel', 'layers', () => toggleHistPanel()],
+          ['Focus mode', 'fit', () => toggleFocusMode()],
+          ['Help', 'question', () => openHelp()],
+        ]
+      },
+    ];
+    const body = groups.map(g => `
+      <div style="margin-bottom:14px">
+        <div style="font:800 10.5px/1 system-ui;letter-spacing:.09em;text-transform:uppercase;color:var(--tx3);margin:0 0 8px">${g.h}</div>
+        <div class="grid4">${g.items.map(([label, ic, fn], i) =>
+      `<button class="btn" data-more="${g.h}:${i}" style="justify-content:flex-start;gap:7px;display:flex;align-items:center">${svg(ic, 14)}<span style="font-size:11.5px">${label}</span></button>`).join('')}</div>
+      </div>`).join('');
+    modal('All quick actions', body, `<button class="btn" data-close>Close</button>`, host => {
+      host.querySelectorAll('[data-more]').forEach(b => b.onclick = () => {
+        const [gh, idx] = b.dataset.more.split(':');
+        const g = groups.find(x => x.h === gh); if (!g) return;
+        const it = g.items[+idx]; if (!it) return;
+        closeModal();
+        setTimeout(() => runSafe(it[2], it[0]), 60);
+      });
+    });
+  }
+  /* selection helpers usable from the More panel */
+  function av14Sel(kind) {
+    const has = (typeof pixSel !== 'undefined') && !!pixSel;
+    if (kind === 'none') { clearPixSel(); A.toast('Selection clear', '', 1200); return; }
+    if (kind === 'all') { selectAllPixels(); A.toast('Select all', '', 1200); return; }
+    if (!has) { A.toast('Pehle selection banao (Subject / Wand / Marquee)', 'err', 2400); return; }
+    if (kind === 'invert') { invertSel(); return; }
+    const map = { feather: ['Feather Selection…', 'feather'], grow: ['Expand Selection…', 'expand'], shrink: ['Contract Selection…', 'contract'] };
+    const want = map[kind]; if (!want) return;
+    for (const [menu, arr] of Object.entries(typeof MENUS !== 'undefined' ? MENUS : {})) {
+      const it = arr.find(x => x.l === want[0]);
+      if (it) { it.a(); return; }
+    }
+    A.toast('Ye option menu me hai: Select ▸ ' + want[0], '', 2600);
+  }
+  function selectionToLayer() {
+    for (const [menu, arr] of Object.entries(typeof MENUS !== 'undefined' ? MENUS : {})) {
+      const it = arr.find(x => /Selection → New Layer/.test(x.l));
+      if (it) { it.a(); return; }
+    }
+    A.toast('Select ▸ Selection → New Layer use karo', '', 2400);
+  }
+  function colorDialogFallback() {
+    for (const [menu, arr] of Object.entries(typeof MENUS !== 'undefined' ? MENUS : {})) {
+      const it = arr.find(x => /Canvas Size|Resize Canvas|Image Size/i.test(x.l));
+      if (it) { it.a(); return; }
+    }
+    scaleImageDialog();
+  }
+
+  const CSS15 = `
+  /* ============================================================
+     v15 · SIMPLE MODE (default) — beginner friendly, click-first
+     ============================================================ */
+  #av15menuBtn{display:none}
+  html.av-simple{font-size:14px}
+  html.av-simple #av15menuBtn{
+    display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 12px;margin-right:6px;
+    border-radius:9px;border:1px solid var(--line2);background:#fff;color:var(--tx);
+    font-weight:800;font-size:12px;letter-spacing:.01em;cursor:pointer;flex:none}
+  html.av-simple #av15menuBtn:hover{border-color:var(--acc);color:var(--acc)}
+  html.av-simple #av15menuBtn .bars{display:flex;flex-direction:column;gap:2.5px;width:13px}
+  html.av-simple #av15menuBtn .bars i{display:block;height:2px;border-radius:2px;background:currentColor}
+
+  /* top bar: fewer things, more air */
+  html.av-simple nav#menus{display:none!important}
+  html.av-simple #topbar{height:52px;gap:8px;padding:0 12px}
+  html.av-simple #logo{font-size:14.5px;margin-right:4px}
+  html.av-simple #boardTabs{margin-left:2px}
+  html.av-simple #quick .qbtn{width:34px;height:34px;border-radius:9px}
+  html.av-simple #quick .qbtn:hover{background:#F4F5F7}
+
+  /* tool rail: icon + visible label, grouped */
+  html.av-simple #toolrail{
+    width:80px;padding:8px 6px 64px;gap:3px;background:#fff;border-right:1px solid var(--line);
+    overflow-y:auto;overflow-x:hidden}
+  html.av-simple #toolrail .tool{
+    width:66px;min-height:46px;height:auto;padding:5px 2px 4px;border-radius:11px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+    border:1px solid transparent;color:var(--tx2)}
+  html.av-simple #toolrail .tool svg{width:19px;height:19px}
+  html.av-simple #toolrail .tool .lbl{
+    font-size:8.5px;font-weight:800;letter-spacing:.01em;line-height:1;color:inherit;
+    max-width:62px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  html.av-simple #toolrail .tool:hover{background:#F4F5F7;border-color:var(--line);color:var(--tx)}
+  html.av-simple #toolrail .tool.on{background:var(--acc);color:#fff;box-shadow:0 6px 16px rgba(245,73,39,.28)}
+  html.av-simple #toolrail .tool.on .lbl{color:#fff}
+  html.av-simple #toolrail .tool .tip{display:none}
+  html.av-simple #toolrail .av15-grp{
+    width:54px;height:1px;background:var(--line);margin:4px 0 2px;flex:none}
+  html.av-simple #toolrail .tool{min-height:42px;padding:4px 2px 3px}
+  html.av-simple #toolrail .tool svg{width:18px;height:18px}
+  /* beginners see the 15 everyday tools; the rest sit one tap away */
+  html.av-simple:not(.av-adv):not(.av-rail-open) #toolrail .tool.av15-extra{display:none}
+  html.av-simple #toolrail .av15-more{
+    width:66px;min-height:30px;margin-top:6px;border-radius:9px;border:1px dashed var(--line2);
+    background:#FAFAFB;color:var(--tx2);font-size:9.5px;font-weight:800;letter-spacing:.02em;
+    display:flex;align-items:center;justify-content:center;gap:4px;flex:none}
+  html.av-simple #toolrail .av15-more:hover{border-color:var(--acc);color:var(--acc);background:#fff}
+  html.av-simple.av-rail-open #toolrail .av15-more{background:var(--avSoft);border-color:var(--acc);color:var(--acc)}
+
+  /* side panel: bigger targets, advanced hidden until asked */
+  html.av-simple #side{width:312px}
+  html.av-simple #side .sec-h{font-size:11px;letter-spacing:.08em;height:34px}
+  html.av-simple #propBody{padding:10px 12px}
+  html.av-simple #propBody .pnote{font-size:11.5px;line-height:1.5}
+  html.av-simple:not(.av-adv) #propBody > :nth-child(n+3){display:none}
+  html.av-simple:not(.av-adv) #blendSel{display:none}
+  html.av-simple:not(.av-adv) #histSec{display:none}
+  html.av-simple #layerList .lrow{height:46px;border-radius:10px}
+  html.av-simple #layerList .lrow canvas{width:46px;height:34px}
+  html.av-simple #layerList .lname{font-size:12.5px}
+  html.av-simple #layerList .lact{width:28px;height:28px;font-size:14px}
+  html.av-simple:not(.av-adv) #layerList .lact.v11alpha,
+  html.av-simple:not(.av-adv) #layerList .lact.v11ref{display:none}
+  html.av-simple #layerList .ltag{opacity:.75}
+  html.av-simple #layerBtns .sbtn{width:28px;height:26px}
+  html.av-simple #colorRow{flex-direction:column;gap:8px}
+  html.av-simple #palette{gap:6px}
+  html.av-simple #palette .pal{width:24px;height:24px;border-radius:7px}
+  html.av-simple #swWrap .sw{width:38px;height:38px;border-radius:10px}
+  html.av-simple #layerFooter{padding:8px 12px 10px}
+  html.av-simple #layerOp{height:6px}
+  html.av-simple #propBody input[type=range]{height:6px}
+  html.av-simple .btn{padding:8px 12px;border-radius:9px;font-size:12.5px}
+
+  /* floating quick bar: only the 8 things a beginner needs */
+  html.av-simple #av12bar{
+    padding:7px;gap:5px;border-radius:16px;
+    max-width:min(860px,calc(100vw - 108px));left:calc(50% + 40px)}
+  html.av-simple #av12bar button{height:44px;padding:0 13px;font-size:12.5px;border-radius:11px}
+  html.av-simple #av12bar button[data-a="fit"],
+  html.av-simple #av12bar button[data-a="center"],
+  html.av-simple #av12bar button[data-a="rot"],
+  html.av-simple #av12bar button[data-a="fliph"],
+  html.av-simple #av12bar button[data-a="dup"],
+  html.av-simple #av12bar button[data-a="del"],
+  html.av-simple #av12bar button[data-a="crop"],
+  html.av-simple #av12bar button[data-a="theme"],
+  html.av-simple #av12bar button[data-a="brand"],
+  html.av-simple #av12bar button[data-a="help"],
+  html.av-simple #av12bar button[data-a="selinv"],
+  html.av-simple #av12bar button[data-a="selnone"],
+  html.av-simple #av12bar button[data-a="selcut"],
+  html.av-simple #av12bar .av-sep{display:none}
+  /* simple bar = the 7 things a beginner actually clicks */
+  html.av-simple #av12bar{max-width:min(900px,calc(100vw - 132px))}
+
+  /* size card: friendlier */
+  html.av-simple #av12card{width:302px;border-radius:16px}
+  html.av-simple #av12card .c-h{height:44px}
+  html.av-simple #av12card .c-in{height:38px}
+  html.av-simple #av12card .c-in input{font-size:14px}
+  html.av-simple #av12card .c-btn button,html.av-simple #av12card .c-btn2 button{height:36px;font-size:12px}
+  html.av-simple #av12card .c-hint{font-size:11px}
+
+  /* advanced toggle chip in the properties header */
+  #av15adv{display:none}
+  html.av-simple #av15adv{
+    display:inline-flex;align-items:center;gap:5px;margin-left:auto;height:22px;padding:0 9px;
+    border-radius:999px;border:1px solid var(--line2);background:#fff;color:var(--tx2);
+    font-size:10.5px;font-weight:800;cursor:pointer}
+  html.av-simple #av15adv:hover{border-color:var(--acc);color:var(--acc)}
+  html.av-simple.av-adv #av15adv{background:var(--acc);border-color:var(--acc);color:#fff}
+
+  /* mode switch */
+  #av15mode{
+    display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 11px;margin-left:6px;
+    border-radius:9px;border:1px solid var(--line2);background:#fff;color:var(--tx2);
+    font-size:11.5px;font-weight:800;cursor:pointer;flex:none}
+  #av15mode:hover{border-color:var(--acc);color:var(--acc)}
+  html.av-simple #av15mode{background:var(--avSoft);border-color:rgba(245,73,39,.4);color:var(--acc)}
+
+  /* ☰ menu dropdown */
+  #av15menu{
+    position:fixed;z-index:21010;top:56px;left:14px;width:min(420px,92vw);max-height:78vh;overflow:auto;
+    background:#fff;border:1px solid var(--line2);border-radius:16px;box-shadow:0 26px 64px rgba(17,24,39,.22);
+    padding:10px;display:none}
+  #av15menu.on{display:block}
+  #av15menu .mh{display:flex;align-items:center;gap:8px;padding:4px 6px 10px}
+  #av15menu .mh b{font-size:13.5px}
+  #av15menu .mh .x{margin-left:auto;width:26px;height:26px;border-radius:8px;display:grid;place-items:center;color:var(--tx3)}
+  #av15menu .mh .x:hover{background:#F4F5F7;color:var(--tx)}
+  #av15menu .mgrid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  #av15menu .mbtn{
+    display:flex;align-items:center;gap:8px;height:38px;padding:0 11px;border-radius:10px;
+    border:1px solid var(--line);background:#FAFAFB;font-size:12.5px;font-weight:700;color:var(--tx);text-align:left}
+  #av15menu .mbtn:hover{border-color:var(--acc);color:var(--acc);background:#fff}
+  #av15menu .mbtn small{margin-left:auto;color:var(--tx3);font-weight:700;font-size:10px}
+  #av15menu .msec{margin:10px 4px 6px;font:800 10px/1 system-ui;letter-spacing:.09em;text-transform:uppercase;color:var(--tx3)}
+  #av15menu .mitem{
+    display:flex;align-items:center;gap:10px;width:100%;min-height:36px;padding:6px 10px;border-radius:9px;
+    font-size:12.5px;color:var(--tx);text-align:left}
+  #av15menu .mitem:hover{background:var(--avSoft);color:var(--acc)}
+  #av15menu .mitem kbd{margin-left:auto;font:700 10px/1 ui-monospace,monospace;color:var(--tx3);
+    background:#F1F2F5;border:1px solid var(--line);border-radius:5px;padding:2px 5px}
+  #av15menu .back{display:flex;align-items:center;gap:7px;height:30px;padding:0 8px;border-radius:8px;
+    color:var(--tx2);font-size:12px;font-weight:800;margin-bottom:4px}
+  #av15menu .back:hover{background:#F4F5F7;color:var(--tx)}
+
+  /* start panel */
+  #av15start .sgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  #av15start .scard{
+    display:flex;flex-direction:column;gap:5px;padding:14px;border-radius:14px;border:1px solid var(--line);
+    background:#FAFAFB;text-align:left;min-height:104px;transition:.14s}
+  #av15start .scard:hover{border-color:var(--acc);background:#fff;box-shadow:0 10px 24px rgba(245,73,39,.12);transform:translateY(-1px)}
+  #av15start .scard i{
+    width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--avSoft);color:var(--acc);font-style:normal}
+  #av15start .scard b{font-size:13.5px}
+  #av15start .scard span{font-size:11.5px;color:var(--tx3);line-height:1.45}
+  #av15start .sfoot{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+  #av15start .sfoot button{flex:1;min-width:130px;height:36px;border-radius:10px;border:1px solid var(--line2);background:#fff;font-weight:800;font-size:12px}
+  #av15start .sfoot button.pri{background:var(--acc);border-color:var(--acc);color:#fff}
+
+  @media (max-width:1100px){
+    html.av-simple #av12bar{left:calc(50% + 34px);max-width:calc(100vw - 92px)}
+  }
+  @media (max-width:760px){
+    html.av-simple #topbar{height:48px;padding:0 8px}
+    html.av-simple #av15menuBtn{padding:0 9px;height:30px}
+    html.av-simple #av15menuBtn span.txt{display:none}
+    html.av-simple #av15mode{padding:0 9px}
+    html.av-simple #av15mode span.txt{display:none}
+    html.av-simple #toolrail{width:auto;height:56px;flex-direction:row;overflow-x:auto;overflow-y:hidden;
+      padding:4px 8px;gap:4px;border-right:none;border-top:1px solid var(--line)}
+    html.av-simple #toolrail .tool{width:44px;min-height:44px;height:44px;padding:3px 2px}
+    html.av-simple #toolrail .tool svg{width:17px;height:17px}
+    html.av-simple #toolrail .tool .lbl{display:none}
+    html.av-simple #toolrail .av15-grp{width:1px;height:28px;margin:0 4px}
+    html.av-simple #toolrail .av15-more{width:auto;min-height:40px;padding:0 10px;margin:0 0 0 4px}
+    html.av-simple #side{width:300px}
+    html.av-simple #av12bar{bottom:66px;left:10px;right:10px;transform:none;max-width:none;padding:5px;gap:3px}
+    html.av-simple #av12bar button{height:40px;padding:0 10px;font-size:11.5px}
+    html.av-simple #av12bar button[data-a="filter"] .t{display:none}
+    html.av-simple #av12card{bottom:120px}
+    #av15menu .mgrid{grid-template-columns:1fr}
+    #av15start .sgrid{grid-template-columns:1fr}
+    #av15menu{left:8px;right:8px;width:auto}
+  }
+`;
+  function injectCSS15(){ const st=document.createElement('style'); st.id='av15-style'; st.textContent=CSS15; document.head.appendChild(st); }
+
+  /* ============================================================
+     12. THEME + BRAND COLOUR SYSTEM (v14)
+     ============================================================ */
+  const LS_KEY = 'artvision.v14';
+  const state = {
+    theme: 'light',            // light | dark
+    brand: '#F54927',          // primary
+    harmony: 'complementary',
+    secondary: null,           // computed unless user picks
+  };
+
+  /* ---------- colour maths (HEX ⇄ HSL, tints/shades, contrast) ---------- */
+  function hex2rgb(h) {
+    h = String(h || '').replace('#', '').trim();
+    if (h.length === 3) h = h.split('').map(c => c + c).join('');
+    const n = parseInt(h, 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+  }
+  function rgb2hex(r, g, b) {
+    const f = v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
+    return '#' + f(r) + f(g) + f(b);
+  }
+  function rgb2hsl(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h = 0, s = 0; const l = (max + min) / 2;
+    if (max !== min) {
+      const d = max - min;
+      s = l > .5 ? d / (2 - max - min) : d / (max + min);
+      if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
+      else if (max === g) h = (b - r) / d + 2;
+      else h = (r - g) / d + 4;
+      h *= 60;
+    }
+    return { h, s: s * 100, l: l * 100 };
+  }
+  function hsl2rgb(h, s, l) {
+    h = ((h % 360) + 360) % 360; s /= 100; l /= 100;
+    const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2;
+    let r = 0, g = 0, b = 0;
+    if (h < 60) { r = c; g = x; } else if (h < 120) { r = x; g = c; }
+    else if (h < 180) { g = c; b = x; } else if (h < 240) { g = x; b = c; }
+    else if (h < 300) { r = x; b = c; } else { r = c; b = x; }
+    return { r: (r + m) * 255, g: (g + m) * 255, b: (b + m) * 255 };
+  }
+  const hex2hsl = hex => { const c = hex2rgb(hex); return rgb2hsl(c.r, c.g, c.b); };
+  const hsl2hex = (h, s, l) => { const c = hsl2rgb(h, s, l); return rgb2hex(c.r, c.g, c.b); };
+  function relLum(hex) {
+    const { r, g, b } = hex2rgb(hex);
+    const f = v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); };
+    return .2126 * f(r) + .7152 * f(g) + .0722 * f(b);
+  }
+  function contrast(a, b) {
+    const l1 = relLum(a), l2 = relLum(b);
+    return (Math.max(l1, l2) + .05) / (Math.min(l1, l2) + .05);
+  }
+  const inkOn = hex => contrast(hex, '#FFFFFF') >= contrast(hex, '#111318') ? '#FFFFFF' : '#111318';
+
+  /* ---------- colour-theory harmony ---------- */
+  const HARMONIES = {
+    complementary: 'Complementary',
+    analogous: 'Analogous',
+    triadic: 'Triadic',
+    split: 'Split complementary',
+    tetradic: 'Tetradic',
+    monochrome: 'Monochromatic',
+  };
+  function harmonyColors(hex, rule) {
+    const { h, s, l } = hex2hsl(hex);
+    const keep = (hh, ss, ll) => hsl2hex(hh, clamp(ss == null ? s : ss, 8, 92), clamp(ll == null ? l : ll, 24, 62));
+    switch (rule) {
+      case 'analogous': return [keep(h + 30), keep(h - 30), keep(h + 60)];
+      case 'triadic': return [keep(h + 120), keep(h + 240), keep(h + 120, s, l - 8)];
+      case 'split': return [keep(h + 150), keep(h + 210), keep(h + 150, s, l - 10)];
+      case 'tetradic': return [keep(h + 90), keep(h + 180), keep(h + 270)];
+      case 'monochrome': return [keep(h, s, l - 16), keep(h, s * .7, l + 12), keep(h, s * .5, l + 24)];
+      default: return [keep(h + 180, s * .92, l - 6), keep(h + 180, s, l - 14), keep(h + 164, s, l + 6)];
+    }
+  }
+  /* 10-step scale (50 … 900) like a design-system ramp */
+  const STEPS = [
+    { n: 50, l: 96, s: .96 }, { n: 100, l: 92, s: .92 }, { n: 200, l: 84, s: .86 },
+    { n: 300, l: 74, s: .82 }, { n: 400, l: 62, s: .9 }, { n: 500, l: 50, s: 1 },
+    { n: 600, l: 42, s: 1 }, { n: 700, l: 34, s: .98 }, { n: 800, l: 26, s: .96 },
+    { n: 900, l: 18, s: .94 },
+  ];
+  function ramp(hex) {
+    const h = hex2hsl(hex);
+    return STEPS.map(st => {
+      // keep the brand's own step 500 exact
+      if (st.n === 500) return { n: 500, hex: hex };
+      return { n: st.n, hex: hsl2hex(h.h, clamp(h.s * st.s, 6, 95), st.l) };
+    });
+  }
+
+  /* ---------- persistence ---------- */
+  function saveState() {
+    try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { }
+  }
+  function loadState() {
+    try {
+      const raw = localStorage.getItem(LS_KEY);
+      if (!raw) return;
+      const o = JSON.parse(raw);
+      if (o.theme === 'light' || o.theme === 'dark') state.theme = o.theme;
+      if (/^#[0-9a-f]{6}$/i.test(o.brand || '')) state.brand = o.brand;
+      if (o.harmony && HARMONIES[o.harmony]) state.harmony = o.harmony;
+      if (/^#[0-9a-f]{6}$/i.test(o.secondary || '')) state.secondary = o.secondary;
+    } catch (e) { }
+  }
+  function secondaryOf() {
+    return state.secondary || harmonyColors(state.brand, state.harmony)[0];
+  }
+
+  /* ---------- apply theme ---------- */
+  function applyTheme(mode, silent) {
+    state.theme = mode === 'dark' ? 'dark' : 'light';
+    const root = document.documentElement;
+    root.classList.toggle('av-light', state.theme === 'light');
+    root.classList.toggle('av-dark', state.theme === 'dark');
+    root.style.setProperty('--avBrand', state.brand);
+    root.style.setProperty('--avBrand2', secondaryOf());
+    root.style.setProperty('--avSoft', softOf(state.brand));
+    root.style.setProperty('--avSoft2', softOf(secondaryOf()));
+    // let the host app use the brand as its accent
+    try {
+      root.style.setProperty('--acc', state.brand);
+      root.style.setProperty('--acc2', secondaryOf());
+    } catch (e) { }
+    try {
+      const bm = document.querySelector('meta[name="theme-color"]');
+      if (bm) bm.content = state.theme === 'light' ? '#F4F5F7' : '#131418';
+    } catch (e) { }
+    saveState();
+    try { rebuildChecker(); } catch (e) { }
+    syncBarState();
+    if (!silent) A.toast(state.theme === 'light' ? 'Light theme' : 'Dark theme', '', 1300);
+  }
+  function softOf(hex) {
+    const { h, s } = hex2hsl(hex);
+    return hsl2hex(h, clamp(s, 30, 90), 96);
+  }
+  function toggleTheme() { applyTheme(state.theme === 'light' ? 'dark' : 'light'); }
+
+  /* ---------- brand palette panel ---------- */
+  function openBrandPanel() {
+    const sec = secondaryOf();
+    const pRamp = ramp(state.brand), sRamp = ramp(sec);
+    const swatches = (arr) => arr.map(x =>
+      `<div class="bsw" data-hex="${x.hex}" style="background:${x.hex};color:${inkOn(x.hex)}" title="${x.hex} · click = copy"><b>${x.n}</b></div>`).join('');
+    const body = `
+      <div class="bhead">
+        <div class="bcard"><small>Brand primary</small><b id="av14phex">${state.brand.toUpperCase()}</b>
+          <div style="display:flex;gap:8px;margin-top:6px">
+            <input type="color" id="av14pcolor" value="${state.brand}">
+            <input id="av14ptext" value="${state.brand.toUpperCase()}" style="flex:1;height:34px;padding:0 9px;font:600 12.5px ui-monospace,monospace">
+          </div>
+        </div>
+        <div class="bcard"><small>Secondary (${HARMONIES[state.harmony]})</small><b id="av14shex">${sec.toUpperCase()}</b>
+          <div style="display:flex;gap:8px;margin-top:6px">
+            <input type="color" id="av14scolor" value="${sec}">
+            <input id="av14stext" value="${sec.toUpperCase()}" style="flex:1;height:34px;padding:0 9px;font:600 12.5px ui-monospace,monospace">
+          </div>
+        </div>
+      </div>
+      <div class="brow"><span class="lbl">Harmony</span>
+        <div class="bharm">${Object.entries(HARMONIES).map(([k, v]) =>
+      `<button data-h="${k}" class="${state.harmony === k ? 'on' : ''}">${v}</button>`).join('')}</div>
+      </div>
+      <div class="brow" style="margin-top:14px"><span class="lbl">Primary</span><div style="flex:1;font-size:11px;color:var(--tx3)">tints → shades (50–900)</div></div>
+      <div class="bgrid" id="av14pramp">${swatches(pRamp)}</div>
+      <div class="brow" style="margin-top:12px"><span class="lbl">Secondary</span><div style="flex:1;font-size:11px;color:var(--tx3)">backgrounds · accents · charts</div></div>
+      <div class="bgrid" id="av14sramp">${swatches(sRamp)}</div>
+      <div class="bacts">
+        <button class="pri" id="av14applyfill">Use as fill</button>
+        <button id="av14applytext">Use as text colour</button>
+        <button id="av14applybg">Set canvas background</button>
+        <button id="av14copyall">Copy palette CSS</button>
+        <button id="av14reset">Reset (#F54927)</button>
+      </div>
+      <div class="bhint">Primary = brand ka main rang (#F54927). Secondary colour-theory se banta hai — <b>complementary</b> sabse zyada contrast deta hai, <b>analogous</b> soft/cohesive, <b>triadic</b> playful. Swatch pe click = hex copy. Contrast ratio swatches me check kiya gaya hai (white/dark ink auto).</div>`;
+    modal('Brand & palette', body,
+      `<button class="btn" data-close>Close</button><button class="btn primary" id="av14ok">Apply to app accent</button>`,
+      host => {
+        const m = host.querySelector('.m'); if (m) m.id = 'av14brand';
+        const repaint = () => {
+          const sec2 = secondaryOf();
+          host.querySelector('#av14phex').textContent = state.brand.toUpperCase();
+          host.querySelector('#av14shex').textContent = sec2.toUpperCase();
+          host.querySelector('#av14pcolor').value = state.brand;
+          host.querySelector('#av14ptext').value = state.brand.toUpperCase();
+          host.querySelector('#av14scolor').value = sec2;
+          host.querySelector('#av14stext').value = sec2.toUpperCase();
+          host.querySelector('#av14pramp').innerHTML = swatches(ramp(state.brand));
+          host.querySelector('#av14sramp').innerHTML = swatches(ramp(sec2));
+          host.querySelector('[id="av14shex"]').previousElementSibling.textContent = 'Secondary (' + HARMONIES[state.harmony] + ')';
+          host.querySelectorAll('.bharm button').forEach(b => b.classList.toggle('on', b.dataset.h === state.harmony));
+          bindSwatches();
+          root_vars();
+        };
+        const root_vars = () => {
+          document.documentElement.style.setProperty('--avBrand', state.brand);
+          document.documentElement.style.setProperty('--avBrand2', secondaryOf());
+          document.documentElement.style.setProperty('--avSoft', softOf(state.brand));
+          try { document.documentElement.style.setProperty('--acc', state.brand); document.documentElement.style.setProperty('--acc2', secondaryOf()); } catch (e) { }
+        };
+        const setBrand = (hex) => {
+          if (!/^#?[0-9a-f]{6}$/i.test(String(hex).trim())) { A.toast('Hex galat hai — #RRGGBB', 'err', 1800); return; }
+          state.brand = ('#' + String(hex).replace('#', '')).toUpperCase();
+          state.secondary = null;
+          saveState(); repaint();
+        };
+        const setSecondary = (hex) => {
+          if (!/^#?[0-9a-f]{6}$/i.test(String(hex).trim())) { A.toast('Hex galat hai — #RRGGBB', 'err', 1800); return; }
+          state.secondary = ('#' + String(hex).replace('#', '')).toUpperCase();
+          saveState(); repaint();
+        };
+        function bindSwatches() {
+          host.querySelectorAll('.bsw').forEach(sw => sw.onclick = () => {
+            const hex = sw.dataset.hex;
+            try { navigator.clipboard.writeText(hex); A.toast(hex + ' copy ho gaya', 'ok', 1400); }
+            catch (e) { A.toast(hex, '', 1800); }
+          });
+        }
+        host.querySelector('#av14pcolor').oninput = e => setBrand(e.target.value);
+        host.querySelector('#av14scolor').oninput = e => setSecondary(e.target.value);
+        host.querySelector('#av14ptext').onchange = e => setBrand(e.target.value);
+        host.querySelector('#av14stext').onchange = e => setSecondary(e.target.value);
+        host.querySelectorAll('.bharm button').forEach(b => b.onclick = () => {
+          state.harmony = b.dataset.h; state.secondary = null; saveState(); repaint();
+        });
+        host.querySelector('#av14applyfill').onclick = () => { setPrimaryColour(state.brand); };
+        host.querySelector('#av14applytext').onclick = () => { setPrimaryColour(state.brand, true); };
+        host.querySelector('#av14applybg').onclick = () => { setCanvasBg(state.brand); };
+        host.querySelector('#av14copyall').onclick = () => {
+          const css = `--brand-500:${state.brand};\n` + ramp(state.brand).map(x => `--brand-${x.n}:${x.hex};`).join('\n') +
+            `\n--secondary-500:${secondaryOf()};\n` + ramp(secondaryOf()).map(x => `--secondary-${x.n}:${x.hex};`).join('\n');
+          try { navigator.clipboard.writeText(css); A.toast('Palette CSS copy ho gaya', 'ok', 2000); } catch (e) { }
+        };
+        host.querySelector('#av14reset').onclick = () => {
+          state.brand = '#F54927'; state.harmony = 'complementary'; state.secondary = null;
+          saveState(); repaint(); A.toast('Brand reset #F54927', 'ok', 1600);
+        };
+        host.querySelector('#av14ok').onclick = () => {
+          applyTheme(state.theme, true); closeModal();
+          A.toast('Brand applied — primary ' + state.brand.toUpperCase(), 'ok', 2200);
+        };
+        bindSwatches();
+      });
+  }
+  function setPrimaryColour(hex, asText) {
+    try {
+      if (typeof setPrimary === 'function') setPrimary(hex);
+      if (typeof primary !== 'undefined') primary = hex;
+      const ta = document.getElementById('textOverlay');
+      if (textEdit && ta) { ta.style.color = hex; }
+      A.toast((asText ? 'Text colour' : 'Fill colour') + ': ' + hex.toUpperCase(), 'ok', 1600);
+      needRender = true;
+    } catch (e) { A.toast('Colour set nahi hua', 'err', 1800); }
+  }
+  function setCanvasBg(hex) {
+    try {
+      const L = A.layers()[0];
+      if (L && L.type === 'raster' && /back/i.test(L.name || '')) {
+        A.bake(L); A.undoPush();
+        replaceCanvas(L, g => { g.fillStyle = hex; g.fillRect(0, 0, doc.w, doc.h); });
+        A.toast('Canvas background → ' + hex.toUpperCase(), 'ok', 1800);
+        return;
+      }
+      A.undoPush();
+      const NL = newRasterLayer('Background');
+      NL.canvas.getContext('2d').fillStyle = hex;
+      NL.canvas.getContext('2d').fillRect(0, 0, doc.w, doc.h);
+      doc.layers.unshift(NL); doc.activeId = NL.id;
+      layerVerBump(NL); docDirty = true; needRender = true;
+      A.ui();
+      A.toast('Background layer → ' + hex.toUpperCase(), 'ok', 1800);
+    } catch (e) { A.toast('Background set fail: ' + e.message, 'err', 2400); }
+  }
+
+
+  const CSS16 = `
+  /* ---------- v16 brand mark ---------- */
+  #av16splash{
+    position:fixed;inset:0;z-index:10080;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(1100px 520px at 50% 35%, #FFFFFF 0%, #F4F5F7 60%, #ECEEF2 100%);
+    transition:opacity .4s ease, visibility .4s ease}
+  #av16splash.out{opacity:0;visibility:hidden}
+  #av16splash .in{display:flex;flex-direction:column;align-items:center;gap:12px;animation:av16in .5s ease both}
+  #av16splash .art{width:138px;height:110px;display:grid;place-items:center}
+  #av16splash .art img{width:100%;height:100%;object-fit:contain;animation:av16pop .7s cubic-bezier(.2,.9,.3,1.2) both}
+  #av16splash .word{font:800 21px/1 Inter,system-ui,sans-serif;letter-spacing:.14em;color:#15171C}
+  #av16splash .word span{color:#B23A1D;font-weight:700;letter-spacing:.2em}
+  #av16splash .tag{font-size:11.5px;color:#767E8C;letter-spacing:.02em}
+  #av16splash .bar{width:132px;height:3px;border-radius:3px;background:#E5E8ED;overflow:hidden;margin-top:6px}
+  #av16splash .bar i{display:block;height:100%;width:0;border-radius:3px;
+    background:linear-gradient(90deg,#F5A623,#FFE600,#FF2A1A);animation:av16bar 1.35s ease forwards}
+  @keyframes av16pop{from{transform:scale(.7);opacity:0}to{transform:scale(1);opacity:1}}
+  @keyframes av16in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  @keyframes av16bar{from{width:0}to{width:100%}}
+  html.av-dark #av16splash{background:radial-gradient(1100px 520px at 50% 35%,#1B1F29 0%,#111318 65%)}
+  html.av-dark #av16splash .word{color:#EAF0FF}
+  html.av-dark #av16splash .bar{background:#242a36}
+
+  /* top bar mark */
+  html.av-light #logo .mark,html.av-dark #logo .mark{background:transparent!important;border-radius:0}
+  #logo .mark img{filter:none}
+  html.av-light #logo .mark{padding:0}
+  #logo b{letter-spacing:.06em}
+  #logo{gap:7px}
+`;
+  function injectCSS16(){ const st=document.createElement('style'); st.id='av16-style'; st.textContent=CSS16; document.head.appendChild(st); }
+
+  /* ============================================================
+     15. SIMPLE MODE — friendlier shell, same full feature set
+     ============================================================ */
+  const SIMPLE_KEY = 'artvision.v15.mode';
+  let simple = true;
+  let mode = 'studio';
+
+  const TOOL_LABELS = {
+    move: 'Move', node: 'Nodes', pen: 'Pen', pencil: 'Pencil', brush: 'Brush',
+    eraser: 'Eraser', bgerase: 'BG erase', smudge: 'Smudge', clone: 'Clone',
+    fill: 'Fill', bgrad: 'Gradient', marquee: 'Marquee', lasso: 'Lasso',
+    wand: 'Wand', text: 'Text', rect: 'Rect', ellipse: 'Circle', line: 'Line',
+    star: 'Star', eyedrop: 'Pick', hand: 'Pan', guide: 'Guide', zoom: 'Zoom'
+  };
+  const TOOL_GROUPS = {
+    // after this tool a divider is drawn
+    ellipse: 'select', wand: 'paint', bgrad: 'draw', star: 'view'
+  };
+
+  function loadMode() {
+    try {
+      const v = localStorage.getItem(SIMPLE_KEY);
+      mode = (v === 'pro' || v === 'simple' || v === 'studio') ? v : 'studio';
+      simple = mode !== 'pro';
+    } catch (e) { mode = 'studio'; simple = true; }
+  }
+  function applyMode(want, silent) {
+    const m = (want === 'pro' || want === 'simple' || want === 'studio') ? want : 'studio';
+    mode = m;
+    simple = m !== 'pro';
+    document.documentElement.classList.toggle('av-simple', simple);
+    document.documentElement.classList.toggle('av-pro', !simple);
+    document.documentElement.classList.toggle('av-studio', m === 'studio');
+    try { localStorage.setItem(SIMPLE_KEY, m); } catch (e) { }
+    // studio = violet-blue gradient skin on a dark base (v12 feel)
+    if (m === 'studio') {
+      try { applyTheme('dark', true); } catch (e) { }
+    }
+    const btn = document.getElementById('av15mode');
+    if (btn) btn.innerHTML = m === 'pro'
+      ? `<span class="txt">Pro</span>`
+      : `${svg('sparkle', 14)}<span class="txt">${m === 'studio' ? 'Studio' : 'Simple'}</span>`;
+    if (btn) btn.title = m === 'pro'
+      ? 'Pro mode — click for the Studio layout'
+      : 'Studio layout — click for the full pro layout';
+    refreshToolLabels();
+    try { buildQuickCards(); } catch (e) { }
+    try { initV18(); } catch (e) { }
+    if (typeof syncCard === 'function') { try { syncCard(true); } catch (e) { } }
+    if (!silent) A.toast(m === 'pro' ? 'Pro mode — saare panels wapas'
+      : (m === 'studio' ? 'Studio mode — click-first, gradient skin' : 'Simple mode'), 'ok', 2000);
+  }
+  function toggleMode() {
+    const cur = document.documentElement.classList.contains('av-studio') ? 'studio'
+      : (simple ? 'simple' : 'pro');
+    applyMode(cur === 'pro' ? 'studio' : 'pro');
+  }
+
+  const CORE_TOOLS = ['move', 'wand', 'marquee', 'lasso', 'brush', 'eraser', 'fill',
+    'text', 'rect', 'ellipse', 'line', 'star', 'eyedrop', 'hand', 'zoom'];
+
+  function refreshToolLabels() {
+    document.querySelectorAll('#toolrail .tool').forEach(b => {
+      const t = b.dataset.tool || '';
+      let lbl = b.querySelector('.lbl');
+      if (simple) {
+        if (!lbl) { lbl = document.createElement('span'); lbl.className = 'lbl'; b.appendChild(lbl); }
+        lbl.textContent = TOOL_LABELS[t] || t;
+      } else if (lbl) lbl.remove();
+    });
+    // core vs extra
+    document.querySelectorAll('#toolrail .tool').forEach(b => {
+      const extra = CORE_TOOLS.indexOf(b.dataset.tool) < 0;
+      b.classList.toggle('av15-extra', extra);
+    });
+    // "More tools" toggle at the end of the rail
+    let mt = document.querySelector('#toolrail .av15-more');
+    const rail = document.getElementById('toolrail');
+    if (simple && rail) {
+      if (!mt) {
+        mt = document.createElement('button');
+        mt.className = 'av15-more';
+        mt.innerHTML = 'More tools';
+        mt.onclick = () => {
+          const open = document.documentElement.classList.toggle('av-rail-open');
+          mt.innerHTML = open ? 'Less' : 'More tools';
+        };
+        rail.appendChild(mt);
+      }
+    } else if (mt) mt.remove();
+
+    // group dividers
+    document.querySelectorAll('#toolrail .av15-grp').forEach(e => e.remove());
+    if (simple) {
+      for (const [tool, name] of Object.entries(TOOL_GROUPS)) {
+        const el = document.querySelector(`#toolrail .tool[data-tool="${tool}"]`);
+        if (el && el.nextSibling) {
+          const d = document.createElement('div'); d.className = 'av15-grp';
+          d.title = name;
+          el.parentNode.insertBefore(d, el.nextSibling);
+        }
+      }
+    }
+  }
+
+  /* ---------- ☰ menu dock (replaces the 9 dense menus in simple mode) ---------- */
+  function buildMenuDock() {
+    const btn = document.createElement('button');
+    btn.id = 'av15menuBtn';
+    btn.innerHTML = `<span class="bars"><i></i><i></i><i></i></span><span class="txt">Menu</span>`;
+    btn.title = 'Sab kuch yahan se — File, Edit, Image, Layer, Filter…';
+    btn.onclick = (e) => { e.stopPropagation(); toggleMenuDock(); };
+    const logo = document.getElementById('logo');
+    if (logo && logo.parentNode) logo.parentNode.insertBefore(btn, logo.nextSibling);
+
+    const dock = document.createElement('div');
+    dock.id = 'av15menu';
+    dock.onclick = e => e.stopPropagation();
+    document.body.appendChild(dock);
+
+    // mode switch lives next to the menu button
+    const mode = document.createElement('button');
+    mode.id = 'av15mode';
+    mode.onclick = toggleMode;
+    const quick = document.getElementById('quick');
+    if (quick && quick.parentNode) quick.parentNode.insertBefore(mode, quick);
+
+    document.addEventListener('click', () => dock.classList.remove('on'));
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') dock.classList.remove('on'); });
+    renderMenuRoot();
+  }
+  let _legacyGuard = false;
+  function guardLegacyLauncher() {
+    if (_legacyGuard) return;
+    _legacyGuard = true;
+    const kill = () => {
+      try {
+        if (!simple) return;
+        document.querySelectorAll('.modal-ov').forEach(o => {
+          if (o.querySelector('.homebox') || /Kya craft karenge/.test(o.textContent || '')) o.remove();
+        });
+      } catch (e) { }
+    };
+    try {
+      new MutationObserver(kill).observe(document.body, { childList: true, subtree: true });
+    } catch (e) { }
+    [200, 700, 1500, 3000, 6000].forEach(ms => setTimeout(kill, ms));
+  }
+  function dismissLegacyHome() {
+    try {
+      document.querySelectorAll('.homebox').forEach(x => {
+        const o = x.closest('.modal-ov'); if (o) o.remove(); else x.remove();
+      });
+    } catch (e) { }
+  }
+  function toggleMenuDock() {
+    const d = document.getElementById('av15menu');
+    if (!d) return;
+    const on = d.classList.toggle('on');
+    if (on) { dismissLegacyHome(); renderMenuRoot(); }
+  }
+  function renderMenuRoot() {
+    const d = document.getElementById('av15menu');
+    if (!d) return;
+    const names = Object.keys(typeof MENUS !== 'undefined' ? MENUS : {});
+    d.innerHTML = `
+      <div class="mh"><b>Menu</b>
+        <button class="x" title="Close">${svg('x', 14)}</button></div>
+      <div class="mgrid">
+        ${names.map(n => `<button class="mbtn" data-menu="${n}">${n}<small>${(MENUS[n] || []).length}</small></button>`).join('')}
+      </div>
+      <div class="msec">Appearance &amp; help</div>
+      <button class="mitem" data-act="theme">${svg(state.theme === 'light' ? 'moon' : 'sun', 15)} ${state.theme === 'light' ? 'Dark theme' : 'Light theme'}</button>
+      <button class="mitem" data-act="brand">${svg('palette', 15)} Brand &amp; palette</button>
+      <button class="mitem" data-act="home">${svg('sparkle', 15)} Studio home — click se shuru</button>
+      <button class="mitem" data-act="new">${svg('check', 15)} Naya kya hai — v19 update</button>
+      <button class="mitem" data-act="start">${svg('question', 15)} Start guide (4 steps)</button>
+      <button class="mitem" data-act="help">${svg('question', 15)} Shortcuts &amp; help</button>
+      <button class="mitem" data-act="pro">${svg('sparkle', 15)} ${simple ? 'Pro mode (all panels)' : 'Studio mode'}</button>`;
+    d.querySelector('.x').onclick = () => d.classList.remove('on');
+    d.querySelectorAll('[data-menu]').forEach(b => b.onclick = () => renderMenuList(b.dataset.menu));
+    d.querySelectorAll('[data-act]').forEach(b => b.onclick = () => {
+      const a = b.dataset.act;
+      d.classList.remove('on');
+      if (a === 'theme') toggleTheme();
+      if (a === 'brand') openBrandPanel();
+      if (a === 'start') openStartPanel();
+      if (a === 'home') openStudioHome();
+      if (a === 'new') openWhatsNew19();
+      if (a === 'help') openHelp();
+      if (a === 'pro') toggleMode();
+    });
+  }
+  function renderMenuList(name) {
+    const d = document.getElementById('av15menu');
+    if (!d) return;
+    const items = (MENUS[name] || []);
+    d.innerHTML = `
+      <div class="back" data-back>${svg('rot', 13)} All menus</div>
+      <div class="msec" style="margin-top:0">${name}</div>
+      ${items.map((it, i) => `<button class="mitem" data-i="${i}">${it.l}${it.k ? `<kbd>${it.k}</kbd>` : ''}</button>`).join('')}`;
+    d.querySelector('[data-back]').onclick = renderMenuRoot;
+    d.querySelectorAll('[data-i]').forEach(b => b.onclick = () => {
+      const it = items[+b.dataset.i];
+      d.classList.remove('on');
+      if (!it) return;
+      setTimeout(() => {
+        try { it.a(); } catch (e) { A.toast(name + ' ▸ ' + it.l + ' fail: ' + e.message, 'err', 3000); }
+      }, 40);
+    });
+  }
+
+  /* ---------- advanced toggle (keeps the deep controls one click away) ---------- */
+  function buildAdvToggle() {
+    const head = document.querySelector('#propsSec .sec-h');
+    if (!head || document.getElementById('av15adv')) return;
+    const b = document.createElement('button');
+    b.id = 'av15adv';
+    b.textContent = 'Advanced';
+    b.title = 'Colour fill, FX, shapes library — advanced controls';
+    b.onclick = () => {
+      const on = document.documentElement.classList.toggle('av-adv');
+      b.textContent = on ? 'Advanced ✓' : 'Advanced';
+      const mt = document.querySelector('#toolrail .av15-more');
+      if (mt) mt.innerHTML = on ? 'Less' : 'More tools';
+      try { refreshToolLabels(); } catch (e) { }
+      A.toast(on ? 'Advanced controls ON' : 'Advanced controls OFF', '', 1500);
+    };
+    head.appendChild(b);
+  }
+
+  /* ---------- start panel: 4 big choices ---------- */
+  function openStartPanel() {
+    // first run: the legacy welcome screen would sit behind this panel — dismiss it
+    try {
+      document.querySelectorAll('.homebox').forEach(x => {
+        const o = x.closest('.modal-ov'); if (o) o.remove(); else x.remove();
+      });
+    } catch (e) { }
+    const body = `
+      <div id="av15start">
+        <div class="sgrid">
+          <button class="scard" data-s="open">
+            <i>${svg('download', 17)}</i><b>1 · Photo ya design kholo</b>
+            <span>PNG / JPG / SVG / PSD — apne device se. Ya khaali canvas se shuru karo.</span>
+          </button>
+          <button class="scard" data-s="bg">
+            <i>${svg('scissors', 17)}</i><b>2 · Background hatao</b>
+            <span>Ek click me on-device cutout. Internet ya API key nahi chahiye.</span>
+          </button>
+          <button class="scard" data-s="resize">
+            <i>${svg('resize', 17)}</i><b>3 · Size theek karo</b>
+            <span>W / H type karo ya slider chalao — layer turant resize hogi.</span>
+          </button>
+          <button class="scard" data-s="finish">
+            <i>${svg('text', 17)}</i><b>4 · Text daalo aur export karo</b>
+            <span>Canvas par click karke likho, phir PNG export — ek click.</span>
+          </button>
+        </div>
+        <div class="sfoot">
+          <button id="av15brand2">${'Brand &amp; palette'}</button>
+          <button id="av15more2">All quick actions</button>
+          <button class="pri" data-close>Close</button>
+        </div>
+      </div>`;
+    modal('Kya banana hai?', body, '', host => {
+      host.querySelectorAll('[data-s]').forEach(b => b.onclick = () => {
+        const k = b.dataset.s;
+        closeModal();
+        setTimeout(() => runStartStep(k), 60);
+      });
+      host.querySelector('#av15brand2').onclick = () => { closeModal(); setTimeout(openBrandPanel, 60); };
+      host.querySelector('#av15more2').onclick = () => { closeModal(); setTimeout(openMorePanel, 60); };
+      host.querySelector('[data-close]').onclick = closeModal;
+    });
+  }
+  function runStartStep(k) {
+    try {
+      if (k === 'open') {
+        const inp = document.getElementById('fileInput');
+        if (inp) { inp.value = ''; inp.click(); A.toast('File chuno — import ho jayegi', '', 2400); }
+        else A.toast('File ▸ Open / Import use karo', 'err', 2400);
+      }
+      if (k === 'bg') {
+        const L = A.active();
+        if (!L || L.type !== 'raster') { A.toast('Pehle photo kholo (step 1)', 'err', 2400); return; }
+        bgRemoveV12();
+      }
+      if (k === 'resize') {
+        toggleCard(true);
+        setTimeout(() => { const w = document.querySelector('#av12cw'); if (w) { w.focus(); w.select(); } }, 200);
+        A.toast('W ya H me size likho, Enter dabao', '', 2600);
+      }
+      if (k === 'finish') {
+        try { setTool('text'); } catch (e) { }
+        A.toast('Canvas par click karo aur type karo · phir Export (bar me)', '', 3200);
+      }
+    } catch (e) { A.toast('Step fail: ' + e.message, 'err', 2600); }
+  }
+
+
+  /* ============================================================
+     16. BRAND MARK — infinity logo (user supplied intro-logo)
+     ============================================================ */
+  const LOGO_512 = 'data:image/png;base64,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';
+  const LOGO_180 = 'data:image/png;base64,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';
+
+  function svgInfinity(size, colors) {
+    const c = colors || ['#F5A623', '#FFE600', '#FF2A1A'];
+    return `<svg viewBox="0 0 64 46" width="${size}" height="${size * 46 / 64}" aria-hidden="true">
+      <path d="M32 23c-4.6-7-9.3-12-16.6-12C7.6 11 3 16.4 3 23s4.6 12 12.4 12C22.7 35 27.4 30 32 23z"
+        fill="none" stroke="${c[0]}" stroke-width="6.4" stroke-linecap="round"/>
+      <path d="M32 23c4.6-7 9.3-12 16.6-12C56.4 11 61 16.4 61 23s-4.6 12-12.4 12C41.3 35 36.6 30 32 23z"
+        fill="none" stroke="${c[1]}" stroke-width="6.4" stroke-linecap="round"/>
+      <path d="M32 23l-6.2-8.5h12.4L32 23z" fill="${c[2]}"/>
+    </svg>`;
+  }
+
+  function setFavicons() {
+    try {
+      document.querySelectorAll('link[rel~="icon"], link[rel="apple-touch-icon"], link[rel="shortcut icon"]')
+        .forEach(l => l.remove());
+      const add = (rel, data, sizes, type) => {
+        const l = document.createElement('link');
+        l.rel = rel; l.type = type || 'image/png'; l.href = data;
+        if (sizes) l.sizes = sizes;
+        document.head.appendChild(l);
+      };
+      add('icon', LOGO_512, '512x512');
+      add('shortcut icon', LOGO_512, '512x512');
+      add('apple-touch-icon', LOGO_180, '180x180');
+      // tab title keeps the wordmark but adds the mark's name
+      if (!/artvision/i.test(document.title)) document.title = 'ArtViSiON STUDiO';
+    } catch (e) { }
+  }
+
+  function paintBrandMarks() {
+    // 1. top bar logo
+    try {
+      const logo = document.getElementById('logo');
+      if (logo) {
+        const mark = logo.querySelector('.mark');
+        if (mark) {
+          mark.innerHTML = `<img src="${LOGO_512}" alt="ArtViSiON" style="width:100%;height:100%;object-fit:contain;display:block">`;
+          mark.style.background = 'transparent';
+          mark.style.boxShadow = 'none';
+          mark.style.width = '34px';
+          mark.style.height = '28px';
+          mark.style.borderRadius = '0';
+          mark.title = 'ArtViSiON STUDiO';
+        }
+        const word = logo.querySelector('b');
+        if (word && !word.dataset.v16) {
+          word.dataset.v16 = '1';
+          word.innerHTML = 'ARTViSiON';
+        }
+        const sub = logo.querySelector('span');
+        if (sub) sub.textContent = 'STUDiO';
+      }
+    } catch (e) { }
+    // 2. converter / mockups overlays' brand chips
+    try {
+      document.querySelectorAll('#converterBrand .mark, #portfolioMockupBrand .mark').forEach(m => {
+        m.innerHTML = `<img src="${LOGO_180}" alt="" style="width:100%;height:100%;object-fit:contain">`;
+        m.style.background = 'transparent';
+      });
+    } catch (e) { }
+  }
+
+  function buildSplash() {
+    if (document.getElementById('av16splash')) return;
+    let seen = false;
+    try { seen = sessionStorage.getItem('av16.splash') === '1'; } catch (e) { }
+    if (seen) return;
+    const el = document.createElement('div');
+    el.id = 'av16splash';
+    el.innerHTML = `
+      <div class="in">
+        <div class="art"><img src="${LOGO_512}" alt="ArtViSiON STUDiO"></div>
+        <div class="word">ARTViSiON <span>STUDiO</span></div>
+        <div class="tag">Vector · Bitmap · Converter — ek hi editor</div>
+        <div class="bar"><i></i></div>
+      </div>`;
+    document.body.appendChild(el);
+    try { sessionStorage.setItem('av16.splash', '1'); } catch (e) { }
+    const kill = () => {
+      el.classList.add('out');
+      setTimeout(() => { try { el.remove(); } catch (e) { } }, 420);
+    };
+    setTimeout(kill, 1500);
+    el.addEventListener('click', kill);
+  }
+
+  const CSS17 = `
+  /* ============================================================
+     v17 · STUDIO SKIN (v12 click-to-design look)
+     violet→blue gradient accent, glassy cards, big click targets
+     ============================================================ */
+  html.av-studio{
+    --avGrad:linear-gradient(135deg,#7C5CFF 0%,#5B7CFF 52%,#4E8BFF 100%);
+    --avGradSoft:linear-gradient(135deg,rgba(124,92,255,.20),rgba(78,139,255,.16));
+    --acc:#7C5CFF; --acc2:#4E8BFF;
+  }
+  html.av-dark.av-studio{
+    --bg:#0C0F17; --p1:#141A27; --p2:#19202F; --p3:#212A3C;
+    --line:#232B3D; --line2:#2E3850;
+    --tx:#EAF0FF; --tx2:#9CABC4; --tx3:#6B7994;
+  }
+  html.av-light.av-studio{
+    --bg:#F5F5FC; --p1:#FFFFFF; --p2:#FBFBFF; --p3:#F0EFFA;
+    --line:#E7E5F4; --line2:#D6D2EE;
+    --tx:#141728; --tx2:#5A6280; --tx3:#848CA6;
+  }
+  html.av-studio body{background:var(--bg)}
+  html.av-studio.av-dark body{background:radial-gradient(1200px 620px at 18% -10%,#1C2440 0%,#0C0F17 58%)}
+
+  /* chrome */
+  html.av-studio #topbar{background:color-mix(in srgb,var(--p1) 88%,transparent);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+  html.av-studio #toolrail,html.av-studio #side{background:var(--p1);border-color:var(--line)}
+  html.av-studio #stage{background:var(--bg)}
+  html.av-studio #statusbar{background:color-mix(in srgb,var(--p1) 90%,transparent);border-top:1px solid var(--line)}
+  html.av-studio #logo b{
+    background:var(--avGrad);-webkit-background-clip:text;background-clip:text;color:transparent;font-weight:800}
+  html.av-studio #logo span{color:var(--tx3)}
+  html.av-studio .mark{background:transparent!important}
+
+  /* active tool + primary controls → gradient */
+  html.av-studio #toolrail .tool.on{
+    background:var(--avGrad)!important;color:#fff!important;
+    box-shadow:0 8px 22px rgba(104,96,255,.42)!important}
+  html.av-studio #toolrail .tool.on .lbl{color:#fff}
+  html.av-studio #toolrail .tool:hover{background:var(--avGradSoft);color:var(--tx)}
+  html.av-studio #av12bar{background:color-mix(in srgb,var(--p1) 94%,transparent);border:1px solid var(--line2);box-shadow:0 22px 54px rgba(6,10,20,.5)}
+  html.av-studio #av12bar button.primary{background:var(--avGrad);box-shadow:0 10px 26px rgba(104,96,255,.44)}
+  html.av-studio #av12bar button.on{background:var(--avGradSoft);color:var(--tx);border-color:rgba(124,92,255,.55)}
+  html.av-studio #av12card{background:color-mix(in srgb,var(--p1) 96%,transparent);border:1px solid var(--line2);box-shadow:0 22px 54px rgba(6,10,20,.45)}
+  html.av-studio #av12card .c-btn button:hover,html.av-studio #av12card .c-btn2 button:hover{border-color:var(--acc);color:var(--acc)}
+  html.av-studio #av12card .tag{background:var(--avGradSoft);color:var(--tx)}
+  html.av-studio .btn.acc,html.av-studio .btn.primary,html.av-studio #av12modal .btn.primary{background:var(--avGrad);border-color:transparent;color:#fff;box-shadow:0 8px 20px rgba(104,96,255,.35)}
+  html.av-studio input[type=range]{accent-color:#7C5CFF}
+  html.av-studio input:focus,html.av-studio select:focus,html.av-studio textarea:focus{
+    outline:none;border-color:#7C5CFF!important;box-shadow:0 0 0 3px rgba(124,92,255,.22)}
+  html.av-studio .sw{border:1px solid var(--line2)}
+  html.av-studio .pal{border-radius:7px}
+  html.av-studio #av12modal{background:rgba(6,9,17,.72)}
+  html.av-studio #av12modal .m{background:var(--p1);border:1px solid var(--line2);box-shadow:0 40px 90px rgba(4,7,14,.6)}
+  html.av-studio .av12-toast{background:var(--p2);border:1px solid var(--line2);color:var(--tx)}
+  html.av-studio #av15menu{background:var(--p1);border:1px solid var(--line2);box-shadow:0 30px 70px rgba(4,7,14,.55)}
+  html.av-studio #av15menu .mbtn{background:var(--p2);border:1px solid var(--line);color:var(--tx)}
+  html.av-studio #av15menu .mbtn:hover{border-color:var(--acc);color:var(--acc);background:var(--p3)}
+  html.av-studio #av15menu .mitem:hover{background:var(--avGradSoft);color:var(--tx)}
+  html.av-studio #av15menuBtn,html.av-studio #av15mode{background:var(--p2);border:1px solid var(--line2);color:var(--tx2)}
+  html.av-studio #av15mode{background:var(--avGrad);border-color:transparent;color:#fff}
+  html.av-studio #av15menuBtn:hover{border-color:var(--acc);color:var(--acc)}
+
+  /* side panel = cards */
+  html.av-studio #side .panel-sec{margin:8px 8px 0;border:1px solid var(--line);border-radius:14px;background:var(--p1);overflow:hidden}
+  html.av-studio #side .sec-h{background:transparent;border-bottom:1px solid var(--line);color:var(--tx2)}
+  html.av-studio #layerList .lrow{border-radius:10px}
+  html.av-studio #layerList .lrow.on{background:var(--avGradSoft);box-shadow:inset 2px 0 0 #7C5CFF}
+
+  /* ---------- studio quick-action cards ---------- */
+  #av17quick{display:none}
+  html.av-studio #av17quick{
+    display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:1fr;gap:8px;margin:8px 8px 0;padding:10px;
+    border:1px solid var(--line);border-radius:14px;background:var(--p1)}
+  #av17quick .qa{
+    display:flex;flex-direction:column;gap:6px;align-items:flex-start;padding:11px 10px;border-radius:11px;
+    border:1px solid var(--line);background:var(--p2);cursor:pointer;transition:.14s;text-align:left}
+  #av17quick .qa:hover{transform:translateY(-1px);border-color:rgba(124,92,255,.6);box-shadow:0 10px 24px rgba(104,96,255,.18)}
+  #av17quick .qa i{
+    width:28px;height:28px;border-radius:9px;display:grid;place-items:center;font-style:normal;
+    background:var(--avGrad);color:#fff;box-shadow:0 6px 16px rgba(104,96,255,.35)}
+  #av17quick .qa b{font-size:11.5px;font-weight:800;color:var(--tx);line-height:1.25}
+  #av17quick .qa small{font-size:10px;color:var(--tx3);line-height:1.35}
+  #av17quick .qa.span2{grid-column:span 2;flex-direction:row;align-items:center;gap:10px}
+  #av17quick .qa.span2 .tx{display:flex;flex-direction:column;gap:2px}
+  html.av-studio:not(.av-adv) #av17quick{display:grid}
+  html.av-pro #av17quick{display:none}
+
+  /* ---------- studio home ---------- */
+  #av17home{
+    position:fixed;inset:0;z-index:21000;display:none;align-items:center;justify-content:center;padding:20px;
+    background:radial-gradient(900px 520px at 50% 0%,rgba(124,92,255,.22),transparent 70%),rgba(6,9,17,.82);
+    backdrop-filter:blur(10px)}
+  html.av-light #av17home{background:radial-gradient(900px 520px at 50% 0%,rgba(124,92,255,.16),transparent 70%),rgba(240,240,250,.86)}
+  #av17home.on{display:flex}
+  #av17home .box{
+    width:min(760px,100%);max-height:88vh;overflow:auto;background:var(--p1);border:1px solid var(--line2);
+    border-radius:22px;padding:26px 26px 20px;box-shadow:0 40px 100px rgba(4,7,14,.6)}
+  #av17home .hd{display:flex;align-items:center;gap:14px;margin-bottom:20px}
+  #av17home .hd img{width:88px;height:70px;object-fit:contain;filter:drop-shadow(0 8px 18px rgba(104,96,255,.25))}
+  #av17home .hd h2{margin:0;font-size:22px;letter-spacing:-.02em;color:var(--tx)}
+  #av17home .hd p{margin:3px 0 0;font-size:12.5px;color:var(--tx3)}
+  #av17home .hd .x{margin-left:auto;width:32px;height:32px;border-radius:10px;display:grid;place-items:center;
+    color:var(--tx3);border:1px solid var(--line);background:var(--p2)}
+  #av17home .hd .x:hover{color:var(--tx);border-color:var(--acc)}
+  #av17home .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  #av17home .hc{
+    display:flex;flex-direction:column;gap:8px;padding:16px 14px;border-radius:16px;text-align:left;
+    border:1px solid var(--line);background:var(--p2);cursor:pointer;transition:.16s;min-height:132px}
+  #av17home .hc:hover{transform:translateY(-2px);border-color:rgba(124,92,255,.65);
+    box-shadow:0 18px 40px rgba(104,96,255,.22);background:var(--p3)}
+  #av17home .hc i{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;
+    background:var(--avGrad);color:#fff;font-style:normal;box-shadow:0 10px 22px rgba(104,96,255,.38)}
+  #av17home .hc b{font-size:13.5px;color:var(--tx);letter-spacing:-.01em}
+  #av17home .hc span{font-size:11.5px;color:var(--tx3);line-height:1.45}
+  #av17home .hc.big{grid-column:span 1;background:var(--avGrad);border-color:transparent}
+  #av17home .hc.big i{background:rgba(255,255,255,.2);box-shadow:none}
+  #av17home .hc.big b,#av17home .hc.big span{color:#fff}
+  #av17home .hc.big span{color:rgba(255,255,255,.82)}
+  #av17home .foot{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+  #av17home .foot button{height:34px;padding:0 14px;border-radius:10px;border:1px solid var(--line2);
+    background:var(--p2);color:var(--tx2);font-size:12px;font-weight:800}
+  #av17home .foot button:hover{border-color:var(--acc);color:var(--acc)}
+  #av17home .foot .hint{margin-left:auto;font-size:11.5px;color:var(--tx3);align-self:center}
+  @media(max-width:760px){
+    #av17home .cards{grid-template-columns:1fr 1fr}
+    #av17home .box{padding:18px 16px 14px;border-radius:18px}
+    #av17home .hd img{width:64px;height:52px}
+    #av17home .hd h2{font-size:18px}
+  }
+`;
+  function injectCSS17(){ const st=document.createElement('style'); st.id='av17-style'; st.textContent=CSS17; document.head.appendChild(st); }
+
+
+  /* ============================================================
+     17. STUDIO HOME — big click-first cards (v12 feel)
+     ============================================================ */
+  const STUDIO_KEY = 'artvision.v17.studio';
+
+  function studioHomeShownOnce() {
+    try { return sessionStorage.getItem('av17.home') === '1'; } catch (e) { return true; }
+  }
+  function markStudioHomeSeen() {
+    try { sessionStorage.setItem('av17.home', '1'); } catch (e) { }
+  }
+
+  function openStudioHome(force) {
+    let el = document.getElementById('av17home');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'av17home';
+      document.body.appendChild(el);
+    }
+    const logo = (typeof LOGO_512 !== 'undefined') ? LOGO_512 : '';
+    el.innerHTML = `
+      <div class="box">
+        <div class="hd">
+          <img src="${logo}" alt="ArtViSiON">
+          <div>
+            <h2>Kya banana hai?</h2>
+            <p>Click karo — baaki editor sambhal lega. Har cheez ek click me.</p>
+          </div>
+          <button class="x" data-x title="Close">${svg('x', 15)}</button>
+        </div>
+        <div class="cards">
+          <button class="hc big" data-k="photo">
+            <i>${svg('download', 19)}</i><b>Photo kholo</b>
+            <span>PNG · JPG · SVG · PSD — device se import</span>
+          </button>
+          <button class="hc" data-k="bg">
+            <i>${svg('scissors', 18)}</i><b>Background hatao</b>
+            <span>1 click, on-device cutout</span>
+          </button>
+          <button class="hc" data-k="resize">
+            <i>${svg('resize', 18)}</i><b>Size theek karo</b>
+            <span>W / H ya slider</span>
+          </button>
+          <button class="hc" data-k="text">
+            <i>${svg('text', 18)}</i><b>Text &amp; brand</b>
+            <span>Heading, badge, palette</span>
+          </button>
+          <button class="hc" data-k="filters">
+            <i>${svg('filter', 18)}</i><b>Look / filters</b>
+            <span>12 presets + manual</span>
+          </button>
+          <button class="hc" data-k="export">
+            <i>${svg('download', 18)}</i><b>Export</b>
+            <span>PNG · JPG · SVG · PSD</span>
+          </button>
+        </div>
+        <div class="foot">
+          <button data-f="brand">${'Brand &amp; palette'}</button>
+          <button data-f="more">All quick actions</button>
+          <button data-f="pro">Pro mode</button>
+          <span class="hint">☰ Menu me poora editor hai</span>
+        </div>
+      </div>`;
+    el.classList.add('on');
+    markStudioHomeSeen();
+    el.querySelector('[data-x]').onclick = closeStudioHome;
+    el.addEventListener('click', e => { if (e.target === el) closeStudioHome(); });
+    el.querySelectorAll('[data-k]').forEach(b => b.onclick = () => {
+      const k = b.dataset.k;
+      closeStudioHome();
+      setTimeout(() => studioCard(k), 80);
+    });
+    el.querySelectorAll('[data-f]').forEach(b => b.onclick = () => {
+      const f = b.dataset.f;
+      closeStudioHome();
+      setTimeout(() => {
+        if (f === 'brand') openBrandPanel();
+        if (f === 'more') openMorePanel();
+        if (f === 'pro') applyMode('pro');
+      }, 80);
+    });
+    if (force) { /* reopened from menu */ }
+  }
+  function closeStudioHome() {
+    const el = document.getElementById('av17home');
+    if (el) el.classList.remove('on');
+  }
+  function studioCard(k) {
+    try {
+      if (k === 'photo') { runStartStep('open'); return; }
+      if (k === 'bg') { runStartStep('bg'); return; }
+      if (k === 'resize') { runStartStep('resize'); return; }
+      if (k === 'text') {
+        try { setTool('text'); } catch (e) { }
+        A.toast('Canvas par click karo, phir type karo · Brand panel me palette hai', '', 3200);
+        return;
+      }
+      if (k === 'filters') { openFilterDialog(); return; }
+      if (k === 'export') {
+        try { exportImage('png', 1, 95); A.toast('PNG export ho raha hai…', 'ok', 1800); }
+        catch (e) { openMorePanel(); }
+        return;
+      }
+    } catch (e) { A.toast('Action fail: ' + e.message, 'err', 2600); }
+  }
+
+  /* quick action cards in the side panel (studio mode) */
+  function buildQuickCards() {
+    if (document.getElementById('av17quick')) return;
+    const side = document.getElementById('side');
+    const props = document.getElementById('propsSec');
+    if (!side || !props || !props.parentNode) return;
+    const wrap = document.createElement('div');
+    wrap.id = 'av17quick';
+    wrap.innerHTML = `
+      <button class="qa span2" data-q="bg" title="Background remove">
+        <i>${svg('scissors', 16)}</i>
+        <span class="tx"><b>Remove BG</b><small>ek click, on-device</small></span>
+      </button>
+      <button class="qa" data-q="subject"><i>${svg('select', 15)}</i><b>Subject</b><small>select karo</small></button>
+      <button class="qa" data-q="resize"><i>${svg('resize', 15)}</i><b>Resize</b><small>W / H</small></button>
+      <button class="qa" data-q="text"><i>${svg('text', 15)}</i><b>Text</b><small>heading</small></button>
+      <button class="qa" data-q="filter"><i>${svg('filter', 15)}</i><b>Filters</b><small>12 presets</small></button>
+      <button class="qa span2" data-q="export"><i>${svg('download', 15)}</i>
+        <span class="tx"><b>Export PNG</b><small>ek click download</small></span></button>`;
+    props.parentNode.insertBefore(wrap, props);
+    wrap.querySelectorAll('[data-q]').forEach(b => b.onclick = () => {
+      const q = b.dataset.q;
+      try {
+        if (q === 'bg') bgRemoveV12();
+        if (q === 'subject') selectSubject(false);
+        if (q === 'resize') toggleCard(true);
+        if (q === 'text') setTool('text');
+        if (q === 'filter') openFilterDialog();
+        if (q === 'export') exportImage('png', 1, 95);
+      } catch (e) { A.toast('Fail: ' + e.message, 'err', 2400); }
+    });
+  }
+
+  /* ============================================================
+     11. boot
+     ============================================================ */
+  function boot() {
+    injectCSS();
+    injectCSS15();
+    injectCSS16();
+    injectCSS17();
+    bindHost();
+    setFavicons();
+    paintBrandMarks();
+    /* v19: opening par koi splash/popup nahi */
+    loadMode();
+    loadState();
+    applyTheme(state.theme, true);
+    patchCanvasChrome();
+    buildMenuDock();
+    guardLegacyLauncher();
+    applyMode(mode, true);
+    buildBar();
+    buildCard();
+    buildAdvToggle();
+    toggleCard(true);
+    try {
+      if (simple && window.matchMedia && window.matchMedia('(max-width:760px)').matches) toggleCard(false);
+    } catch (e) { }
+    setTimeout(() => {
+      try { buildAdvToggle(); refreshToolLabels(); paintBrandMarks(); buildQuickCards(); initV18(); } catch (e) { }
+      /* v19: boot par studio-home modal nahi — ☰ Menu se khulta hai */
+    }, 1100);
+    // simple mode = no 4-screen legacy launcher on every reload
+    setTimeout(() => {
+      try {
+        if (!simple && !document.documentElement.classList.contains('av-studio')) return;
+        if (sessionStorage.getItem('av15.launcherDismissed') === '1') { dismissLegacyHome(); return; }
+        sessionStorage.setItem('av15.launcherDismissed', '1');
+        dismissLegacyHome();
+      } catch (e) { }
+    }, 900);
+    patchTools();
+    window.AV12 = {
+      version: '19.0',
+      bgRemove: bgRemoveV12,
+      openBgDialog,
+      cutoutData,
+      wandMask: wandMaskV12,
+      resizeLayer, resizeVectorLayer, selectSubject, layerBBox, vectorBBox,
+      fitLayer, centerLayer, rotateLayer90, flipLayer,
+      maskFromSelection, deleteSelectionPixels,
+      filterDialog: openFilterDialog,
+      help: openHelp,
+      pickLayerAt, rasterBBox,
+      card: () => card, bar: () => bar,
+      toggleCard,
+      openMorePanel,
+      studioHome: openStudioHome, mode: () => mode, setMode: applyMode,
+      logo: () => LOGO_512, infinity: svgInfinity, brandMark: paintBrandMarks,
+      simple: () => simple, setSimple: (on) => applyMode(on ? 'simple' : 'pro'),
+      startPanel: openStartPanel, menuDock: toggleMenuDock,
+      /* v14 */
+      theme: () => state.theme,
+      setTheme: applyTheme,
+      toggleTheme,
+      brand: () => state.brand,
+      setBrand: (hex) => { state.brand = hex; state.secondary = null; applyTheme(state.theme, true); },
+      palette: () => ({
+        primary: state.brand,
+        secondary: secondaryOf(),
+        harmony: state.harmony,
+        primaryRamp: ramp(state.brand),
+        secondaryRamp: ramp(secondaryOf()),
+      }),
+      openBrandPanel,
+      harmonyColors, ramp, contrast,
+      setCanvasBg,
+    };
+    LOG('v19 active — no boot popup, drag = workspace pan');
+    /* v19: first-run welcome popup hataya — seedha editor khulta hai */
+    try { localStorage.setItem('av14.welcomed', '1'); } catch (e) { }
+  }
+
+  /* wait until the host app is initialised (doc exists) */
+  let tries = 0;
+  const t = setInterval(() => {
+    const ok = (typeof TOOLS !== 'undefined') && (typeof doc !== 'undefined') && doc &&
+      (typeof setPixSel === 'function') && (typeof pushUndo === 'function');
+    if (ok || ++tries > 300) {
+      clearInterval(t);
+      if (ok) { try { boot(); } catch (e) { console.error('[AV12] boot fail', e); } }
+      else console.warn('[AV12] host app not found — patch skipped');
+    }
+  }, 60);
+
+  /* ============================================================
+     18. CLARITY PASS — bada text, saaf rail, guided steps, empty state
+     (v17 ka look same, par padhne/click karne me aasan)
+     ============================================================ */
+  const CSS18 = `
+  /* ---------- tool rail: icon + readable label in a row ---------- */
+  html.av-studio #toolrail{
+    width:130px;padding:7px 8px 8px;gap:1px;align-items:stretch;
+    overflow-y:auto;overflow-x:hidden;scrollbar-width:none}
+  html.av-studio #toolrail::-webkit-scrollbar{width:0}
+  html.av-studio #toolrail .tool{
+    width:114px;min-height:38px;height:auto;flex-direction:row;align-items:center;
+    justify-content:flex-start;gap:9px;padding:0 9px;border-radius:10px;
+    border:1px solid transparent;color:var(--tx2)}
+  html.av-studio #toolrail .tool svg{width:19px;height:19px;flex:none}
+  html.av-studio #toolrail .tool .lbl{
+    display:block;font-size:11px;font-weight:700;line-height:1.1;letter-spacing:0;
+    max-width:84px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:inherit}
+  html.av-studio #toolrail .tool .tip{display:none!important}
+  html.av-studio #toolrail .tsep,html.av-studio #toolrail .av15-grp{
+    width:80px;height:1px;background:var(--line);margin:4px 0;flex:none;align-self:center}
+  html.av-studio #toolrail .av15-more{
+    position:sticky;bottom:0;width:114px;min-height:34px;margin-top:6px;flex:none;
+    display:flex;align-items:center;justify-content:center;gap:5px;border-radius:10px;
+    border:1px dashed var(--line2);background:var(--p2);color:var(--tx2);
+    font-size:10.5px;font-weight:800;letter-spacing:.02em;
+    backdrop-filter:blur(6px)}
+  html.av-studio #toolrail .av15-more:hover{border-color:var(--acc);color:var(--acc)}
+
+  /* ---------- side panel: never clip, always scrollable ---------- */
+  html.av-studio #side{width:330px;overflow-y:auto!important;overflow-x:hidden!important;padding-bottom:14px}
+  html.av-studio #side > *{flex:none}
+  html.av-studio #side::-webkit-scrollbar{width:9px}
+  html.av-studio #side::-webkit-scrollbar-thumb{background:var(--line2);border-radius:9px}
+  html.av-studio #palette{grid-template-columns:repeat(9,1fr)!important;min-width:0}
+  html.av-studio #side .pal{min-width:0}
+  html.av-studio #side .sec-h{height:34px;font-size:11px;font-weight:800;letter-spacing:.09em}
+  html.av-studio #side *{max-width:100%}
+
+  /* ---------- guided steps card ---------- */
+  #av18steps{display:none}
+  html.av-studio #av18steps{
+    display:block;margin:8px 8px 0;padding:11px 10px 8px;border:1px solid var(--line);border-radius:14px;
+    background:linear-gradient(165deg,rgba(124,92,255,.16),rgba(78,139,255,.05) 55%,transparent),var(--p1)}
+  #av18steps .sh{display:flex;align-items:center;gap:8px;margin:0 3px 8px}
+  #av18steps .sh b{font-size:11px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--tx2)}
+  #av18steps .sh .prog{margin-left:auto;font-size:10.5px;font-weight:800;color:var(--tx3)}
+  #av18steps .bar{height:4px;border-radius:99px;background:var(--p3);overflow:hidden;margin:0 3px 8px}
+  #av18steps .bar i{display:block;height:100%;width:0;background:var(--avGrad);transition:width .35s ease}
+  #av18steps .stp{
+    display:flex;align-items:center;gap:10px;width:100%;padding:8px;border-radius:11px;
+    border:1px solid transparent;background:transparent;text-align:left;cursor:pointer;transition:.13s}
+  #av18steps .stp:hover{background:var(--p2);border-color:var(--line)}
+  #av18steps .stp .n{
+    width:22px;height:22px;border-radius:50%;display:grid;place-items:center;flex:none;
+    font-size:11px;font-weight:800;background:var(--p3);color:var(--tx2)}
+  #av18steps .stp.cur .n{background:var(--avGrad);color:#fff;box-shadow:0 5px 14px rgba(104,96,255,.5)}
+  #av18steps .stp.done .n{background:rgba(49,196,141,.16);color:#31C48D}
+  #av18steps .stp .tt{display:flex;flex-direction:column;gap:1px;min-width:0}
+  #av18steps .stp b{font-size:12.5px;font-weight:800;color:var(--tx);line-height:1.2}
+  #av18steps .stp small{font-size:10.5px;color:var(--tx3);line-height:1.3}
+  #av18steps .stp.done b{color:var(--tx3)}
+  #av18steps .stp .go{margin-left:auto;flex:none;color:var(--tx3);font-size:13px}
+  #av18steps .stp.cur .go{color:var(--acc)}
+
+  /* ---------- canvas empty state ---------- */
+  #av18empty{position:absolute;inset:0;z-index:12;display:none;place-items:center;pointer-events:none;padding:18px}
+  #av18empty.on{display:grid}
+  #av18empty .card{
+    pointer-events:auto;width:min(440px,90%);border-radius:20px;padding:22px 22px 18px;
+    background:color-mix(in srgb,var(--p1) 94%,transparent);border:1px solid var(--line2);
+    backdrop-filter:blur(14px);box-shadow:0 30px 74px rgba(4,7,14,.45);text-align:center}
+  #av18empty h3{margin:0;font-size:18px;letter-spacing:-.01em;color:var(--tx)}
+  #av18empty p{margin:5px 0 16px;font-size:12px;color:var(--tx3);line-height:1.5}
+  #av18empty .btns{display:grid;gap:9px}
+  #av18empty .eb{
+    display:flex;align-items:center;gap:11px;padding:12px 14px;border-radius:13px;text-align:left;
+    border:1px solid var(--line);background:var(--p2);color:var(--tx);cursor:pointer;transition:.14s}
+  #av18empty .eb:hover{transform:translateY(-1px);border-color:rgba(124,92,255,.6);background:var(--p3)}
+  #av18empty .eb i{
+    width:32px;height:32px;border-radius:10px;display:grid;place-items:center;flex:none;font-style:normal;
+    background:var(--avGrad);color:#fff;box-shadow:0 7px 18px rgba(104,96,255,.36)}
+  #av18empty .eb.hero{background:var(--avGrad);border-color:transparent;color:#fff}
+  #av18empty .eb.hero i{background:rgba(255,255,255,.2);box-shadow:none}
+  #av18empty .eb b{font-size:13px;font-weight:800;display:block;line-height:1.2}
+  #av18empty .eb small{font-size:11px;opacity:.78;display:block;margin-top:1px}
+  #av18empty .eb.hero small{color:rgba(255,255,255,.85)}
+  #av18empty .tip{margin-top:12px;font-size:10.5px;color:var(--tx3)}
+
+
+  /* ---------- beginner view: layers + colours behind one button ---------- */
+  html.av-studio:not(.av-adv) #side .panel-sec.av18-layers,
+  html.av-studio:not(.av-adv) #side .panel-sec.av18-colors{display:none}
+  html.av-studio #av15adv{display:none}
+  #av18adv{
+    display:none;width:calc(100% - 16px);margin:8px 8px 0;min-height:42px;border-radius:12px;
+    align-items:center;justify-content:center;gap:8px;font-size:11.5px;font-weight:800;white-space:nowrap;overflow:hidden;
+    border:1px dashed var(--line2);background:var(--p2);color:var(--tx2);cursor:pointer;transition:.14s}
+  html.av-studio #av18adv{display:flex}
+  #av18adv:hover{border-color:var(--acc);color:var(--acc);background:var(--p3)}
+  html.av-adv #av18adv{border-style:solid;border-color:var(--line);color:var(--tx3)}
+  #av18steps .sh .help{margin-left:auto;width:22px;height:22px;border-radius:7px;display:grid;
+    place-items:center;border:1px solid var(--line);background:var(--p2);color:var(--tx3);cursor:pointer}
+  #av18steps .sh .help:hover{color:var(--acc);border-color:var(--acc)}
+  #av18steps .sh .prog{margin-left:0}
+
+  /* ---------- readable chrome ---------- */
+  html.av-studio #statusbar{font-size:11.5px}
+  html.av-studio #av12bar button{font-size:12px}
+  html.av-studio #topbar{height:56px}
+  @media(max-width:820px){
+    html.av-studio #av12bar{background:var(--p1)!important;max-width:calc(100vw - 16px);
+      overflow-x:auto;justify-content:flex-start;gap:4px;padding:6px 8px;scrollbar-width:none}
+    html.av-studio #av12bar::-webkit-scrollbar{height:0}
+    html.av-studio #av12bar button{flex:none;flex-direction:column;gap:3px;min-width:54px;height:auto;padding:6px 5px}
+    html.av-studio #av12bar .t{display:block!important;font-size:8.5px;font-weight:700;line-height:1;
+      max-width:58px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    html.av-studio #toasts>div:nth-child(n+2){display:none!important}
+    html.av-studio #toasts{top:auto!important;bottom:calc(130px + env(safe-area-inset-bottom))!important;
+      left:10px!important;right:10px!important;align-items:stretch!important}
+    html.av-studio #toasts>div{width:100%!important}
+    html.av-studio #toasts>div{max-width:82vw!important;font-size:11.5px!important}
+    html.av-studio #toolrail{width:auto}
+    html.av-studio #toolrail .tool{width:auto;min-height:44px;padding:0 10px}
+    html.av-studio #toolrail .tool .lbl{display:block;font-size:11px}
+    html.av-studio #side{width:100%}
+  }
+  `;
+  function injectCSS18() {
+    if (document.getElementById('av18-style')) return;
+    const st = document.createElement('style'); st.id = 'av18-style'; st.textContent = CSS18;
+    document.head.appendChild(st);
+  }
+
+  /* ---- guided steps ---- */
+  const S18 = { bg: false, size: false, ex: false };
+  const STEPS18 = [
+    { k: 'photo', t: 'Photo kholo', h: 'PNG · JPG · SVG · PSD — file chuno', go: () => $('#fileInput').click() },
+    { k: 'bg', t: 'Background hatao', h: '1 click, on-device cutout', go: () => bgRemoveV12() },
+    { k: 'size', t: 'Size theek karo', h: 'W / H slider ya preset', go: () => toggleCard(true) },
+    { k: 'text', t: 'Text ya logo', h: 'Headline, badge, brand colour', go: () => setTool('text') },
+    { k: 'ex', t: 'Export karo', h: 'PNG · JPG · SVG · PDF', go: () => exportImage('png', 1, 95) },
+  ];
+
+  function hasTextLayer18() {
+    try {
+      return doc.layers.some(L => L.type === 'vector' && (L.shapes || []).some(s => s.type === 'text'));
+    } catch (e) { return false; }
+  }
+  function hasCut18() {
+    try {
+      const L = activeLayer();
+      if (!L || L.type !== 'raster' || !L.canvas) return false;
+      const c = L.canvas, x = c.getContext('2d');
+      const d = x.getImageData(0, 0, c.width, c.height).data;
+      const step = 4 * Math.max(1, Math.floor((c.width * c.height) / 40000));
+      let clear = 0, tot = 0;
+      for (let i = 3; i < d.length; i += step) { tot++; if (d[i] < 24) clear++; }
+      return tot > 0 && clear / tot > 0.06;
+    } catch (e) { return false; }
+  }
+  function stepDone18(k) {
+    if (k === 'photo') return (doc.layers || []).length > 0;
+    if (k === 'bg') return S18.bg || hasCut18();
+    if (k === 'size') return S18.size;
+    if (k === 'text') return hasTextLayer18();
+    if (k === 'ex') return S18.ex;
+    return false;
+  }
+
+  function buildSteps18() {
+    if (document.getElementById('av18steps')) return;
+    const side = document.getElementById('side');
+    if (!side) return;
+    const box = document.createElement('div');
+    box.id = 'av18steps';
+    box.innerHTML = `<div class="sh"><b>Shuru karo · 5 steps</b><span class="prog">0/5</span>
+      <button class="help" title="Madad / poora guide">?</button></div>
+      <div class="bar"><i></i></div>
+      ${STEPS18.map((s, i) => `<button class="stp" data-s="${s.k}">
+        <span class="n">${i + 1}</span>
+        <span class="tt"><b>${s.t}</b><small>${s.h}</small></span>
+        <span class="go">›</span></button>`).join('')}`;
+    side.insertBefore(box, side.firstChild);
+    const hb = box.querySelector('.help');
+    if (hb) hb.onclick = (e) => { e.stopPropagation(); try { if (typeof openHelp === 'function') openHelp(); else openStartPanel(); } catch (er) { } };
+    box.querySelectorAll('.stp').forEach(b => {
+      b.onclick = () => {
+        const k = b.dataset.s;
+        const s = STEPS18.find(z => z.k === k);
+        try {
+          s.go();
+          if (k === 'bg') S18.bg = true;
+          if (k === 'size') S18.size = true;
+          if (k === 'ex') S18.ex = true;
+        } catch (e) { A.toast('Fail: ' + e.message, 'err', 2400); }
+        setTimeout(refreshSteps18, 400);
+        setTimeout(refreshSteps18, 1600);
+      };
+    });
+    refreshSteps18();
+  }
+
+  function refreshSteps18() {
+    const box = document.getElementById('av18steps');
+    if (!box) return;
+    const done = STEPS18.filter(s => stepDone18(s.k));
+    box.querySelectorAll('.stp').forEach(b => {
+      const k = b.dataset.s, d = stepDone18(k);
+      b.classList.toggle('done', d);
+      b.classList.toggle('cur', !d && STEPS18.find(s => !stepDone18(s.k)).k === k);
+      b.querySelector('.n').innerHTML = d ? '&#10003;' : (STEPS18.findIndex(s => s.k === k) + 1);
+    });
+    const pct = Math.round(done.length / STEPS18.length * 100);
+    box.querySelector('.bar i').style.width = pct + '%';
+    box.querySelector('.prog').textContent = done.length + '/' + STEPS18.length;
+  }
+
+  /* ---- canvas empty state ---- */
+  function buildEmpty18() {
+    if (document.getElementById('av18empty')) return;
+    const stage = document.getElementById('stage');
+    if (!stage) return;
+    const box = document.createElement('div');
+    box.id = 'av18empty';
+    box.innerHTML = `<div class="card">
+      <h3>Shuru karo — 1 click</h3>
+      <p>Photo kholo ya sample dekho. Baaki editor khud sambhal lega.</p>
+      <div class="btns">
+        <button class="eb hero" data-e="open"><i>${svg('open', 17)}</i>
+          <span><b>Photo kholo</b><small>PNG · JPG · SVG · PSD · PDF</small></span></button>
+        <button class="eb" data-e="sample"><i>${svg('star', 17)}</i>
+          <span><b>Sample design dekho</b><small>ready-made layout se seekho</small></span></button>
+        <button class="eb" data-e="blank"><i>${svg('resize', 17)}</i>
+          <span><b>Khaali canvas</b><small>1080×1080 se shuru</small></span></button>
+      </div>
+      <div class="tip">Tip: photo drop bhi kar sakte ho — seedha canvas par.</div>
+    </div>`;
+    stage.appendChild(box);
+    box.querySelectorAll('[data-e]').forEach(b => b.onclick = () => {
+      const k = b.dataset.e;
+      try {
+        if (k === 'open') $('#fileInput').click();
+        if (k === 'sample') demoDoc();
+        if (k === 'blank') { addRasterLayer(); }
+      } catch (e) { A.toast('Fail: ' + e.message, 'err', 2400); }
+      setTimeout(syncEmpty18, 500);
+    });
+  }
+  function syncEmpty18() {
+    const box = document.getElementById('av18empty');
+    if (!box) return;
+    let has = true;
+    try { has = (doc.layers || []).length > 0; } catch (e) { has = true; }
+    const studio = document.documentElement.classList.contains('av-studio');
+    box.classList.toggle('on', !has && studio);
+  }
+
+  function buildAdvFooter18() {
+    const side = document.getElementById('side');
+    if (!side || document.getElementById('av18adv')) return;
+    side.querySelectorAll('.panel-sec').forEach(sec => {
+      if (sec.querySelector('#layerList')) sec.classList.add('av18-layers');
+      if (sec.querySelector('#palette')) sec.classList.add('av18-colors');
+    });
+    const b = document.createElement('button');
+    b.id = 'av18adv';
+    b.innerHTML = `<span>${svg('layers', 15)}</span><b>Advanced — layers + colours</b>`;
+    const q = document.getElementById('av17quick');
+    const props = document.getElementById('propsSec');
+    if (q && q.parentNode === side) side.insertBefore(b, q.nextSibling);
+    else if (props && props.parentNode === side) side.insertBefore(b, props);
+    else side.appendChild(b);
+    const setLbl = () => {
+      const on = document.documentElement.classList.contains('av-adv');
+      b.querySelector('b').textContent = on ? 'Advanced band karo' : 'Advanced — layers + colours';
+    };
+    b.onclick = () => {
+      const on = document.documentElement.classList.toggle('av-adv');
+      try { localStorage.setItem('av18.adv', on ? '1' : '0'); } catch (e) { }
+      setLbl();
+    };
+    setLbl();
+  }
+
+
+  /* ============================================================
+     19. WORKSPACE DRAG — mouse se click+khinch → canvas move
+     (Move tool: khaali jagah par drag = view pan, object par drag = object move)
+     ============================================================ */
+  function installPanDrag() {
+    const cvs = document.getElementById('cv');
+    if (!cvs || cvs.__av19pan) return;
+    cvs.__av19pan = true;
+
+    const hitAt = (clientX, clientY) => {
+      try {
+        const r = cvs.getBoundingClientRect();
+        const p = viewToDoc(clientX - r.left, clientY - r.top);
+        return pickLayerAt(p);
+      } catch (e) { return null; }
+    };
+
+    cvs.addEventListener('pointerdown', e => {
+      if (e.button !== 0 || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+      try {
+        if (spaceDown || e.altKey) return;          // host handles space-pan
+        if (curTool !== 'move') return;             // marquee/pen/etc = uncha
+        if (typeof textEdit !== 'undefined' && textEdit) return;
+      } catch (err) { return; }
+      if (hitAt(e.clientX, e.clientY)) return;      // object ke upar → normal move
+      const r = cvs.getBoundingClientRect();
+      try { G.pan = { sx: e.clientX - r.left, sy: e.clientY - r.top, px: panX, py: panY }; }
+      catch (err) { return; }
+      try { cvs.setPointerCapture(e.pointerId); } catch (err) { }
+      cvs.style.cursor = 'grabbing';
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      const done = () => {
+        try { G.pan = null; } catch (err) { }
+        cvs.style.cursor = '';
+        cvs.removeEventListener('pointerup', done, true);
+        cvs.removeEventListener('pointercancel', done, true);
+      };
+      cvs.addEventListener('pointerup', done, true);
+      cvs.addEventListener('pointercancel', done, true);
+    }, true);
+
+    /* hover par grab cursor → pata chale ki yahan se kheencha ja sakta hai */
+    cvs.addEventListener('pointermove', e => {
+      try {
+        if (G.pan || spaceDown || curTool !== 'move') return;
+        const cur = cvs.style.cursor;
+        if (cur === 'grabbing') return;
+        const want = hitAt(e.clientX, e.clientY) ? '' : 'grab';
+        if (cur !== want) cvs.style.cursor = want;
+      } catch (err) { }
+    });
+  }
+
+
+  /* ============================================================
+     20. WHAT'S NEW — v19 update panel (menu se khulta hai)
+     ============================================================ */
+  const CSS19 = `
+  #av19new{position:fixed;inset:0;z-index:21500;display:none;align-items:center;justify-content:center;padding:20px;
+    background:rgba(6,9,17,.78);backdrop-filter:blur(9px)}
+  #av19new.on{display:flex}
+  #av19new .box{width:min(560px,100%);max-height:86vh;overflow:auto;border-radius:20px;padding:22px 22px 16px;
+    background:var(--p1);border:1px solid var(--line2);box-shadow:0 40px 100px rgba(4,7,14,.6)}
+  #av19new .hd{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+  #av19new .hd h3{margin:0;font-size:18px;letter-spacing:-.01em;color:var(--tx)}
+  #av19new .hd .v{font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#fff;
+    background:var(--avGrad);padding:3px 9px;border-radius:99px}
+  #av19new .hd .x{margin-left:auto;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;
+    border:1px solid var(--line);background:var(--p2);color:var(--tx3);cursor:pointer}
+  #av19new .hd .x:hover{color:var(--tx);border-color:var(--acc)}
+  #av19new p.sub{margin:0 0 14px;font-size:12px;color:var(--tx3)}
+  #av19new .it{display:flex;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+  #av19new .it i{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;flex:none;font-style:normal;
+    background:var(--avGradSoft);color:var(--acc);font-size:12px;font-weight:800}
+  #av19new .it b{display:block;font-size:12.5px;color:var(--tx);line-height:1.3}
+  #av19new .it small{display:block;font-size:11.5px;color:var(--tx3);line-height:1.45;margin-top:2px}
+  #av19new .ft{display:flex;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+  #av19new .ft button{height:34px;padding:0 14px;border-radius:10px;border:1px solid var(--line2);
+    background:var(--p2);color:var(--tx2);font-size:12px;font-weight:800;cursor:pointer}
+  #av19new .ft button.pri{background:var(--avGrad);border-color:transparent;color:#fff}
+  #av19new .ft button:hover{border-color:var(--acc);color:var(--acc)}
+  #av19new .ft button.pri:hover{color:#fff}
+  `;
+  function openWhatsNew19() {
+    if (!document.getElementById('av19-style')) {
+      const st = document.createElement('style'); st.id = 'av19-style'; st.textContent = CSS19;
+      document.head.appendChild(st);
+    }
+    let ov = document.getElementById('av19new');
+    if (!ov) {
+      ov = document.createElement('div'); ov.id = 'av19new';
+      ov.innerHTML = `<div class="box">
+        <div class="hd"><span class="v">v19</span><h3>Naya kya hai</h3><button class="x" title="Close">${svg('x', 14)}</button></div>
+        <p class="sub">Aapke bataye do points sabse pehle — baaki uske saath.</p>
+        <div class="it"><i>1</i><span><b>Open par koi popup nahi</b>
+          <small>Home modal, splash, launcher, start toast — sab hata. Seedha editor. Chahiye to ☰ Menu → Studio home.</small></span></div>
+        <div class="it"><i>2</i><span><b>Mouse se workspace move</b>
+          <small>Move tool me khaali jagah par click + drag = canvas move. Object par drag = object move. Space+drag = kahin se bhi.</small></span></div>
+        <div class="it"><i>3</i><span><b>Shuru karo · 5 steps</b>
+          <small>Photo → Background → Size → Text → Export. Har step click par kaam, ho jaane par green tick.</small></span></div>
+        <div class="it"><i>4</i><span><b>Bade, padhne layak labels</b>
+          <small>Tool rail ke naam 11px (pehle 8.5px), panel me kuch bhi cut nahi, mobile par icon + naam.</small></span></div>
+        <div class="it"><i>5</i><span><b>Beginner panel</b>
+          <small>Layers + Colours "Advanced — layers + colours" button ke peeche. Sab kuch wahin milta hai.</small></span></div>
+        <div class="ft"><button class="pri" data-do="start">Shuru karo</button>
+          <button data-do="close">Band karo</button></div>
+      </div>`;
+      document.body.appendChild(ov);
+      ov.querySelector('.x').onclick = () => ov.classList.remove('on');
+      ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('on'); });
+      ov.querySelector('[data-do="close"]').onclick = () => ov.classList.remove('on');
+      ov.querySelector('[data-do="start"]').onclick = () => { ov.classList.remove('on'); try { $('#fileInput').click(); } catch (e) { } };
+    }
+    ov.classList.add('on');
+  }
+
+  function initV18() {
+    injectCSS18();
+    try { if (localStorage.getItem('av18.adv') === '1') document.documentElement.classList.add('av-adv'); } catch (e) { }
+    try { buildAdvFooter18(); } catch (e) { }
+    try { buildSteps18(); } catch (e) { }
+    try { buildEmpty18(); } catch (e) { }
+    try { installPanDrag(); } catch (e) { }
+    try {
+      const sb = document.getElementById('statusbar');
+      if (sb) {
+        const w = document.createTreeWalker(sb, NodeFilter.SHOW_TEXT); let n;
+        while ((n = w.nextNode())) {
+          if (n.nodeValue && n.nodeValue.indexOf('Click=select') >= 0) {
+            n.nodeValue = n.nodeValue.replace('Drag=move', 'Khaali jagah par drag = workspace move');
+            break;
+          }
+        }
+      }
+    } catch (e) { }
+    syncEmpty18();
+    if (!initV18._t) {
+      initV18._t = setInterval(() => {
+        try { syncEmpty18(); refreshSteps18(); } catch (e) { }
+      }, 900);
+    }
+  }
+  window.AV18 = { steps: () => S18, refresh: refreshSteps18, empty: syncEmpty18, adv: buildAdvFooter18, pan: installPanDrag, whatsNew: openWhatsNew19 };
+
+})();
+
+
+
+</script>
 </body>
 </html>
