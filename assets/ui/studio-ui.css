@@ -750,3 +750,141 @@ html.av-show-menus #menus .mbtn.open{background:var(--ui-brand-soft) !important;
 @media (max-width:900px){
   #topbar>#boardTabs{order:8 !important;flex:1 0 100% !important}
 }
+
+/* ─────────────────────────────────────────────────────────────
+   14 · LEGACY PANEL THEMING (QR · Pro · Signage · Print · Design hub)
+   The v23–v25 panels ship their own light-only CSS. These rules map
+   their hardcoded surfaces onto the design tokens so dark mode stops
+   showing white cards with light-grey text.
+   ───────────────────────────────────────────────────────────── */
+
+/* — inline light text inside modal bodies (help / brand / guides) — */
+html:not(.av-dark) #modalRoot .m-b b,
+html:not(.av-dark) #modalRoot .m-b strong,
+html:not(.av-dark) #av12modal .m-b b,
+html:not(.av-dark) #av12modal .m-b strong,
+html:not(.av-dark) #modalRoot .m-b [style*="#fff"],
+html:not(.av-dark) #modalRoot .m-b [style*="#FFF"],
+html:not(.av-dark) #modalRoot .m-b [style*="white"]{color:var(--ui-ink)!important}
+html:not(.av-dark) #modalRoot .m-b [style*="#6f7b91"],
+html:not(.av-dark) #modalRoot .m-b [style*="#9db9ff"]{color:var(--ui-ink-3)!important}
+
+/* — dark theme: legacy white panels — */
+html.av-dark .av23box,
+html.av-dark #av24pro .av23box,
+html.av-dark #av25qr .av23box,
+html.av-dark #av25sign .av23box{background:var(--ui-card)!important;color:var(--ui-ink)!important}
+html.av-dark .av23head,
+html.av-dark .av23foot{background:var(--ui-card-2)!important;border-color:var(--ui-line)!important}
+html.av-dark .av23head b,
+html.av-dark .pcard b,
+html.av-dark .tcard b,
+html.av-dark .av24tile b,
+html.av-dark .hubcard b,
+html.av-dark .av23fld label,
+html.av-dark .av23hint b{color:var(--ui-ink)!important}
+html.av-dark .av23head small,
+html.av-dark .pcard small,
+html.av-dark .tcard small,
+html.av-dark .av24tile small,
+html.av-dark .hubcard small,
+html.av-dark .av24cmyknote,
+html.av-dark .av24mini small{color:var(--ui-ink-3)!important}
+html.av-dark .pcard,
+html.av-dark .tcard,
+html.av-dark .acard,
+html.av-dark .hubcard,
+html.av-dark .av24tile,
+html.av-dark .av24minigrid,
+html.av-dark .av23fld input,
+html.av-dark .av23fld select,
+html.av-dark .av23fld textarea,
+html.av-dark .av24tile input,
+html.av-dark .av24tile select,
+html.av-dark .av23search,
+html.av-dark .av23btn,
+html.av-dark .av23x,
+html.av-dark .av24quick button,
+html.av-dark .sg25ratios button,
+html.av-dark .qrData,
+html.av-dark .qrText{background:var(--ui-card)!important;color:var(--ui-ink)!important;border-color:var(--ui-line)!important}
+html.av-dark .pcard.on,
+html.av-dark .tcard.on,
+html.av-dark .acard.on,
+html.av-dark .hubcard:hover,
+html.av-dark .av23btn:hover,
+html.av-dark .av24quick button:hover{background:var(--ui-brand-soft)!important;border-color:var(--ui-brand-line)!important;color:var(--ui-brand-ink)!important}
+html.av-dark .av23steps span{background:var(--ui-hover)!important;color:var(--ui-ink-3)!important}
+html.av-dark .av23steps span.on{background:var(--ui-brand-grad)!important;color:#fff!important}
+html.av-dark .hubcard .ic,
+html.av-dark .pcard .ic{color:#fff!important}
+html:not(.av-dark) .hubcard .ic,
+html:not(.av-dark) .pcard .ic{color:#fff!important}
+html.av-dark .sg25kv,
+html.av-dark .sg25info,
+html.av-dark .sg25big{background:var(--ui-card)!important;color:var(--ui-ink)!important;border-color:var(--ui-line)!important}
+html.av-dark .av24minigrid i{background:var(--ui-brand-soft)!important;border-color:var(--ui-brand-line)!important}
+html.av-dark .av23foot .av23btn.pri,
+html.av-dark .av23btn.pri{background:var(--ui-brand-grad)!important;color:#fff!important;border-color:transparent!important}
+html.av-dark .av24badge{background:rgba(21,128,61,.18)!important;color:#7ee2a8!important;border-color:rgba(21,128,61,.35)!important}
+/* chips / segmented rows inside these panels */
+html.av-dark .av23tabs button,
+html.av-dark .chips .chip,
+html.av-dark .av25chips button{background:var(--ui-card)!important;color:var(--ui-ink)!important;border-color:var(--ui-line)!important}
+html.av-dark .av23tabs button.on,
+html.av-dark .chips .chip.on,
+html.av-dark .av25chips button.on{background:var(--ui-brand-soft)!important;color:var(--ui-brand-ink)!important;border-color:var(--ui-brand-line)!important}
+
+/* — dark theme: remaining legacy spots (hint strip, signage key/values) — */
+html.av-dark .av23hint{background:var(--ui-card-2)!important;border-color:var(--ui-line)!important;color:var(--ui-ink-2)!important}
+html.av-dark .av23hint b,
+html.av-dark .sg25info b,
+html.av-dark .sg25kv b,
+html.av-dark .sg25big{color:var(--ui-ink)!important}
+html.av-dark .av23hint,
+html.av-dark .av23hint *{color:var(--ui-ink-2) !important}
+html.av-dark .av23hint b{color:var(--ui-ink)!important}
+html.av-dark .sg25kv span,
+html.av-dark .sg25kv small,
+html.av-dark .q25slide span{color:var(--ui-ink-3)!important}
+html.av-dark .q25slide{color:var(--ui-ink-2)!important}
+html.av-dark .q25in,
+html.av-dark .q25sel,
+html.av-dark .av23fld input[type=text],
+html.av-dark .av23fld input:not([type]),
+html.av-dark input.q25in{background:var(--ui-card-2)!important;color:var(--ui-ink)!important;border-color:var(--ui-line)!important}
+html.av-dark .q25in::placeholder{color:var(--ui-ink-3)!important;opacity:.75}
+html.av-dark .q25hint{background:var(--ui-card-2)!important;border-color:var(--ui-line)!important;color:var(--ui-ink-2)!important}
+html.av-dark .q25hint b{color:var(--ui-ink)!important}
+html.av-dark .q25hint li,
+html.av-dark .q25hint span{color:var(--ui-ink-2)!important}
+
+/* ─────────────────────────────────────────────────────────────
+   15 · TAP-TARGET FLOOR (status-bar zoom + tiny chrome buttons)
+   Desktop 30 px, touch/coarse 40 px — nothing below that stays clickable.
+   ───────────────────────────────────────────────────────────── */
+#stZoom button,#stZoom .zb,
+#quick #tgRul,#quick #tgGrid,#quick #tgSnap,
+#av18steps .sh .help,#av18steps .sh .av-guide-btn{min-width:30px !important;min-height:30px !important;border-radius:8px !important}
+#stZoom button{font-size:12px !important;font-weight:750 !important}
+#stZoom button:hover{background:var(--ui-hover) !important;color:var(--ui-ink) !important}
+@media (pointer:coarse){
+  #stZoom button,#stZoom .zb,
+  #quick #tgRul,#quick #tgGrid,#quick #tgSnap,
+  #av18steps .sh .help,#av18steps .sh .av-guide-btn{min-width:40px !important;min-height:40px !important}
+}
+@media (max-width:900px){
+  #stZoom button,#stZoom .zb{min-width:40px !important;min-height:36px !important}
+  #stZoom #zVal{min-width:52px !important;display:inline-flex;align-items:center !important;justify-content:center !important}
+}
+/* ruler / grid / snap toggles live in the quick group, not a toolbar */
+#quick .qbtn#tgRul,#quick .qbtn#tgGrid,#quick .qbtn#tgSnap,
+#quick button#tgRul,#quick button#tgGrid,#quick button#tgSnap{min-width:32px!important;min-height:32px!important;padding:0!important;display:inline-grid!important;place-items:center !important}
+@media (pointer:coarse){
+  #quick button#tgRul,#quick button#tgGrid,#quick button#tgSnap{min-width:40px!important;min-height:40px!important}
+}
+/* ruler / grid / snap toggles sit in the status bar */
+#statusbar .qbtn,#statusbar button.qbtn{width:30px!important;height:30px!important;min-width:30px!important;min-height:30px!important;padding:0!important;border-radius:8px !important;display:inline-grid;place-items:center !important}
+#statusbar .qbtn svg{width:16px !important;height:16px !important}
+#statusbar .qbtn:hover{background:var(--ui-hover) !important;color:var(--ui-ink) !important}
+@media (pointer:coarse){#statusbar .qbtn{width:38px!important;height:38px!important;min-width:38px!important;min-height:38px!important}}

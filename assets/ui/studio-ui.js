@@ -318,8 +318,14 @@
       if (!el.getAttribute('type')) el.setAttribute('type', 'button');
     });
     $$('#toolrail .tool').forEach(function (b) {
-      var t = b.querySelector('.lbl');
-      if (t && !b.getAttribute('aria-label')) b.setAttribute('aria-label', t.textContent.trim());
+      var t = b.querySelector('.lbl') || b.querySelector('.tip');
+      var name = t ? t.textContent.replace(/\s+/g, ' ').trim() : (b.dataset.tool || '');
+      /* some modes hide the .tip bubble — keep a native tooltip so every tool
+         can always be identified (and screen readers get the full name) */
+      if (name) {
+        if (!b.getAttribute('aria-label')) b.setAttribute('aria-label', name);
+        if (!b.title) b.title = name;
+      }
       if (!b.getAttribute('type')) b.setAttribute('type', 'button');
     });
     var side = $('#side');
