@@ -902,7 +902,7 @@ function setActiveLayer(id){doc.activeId=id;clearSel();cancelRT(true);uiLayers()
 function insertLayer(L,ref){const arr=ref?(parentArrayOf(ref.id)||doc.layers):doc.layers;
   const i=ref?arr.findIndex(l=>l.id===ref.id):-1;
   if(i<0)arr.push(L);else arr.splice(i+1,0,L);doc.activeId=L.id}
-function makeDoc(w,h,bg){doc={name:'untitled',w,h,layers:[],activeId:null,guides:[]};comp=mkCanvas(w,h);
+function makeDoc(w,h,bg){markAutosaveDirty();doc={name:'untitled',w,h,layers:[],activeId:null,guides:[]};comp=mkCanvas(w,h);
   if(bg){const b=newRasterLayer('Background');const g=b.canvas.getContext('2d');g.fillStyle=bg;g.fillRect(0,0,w,h);doc.layers.push(b);doc.activeId=b.id}
   layerCounters={raster:0,vector:0};
   if(typeof buildBoardTabs==='function')buildBoardTabs()}
@@ -936,7 +936,7 @@ function restore(s){
   comp=mkCanvas(doc.w,doc.h);
   clearSel();cancelRT(true);if(pen)pen=null;
   docDirty=true;uiLayers();uiProps()}
-function pushUndo(pre,label){undoStack.push(pre||snap());histNames.push(label||'Edit');const cap=undoCapNow();while(undoStack.length>cap){undoStack.shift();histNames.shift()}
+function pushUndo(pre,label){autosaveDirty=true;undoStack.push(pre||snap());histNames.push(label||'Edit');const cap=undoCapNow();while(undoStack.length>cap){undoStack.shift();histNames.shift()}
   redoStack.length=0;redoNames.length=0;uiQuick()}
 function undo(){if(RT){cancelRT(false);return}
   if(!undoStack.length){toast('Undo ke liye kuch nahi hai');return}
@@ -951,8 +951,82 @@ function makeChecker(){const c=mkCanvas(16,16),g=c.getContext('2d');
   g.fillRect(0,0,8,8);g.fillRect(8,8,8,8);checkerPat=ctx.createPattern(c,'repeat')}
 let _clipScr=null;
 function clipScratch(){if(!_clipScr||_clipScr.width!==doc.w||_clipScr.height!==doc.h)_clipScr=mkCanvas(doc.w,doc.h);return _clipScr}
+/* ── live stroke preview ────────────────────────────────────────────────
+   Painting writes into a scratch canvas (G.stroke.tmp) while the mouse is
+   down. The preview is only visible if the COMPOSITE is refreshed on every
+   pointermove, so: (a) mark docDirty on every dab, (b) refresh it cheaply by
+   caching "layers below" + "layers above" once per stroke instead of
+   re-compositing every layer on each frame. */
+function strokeCacheOK(S){
+  if(!S||!S.layer)return false;
+  if(doc.layers.indexOf(S.layer)<0)return false;
+  if(typeof RT!=='undefined'&&RT)return false;
+  if(typeof pixSel!=='undefined'&&pixSel&&pixSel.float)return false;
+  const onMask=(typeof maskEditId!=='undefined')&&maskEditId===S.layer.id;
+  if(onMask)return false;
+  if(S.layer.type==='raster'&&S.layer.mask&&S.layer.mask.enabled)return false;
+  for(const L of doc.layers){ if(L.type==='group'||L.clip)return false }
+  return true;
+}
+/* cache "layers below / above the stroke layer" — built once, reused across
+   strokes while the rest of the stack is unchanged (signature check) */
+let _strokeStack=null;
+function strokeStackSig(idx){
+  let k=doc.w+'x'+doc.h+'#'+idx+'#';
+  doc.layers.forEach((L,i)=>{
+    if(i===idx)return;
+    k+=L.id+':'+(L.ver||0)+':'+(L.visible?1:0)+':'+Math.round(L.opacity*100)+':'+L.blend+':'+
+       (L.offset?Math.round(L.offset.x)+','+Math.round(L.offset.y):'-')+';';
+  });
+  return k}
+function buildStrokeCache(S){
+  const idx=doc.layers.indexOf(S.layer);
+  const sig=strokeStackSig(idx);
+  if(_strokeStack&&_strokeStack.sig===sig){
+    S.below=_strokeStack.below;S.above=_strokeStack.above;S.cacheReady=true;return true}
+  const below=mkCanvas(doc.w,doc.h),above=mkCanvas(doc.w,doc.h);
+  const bg=below.getContext('2d'),ag=above.getContext('2d');
+  doc.layers.forEach((L,i)=>{ if(!L.visible)return;
+    if(i<idx)drawLayerFxOrPlain(bg,L); else if(i>idx)drawLayerFxOrPlain(ag,L) });
+  _strokeStack={sig,below,above};
+  S.below=below;S.above=above;S.cacheReady=true;return true}
+function dropStrokeCache(){_strokeStack=null}
+function strokeCompositeFast(g){
+  const S=G.stroke;
+  if(!S||!S.tmp)return false;
+  if(!S.cacheReady&&!buildStrokeCache(S))return false;
+  g.clearRect(0,0,doc.w,doc.h);
+  g.drawImage(S.below,0,0);
+  const L=S.layer;
+  if(L.visible){
+    if(L.blend==='source-over'){
+      /* common case: base + live stroke, exactly what the commit will produce */
+      g.save();
+      g.globalAlpha=L.opacity;g.globalCompositeOperation='source-over';
+      g.drawImage(L.canvas,L.offset.x,L.offset.y);
+      g.globalAlpha=L.opacity*S.opacity;g.globalCompositeOperation=S.mode;
+      g.drawImage(S.tmp,0,0);
+      g.restore();
+    }else{
+      /* multiply / screen etc: merge stroke into a layer copy first, warna
+         preview aur final me farq dikhta tha */
+      const m=S.merge&&S.merge.width===doc.w?S.merge:(S.merge=mkCanvas(doc.w,doc.h));
+      const mg=m.getContext('2d');
+      mg.setTransform(1,0,0,1,0,0);mg.globalAlpha=1;mg.globalCompositeOperation='source-over';
+      mg.clearRect(0,0,doc.w,doc.h);
+      mg.drawImage(L.canvas,L.offset.x,L.offset.y);
+      mg.globalAlpha=S.opacity;mg.globalCompositeOperation=S.mode;mg.drawImage(S.tmp,0,0);
+      g.save();g.globalAlpha=L.opacity;g.globalCompositeOperation=L.blend;g.drawImage(m,0,0);g.restore();
+    }
+  }
+  g.drawImage(S.above,0,0);
+  return true}
 function renderComposite(){
   const g=comp.getContext('2d');
+  g.save();g.setTransform(1,0,0,1,0,0);
+  if(G.stroke&&G.stroke.tmp&&G.stroke.layer&&strokeCacheOK(G.stroke)&&strokeCompositeFast(g)){
+    g.restore();docDirty=false;return}
+  g.restore();
   g.setTransform(1,0,0,1,0,0);g.clearRect(0,0,doc.w,doc.h);
   let lastBase=null;
   for(const L of doc.layers){
@@ -1205,11 +1279,17 @@ function stampSegment(tmp,from,to,st){
       const gr=g.createRadialGradient(x,y,ir,x,y,r);
       gr.addColorStop(0,st.color);gr.addColorStop(1,withAlpha(st.color,0));
       g.fillStyle=gr;g.beginPath();g.arc(x,y,r,0,TAU);g.fill();g.fillStyle=st.color}}}
+function thumbRefreshSoon(){
+  /* bade artboard par thumbnail redraw (8.7 MP -> 46x34) ek hi frame me
+     stroke-end ke saath karta hai to ~100 ms hitch aata hai — chhote timeout
+     par bhej do, dikhta same hai */
+  if(doc&&doc.w*doc.h>4e6){setTimeout(function(){try{uiLayersRefresh()}catch(e){}},40)}
+  else uiLayersRefresh()}
 function strokeBegin(layer,p,st){
   bakeOffset(layer);
   pushUndo();
   const tmp=mkCanvas(doc.w,doc.h);
-  G.stroke={layer,tmp,mode:st.eraser?'destination-out':'source-over',opacity:st.opacity/100,st,last:{x:p.x,y:p.y}};
+  G.stroke={layer,tmp,mode:st.eraser?'destination-out':'source-over',opacity:st.opacity/100,st,last:{x:p.x,y:p.y},cacheReady:false};
   stampSegment(tmp,null,{x:p.x,y:p.y},st);docDirty=true}
 function strokeMove(p){const S=G.stroke;if(!S)return;
   stampSegment(S.tmp,S.last,{x:p.x,y:p.y},S.st);S.last={x:p.x,y:p.y};docDirty=true}
@@ -1217,7 +1297,7 @@ function strokeEnd(){const S=G.stroke;if(!S)return;
   const onMask=(typeof maskEditId!=='undefined')&&maskEditId===S.layer.id&&!!(S.layer.mask&&S.layer.mask.enabled);
   const g=(onMask?S.layer.mask.canvas:S.layer.canvas).getContext('2d');
   g.save();g.globalAlpha=S.opacity;g.globalCompositeOperation=S.mode;g.drawImage(S.tmp,0,0);g.restore();
-  layerVerBump(S.layer);G.stroke=null;G._strokeSt=null;docDirty=true;needRender=true;uiLayersRefresh()}
+  layerVerBump(S.layer);G.stroke=null;G._strokeSt=null;docDirty=true;needRender=true;thumbRefreshSoon()}
 
 /* ---------- flood fill ---------- */
 function floodFill(layer,p){
@@ -1906,6 +1986,12 @@ function setTool(t){
   curTool=t;
   document.querySelectorAll('.tool').forEach(b=>b.classList.toggle('on',b.dataset.tool===t));
   cv.style.cursor=TOOLS[t].cursor==='none'?'none':TOOLS[t].cursor;
+  /* fix: line / pen / pencil sirf stroke se dikhte hain. Agar stroke off hai
+     to tool chunne par use on kar do, warna drag karke kuch banta hi nahi. */
+  if((t==='line'||t==='pen'||t==='pencil')&&!opts.strokeOn){
+    opts.strokeOn=true;
+    if(typeof uiProps==='function')setTimeout(()=>{try{uiProps()}catch(e){}},0);
+  }
   $('#stHint').textContent=HINTS[t]||'';
   needRender=true;uiProps()}
 const HINTS={
@@ -2891,7 +2977,7 @@ async function buildDocFromPayload(j){
       frames.push({cells})}
     animState={frames,fps:clamp(j.anim.fps||12,1,60),cur:clamp(j.anim.cur||0,0,frames.length-1)}}
   return{doc:nd,animState}}
-async function loadProject(j){
+async function loadProject(j){markAutosaveDirty();
   boards=null;boardCur=0;
   if(j&&j.version===5&&Array.isArray(j.boards)){
     const arr=[];
@@ -3471,8 +3557,12 @@ function demoDoc(){
 function resizeCanvas(){
   const r=$('#stage').getBoundingClientRect();
   dpr=Math.min(window.devicePixelRatio||1,(window.matchMedia&&matchMedia('(pointer:coarse)').matches?2:2.5));
-  cv.width=Math.max(50,Math.round(r.width*dpr));
-  cv.height=Math.max(50,Math.round(r.height*dpr));
+  /* perf: 4K display + badi stage par backing store 25 MP cross kar jata hai
+     (400 MB+) => tab freeze. Memory ceiling ke saath dpr ko neeche laao. */
+  const MAXPX=9e6; /* ~9 MP ≈ 36 MB RGBA */
+  let w=Math.max(50,Math.round(r.width*dpr)), h=Math.max(50,Math.round(r.height*dpr));
+  if(w*h>MAXPX){const k=Math.sqrt(MAXPX/(w*h));dpr=Math.max(1,dpr*k);w=Math.round(w*k);h=Math.round(h*k)}
+  cv.width=w; cv.height=h;
   needRender=true}
 function init(){
   cv=$('#cv');ctx=cv.getContext('2d');
@@ -3756,7 +3846,7 @@ function strokeBegin(layer,p,st){
   bakeOffset(layer);
   pushUndo();
   const tmp=mkCanvas(doc.w,doc.h);
-  G.stroke={layer,tmp,mode:st.eraser?'destination-out':'source-over',opacity:st.opacity/100,st,last:{x:p.x,y:p.y}};
+  G.stroke={layer,tmp,mode:st.eraser?'destination-out':'source-over',opacity:st.opacity/100,st,last:{x:p.x,y:p.y},cacheReady:false};
   stampSegment(tmp,null,{x:p.x,y:p.y},st);docDirty=true}
 function strokeEnd(){const S=G.stroke;if(!S)return;
   S.tmp=symRasterCombine(S.tmp);
@@ -3765,7 +3855,7 @@ function strokeEnd(){const S=G.stroke;if(!S)return;
   const onMask=(typeof maskEditId!=='undefined')&&maskEditId===S.layer.id&&!!(S.layer.mask&&S.layer.mask.enabled);
   const g=(onMask?S.layer.mask.canvas:S.layer.canvas).getContext('2d');
   g.save();g.globalAlpha=S.opacity;g.globalCompositeOperation=S.mode;g.drawImage(S.tmp,0,0);g.restore();
-  layerVerBump(S.layer);G.stroke=null;G._strokeSt=null;docDirty=true;needRender=true;uiLayersRefresh()}
+  layerVerBump(S.layer);G.stroke=null;G._strokeSt=null;docDirty=true;needRender=true;thumbRefreshSoon()}
 function deleteSelection(){
   const L=activeLayer();
   if(pixSel&&L&&L.type==='raster'&&!L.locked){
@@ -4542,7 +4632,7 @@ function projectDocPayload(includeAnim){
 function projectJSON(includeAnim){
   const p=projectDocPayload(includeAnim);
   return{app:'artvision',version:4,...p}}
-let autoTimer=null;
+let autoTimer=null,autosaveDirty=true,autosaveLastOk=0;
 function autosavePayload(strip){
   if(typeof boards!=='undefined'&&boards&&boards.length>1){
     const j={app:'artvision',version:5,cur:boardCur,
@@ -4553,13 +4643,24 @@ function autosavePayload(strip){
   const j=projectJSON(false);
   if(strip){j.layers=j.layers.map(LM=>{if(LM.data&&LM.data.length>3000)LM.data=null;return LM});j.partial=true}
   return j}
-function autosaveNow(){
+function autosaveNow(force){
   if(!doc||anim.playing)return;
+  /* perf: background tab ya koi change nahi => serialize hi na karo.
+     Bade artboards par seedha "stripped" payload banao taaki main thread
+     par do baar tens-of-MB JSON.stringify na chale. */
+  if(document.hidden&&!force)return;
+  if(!autosaveDirty&&!force)return;
+  autosaveDirty=false;
   try{
-    let s=JSON.stringify(autosavePayload(false));
-    if(!lsSet('artvision_autosave',s)){
-      lsSet('artvision_autosave',JSON.stringify(autosavePayload(true)))}
+    const big=doc.w*doc.h>9e6;
+    let s=JSON.stringify(autosavePayload(big));
+    if(!big&&s.length>4e6){ /* 4 MB se bada => rasters strip karke ek hi retry */
+      s=JSON.stringify(autosavePayload(true))}
+    if(lsSet('artvision_autosave',s))autosaveLastOk=Date.now();
+    else{ /* quota: purana data hatao, dobara mat likho */
+      try{localStorage.removeItem('artvision_autosave')}catch(e){}}
   }catch(e){}}
+function markAutosaveDirty(){autosaveDirty=true}
 function startAutosave(){
   if(autoTimer)clearInterval(autoTimer);
   autoTimer=setInterval(autosaveNow,30000)}
@@ -8634,8 +8735,10 @@ function HITPAD() {
    ArtViSiON STUDiO v11.0 — CLIP STUDIO PAINT × PROCREATE feature pack
    ──────────────────────────────────────────────────────────────────────────
    Naya is build me:
-     • Brush Studio — dynamic brush engine (pressure size/opacity, taper,
-       jitter, scatter, paper grain, brush blend mode), 13 built-in brushes
+     • Brush Studio — texture-aware brush engine (pressure size/opacity, taper,
+       jitter, scatter, paper grain, flow, spacing, surface: solid / dry / wet /
+       screentone, bristle split, wet edge, chisel tip, colour jitter),
+       13 built-in brushes · live preview === committed stroke
      • Stabilizer / StreamLine (CSP "hand-brush correction" + Procreate)
      • QuickShape — stroke ke end par hold karo → perfect line / circle /
        ellipse / rectangle
@@ -8656,36 +8759,53 @@ const V11_LS_BRUSH = 'artvision_v11_brush';
 const V11_LS_PRESETS = 'artvision_v11_presets';
 
 const V11_BUILTIN_PRESETS = [
-  { id:'gpen',     name:'G-Pen',        emoji:'✒️', size:7,  soft:8,   op:100, eraser:false,
-    dyn:{stabilize:28,pSize:78,pOpacity:0,taper:35,jitter:0,scatter:0,grain:0}, blend:'source-over' },
-  { id:'mapping',  name:'Mapping Pen',  emoji:'🖊️', size:3,  soft:4,   op:100, eraser:false,
-    dyn:{stabilize:42,pSize:88,pOpacity:0,taper:50,jitter:0,scatter:0,grain:0}, blend:'source-over' },
-  { id:'ink',      name:'Ink Brush',    emoji:'🖌️', size:24, soft:22,  op:100, eraser:false,
-    dyn:{stabilize:20,pSize:60,pOpacity:35,taper:60,jitter:6,scatter:4,grain:12}, blend:'source-over' },
-  { id:'textured', name:'Textured Pen', emoji:'✏️', size:14, soft:30,  op:95,  eraser:false,
-    dyn:{stabilize:25,pSize:55,pOpacity:20,taper:30,jitter:8,scatter:0,grain:48}, blend:'source-over' },
-  { id:'pencil',   name:'Pencil',       emoji:'🩶', size:9,  soft:34,  op:80,  eraser:false,
-    dyn:{stabilize:18,pSize:45,pOpacity:35,taper:22,jitter:14,scatter:3,grain:55}, blend:'source-over' },
-  { id:'airbrush', name:'Airbrush',     emoji:'💨', size:70, soft:100, op:42,  eraser:false,
-    dyn:{stabilize:10,pSize:0,pOpacity:70,taper:0,jitter:0,scatter:0,grain:0}, blend:'source-over' },
-  { id:'marker',   name:'Marker',       emoji:'🖍️', size:32, soft:8,   op:72,  eraser:false,
-    dyn:{stabilize:15,pSize:20,pOpacity:0,taper:0,jitter:0,scatter:0,grain:6}, blend:'multiply' },
-  { id:'water',    name:'Watercolor',   emoji:'🎨', size:60, soft:62,  op:34,  eraser:false,
-    dyn:{stabilize:14,pSize:30,pOpacity:45,taper:20,jitter:10,scatter:18,grain:28}, blend:'multiply' },
-  { id:'charcoal', name:'Charcoal',     emoji:'🪨', size:34, soft:52,  op:78,  eraser:false,
-    dyn:{stabilize:8,pSize:40,pOpacity:30,taper:26,jitter:22,scatter:14,grain:74}, blend:'source-over' },
-  { id:'tone',     name:'Tone Brush',   emoji:'🔲', size:30, soft:6,   op:100, eraser:false,
-    dyn:{stabilize:10,pSize:0,pOpacity:0,taper:0,jitter:0,scatter:0,grain:70}, blend:'source-over' },
+  /* ══ inking ══ */
+  { id:'gpen',     name:'G-Pen',        emoji:'✒️', size:7,  soft:6,   op:100, eraser:false,
+    dyn:{stabilize:28,pSize:78,pOpacity:0,taper:35,jitter:0,scatter:0,grain:0,
+         texScale:1,bristle:0,wet:0,streak:0,angle:0,cjit:0,spacing:0.12,flow:100,surface:'solid'}, blend:'source-over' },
+  { id:'mapping',  name:'Mapping Pen',  emoji:'🖊️', size:3,  soft:2,   op:100, eraser:false,
+    dyn:{stabilize:42,pSize:88,pOpacity:0,taper:50,jitter:0,scatter:0,grain:0,
+         texScale:1,bristle:0,wet:0,streak:0,angle:0,cjit:0,spacing:0.10,flow:100,surface:'solid'}, blend:'source-over' },
+  { id:'ink',      name:'Ink Brush',    emoji:'🖌️', size:24, soft:30,  op:100, eraser:false,
+    dyn:{stabilize:20,pSize:60,pOpacity:35,taper:62,jitter:5,scatter:3,grain:18,
+         texScale:1.6,bristle:0,wet:22,streak:0,angle:0,cjit:6,spacing:0.13,flow:72,surface:'solid'}, blend:'source-over' },
+  { id:'textured', name:'Textured Pen', emoji:'✏️', size:14, soft:40,  op:92,  eraser:false,
+    dyn:{stabilize:25,pSize:55,pOpacity:20,taper:30,jitter:8,scatter:0,grain:54,
+         texScale:1.4,bristle:40,wet:0,streak:0,angle:0,cjit:10,spacing:0.20,flow:58,surface:'dry'}, blend:'source-over' },
+  { id:'pencil',   name:'Pencil',      emoji:'🩶', size:9,  soft:45,  op:85,  eraser:false,
+    dyn:{stabilize:18,pSize:45,pOpacity:35,taper:22,jitter:10,scatter:3,grain:64,
+         texScale:2.2,bristle:46,wet:0,streak:0,angle:0,cjit:16,spacing:0.18,flow:52,surface:'dry'}, blend:'source-over' },
+  { id:'charcoal', name:'Charcoal',    emoji:'🪨', size:34, soft:55,  op:80,  eraser:false,
+    dyn:{stabilize:8,pSize:40,pOpacity:30,taper:26,jitter:18,scatter:12,grain:80,
+         texScale:0.8,bristle:45,wet:0,streak:0,angle:0,cjit:14,spacing:0.18,flow:55,surface:'dry'}, blend:'source-over' },
+  { id:'tone',     name:'Tone Brush',  emoji:'🔲', size:30, soft:20,  op:100, eraser:false,
+    dyn:{stabilize:10,pSize:0,pOpacity:0,taper:0,jitter:0,scatter:0,grain:30,
+         texScale:1,bristle:0,wet:0,streak:0,angle:0,cjit:0,spacing:0.22,flow:100,surface:'tone'}, blend:'source-over' },
+  /* ══ painting ══ */
+  { id:'airbrush', name:'Airbrush',    emoji:'💨', size:70, soft:100, op:60,  eraser:false,
+    dyn:{stabilize:10,pSize:0,pOpacity:70,taper:0,jitter:0,scatter:8,grain:10,
+         texScale:0.5,bristle:0,wet:0,streak:0,angle:0,cjit:0,spacing:0.10,flow:7,surface:'solid'}, blend:'source-over' },
+  { id:'marker',   name:'Marker',      emoji:'🖍️', size:32, soft:10,  op:78,  eraser:false,
+    dyn:{stabilize:15,pSize:20,pOpacity:0,taper:0,jitter:0,scatter:0,grain:8,
+         texScale:1,bristle:0,wet:12,streak:55,angle:-35,cjit:0,spacing:0.09,flow:100,surface:'solid'}, blend:'multiply' },
+  { id:'water',    name:'Watercolor',  emoji:'🎨', size:60, soft:70,  op:55,  eraser:false,
+    dyn:{stabilize:14,pSize:30,pOpacity:45,taper:20,jitter:8,scatter:14,grain:34,
+         texScale:0.35,bristle:0,wet:70,streak:0,angle:0,cjit:30,spacing:0.12,flow:14,surface:'wet'}, blend:'multiply' },
+  /* ══ erasers ══ */
   { id:'eraserSoft', name:'Soft Eraser', emoji:'🧽', size:48, soft:70, op:100, eraser:true,
-    dyn:{stabilize:20,pSize:55,pOpacity:25,taper:20,jitter:0,scatter:0,grain:0}, blend:'destination-out' },
+    dyn:{stabilize:20,pSize:55,pOpacity:25,taper:20,jitter:0,scatter:0,grain:0,
+         texScale:1,bristle:0,wet:0,streak:0,angle:0,cjit:0,spacing:0.16,flow:100,surface:'solid'}, blend:'destination-out' },
   { id:'eraserHard', name:'Hard Eraser', emoji:'◻️', size:24, soft:2,  op:100, eraser:true,
-    dyn:{stabilize:26,pSize:60,pOpacity:0,taper:25,jitter:0,scatter:0,grain:0}, blend:'destination-out' },
+    dyn:{stabilize:26,pSize:60,pOpacity:0,taper:25,jitter:0,scatter:0,grain:0,
+         texScale:1,bristle:0,wet:0,streak:0,angle:0,cjit:0,spacing:0.14,flow:100,surface:'solid'}, blend:'destination-out' },
   { id:'eraserKnead', name:'Kneaded Eraser', emoji:'🩹', size:56, soft:45, op:55, eraser:true,
-    dyn:{stabilize:12,pSize:30,pOpacity:50,taper:10,jitter:8,scatter:6,grain:35}, blend:'destination-out' }
+    dyn:{stabilize:12,pSize:30,pOpacity:50,taper:10,jitter:8,scatter:6,grain:40,
+         texScale:1,bristle:30,wet:0,streak:0,angle:0,cjit:0,spacing:0.12,flow:100,surface:'dry'}, blend:'destination-out' }
 ];
 
 const V11_DYN_DEFAULTS = {
   stabilize:28, pSize:70, pOpacity:0, taper:30, jitter:0, scatter:0, grain:0,
+  texScale:1, bristle:0, wet:0, streak:0, angle:0, cjit:0, spacing:0.16, flow:100, surface:'solid',
   blend:'source-over', quickShape:true, qsDelay:380
 };
 
@@ -8751,28 +8871,163 @@ function v11ByTool(t){ return (V11_PRESETS || []).filter(p => !!p.eraser === (t 
    1 · DYNAMIC BRUSH ENGINE  (Procreate brush studio + CSP sub-tool)
    ══════════════════════════════════════════════════════════════════════════ */
 
+/* ════════════════════════════════════════════════════════════════════════════
+   BRUSH ENGINE v11.2 · texture-aware dabs, live preview === committed result
+   - Surface types: solid · dry (charcoal/pencil) · wet (watercolour) · tone (screentone)
+   - Per-dab paper texture (multi-octave noise field), bristle splitting,
+     wet edge, chisel angle/streak, colour jitter, per-preset spacing
+   - Live preview aur final stroke EK hi deterministic engine se bante hain
+     (same seed · same rng budget · same spacing) → release par pop nahi
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ---------- deterministic surface / paper texture field ---------- */
+const V11_TEX_S = 256;
+let v11TexCache = null;
+function v11TexField(){
+  if(v11TexCache) return v11TexCache;
+  const S = V11_TEX_S, N = S * S, out = new Float32Array(N);
+  const rng = v11Rng(918273645);
+  const octs = [[6, 0.50], [18, 0.30], [54, 0.20]];
+  for(let o = 0; o < octs.length; o++){
+    const gN = octs[o][0], amp = octs[o][1];
+    const grid = new Float32Array(gN * gN);
+    for(let i = 0; i < grid.length; i++) grid[i] = rng();
+    const cell = S / gN;
+    for(let y = 0; y < S; y++){
+      const gy = y / cell, y0 = Math.floor(gy) % gN, y1 = (y0 + 1) % gN;
+      let ty = gy - Math.floor(gy); ty = ty * ty * (3 - 2 * ty);
+      for(let x = 0; x < S; x++){
+        const gx = x / cell, x0 = Math.floor(gx) % gN, x1 = (x0 + 1) % gN;
+        let tx = gx - Math.floor(gx); tx = tx * tx * (3 - 2 * tx);
+        const a = grid[y0 * gN + x0], b = grid[y0 * gN + x1];
+        const c = grid[y1 * gN + x0], d = grid[y1 * gN + x1];
+        out[y * S + x] += amp * (((a * (1 - tx) + b * tx) * (1 - ty)) + ((c * (1 - tx) + d * tx) * ty));
+      }
+    }
+  }
+  let mn = 1e9, mx = -1e9;
+  for(let i = 0; i < N; i++){ if(out[i] < mn) mn = out[i]; if(out[i] > mx) mx = out[i] }
+  const span = (mx - mn) || 1;
+  for(let i = 0; i < N; i++) out[i] = (out[i] - mn) / span;
+  v11TexCache = { S:S, a:out };
+  return v11TexCache;
+}
+function v11TexAt(x, y, scale){
+  const T = v11TexField(), S = T.S, a = T.a;
+  let u = (x * scale) % S, v = (y * scale) % S;
+  if(u < 0) u += S;
+  if(v < 0) v += S;
+  const x0 = u | 0, y0 = v | 0, x1 = (x0 + 1) % S, y1 = (y0 + 1) % S;
+  const fx = u - x0, fy = v - y0;
+  const r0 = a[y0 * S + x0] * (1 - fx) + a[y0 * S + x1] * fx;
+  const r1 = a[y1 * S + x0] * (1 - fx) + a[y1 * S + x1] * fx;
+  return r0 * (1 - fy) + r1 * fy;
+}
+
+/* ---------- dab sprites (cached per colour · softness · surface) ---------- */
 const v11StampCache = new Map();
-function v11StampSprite(color, soft){
-  const key = color + '|' + v11Clamp(Math.round(soft * 100), 0, 100);
+const v11ColorIds = new Map();
+let v11ColorSeq = 0;
+function v11ColorId(c){
+  let i = v11ColorIds.get(c);
+  if(i == null){ i = ++v11ColorSeq; v11ColorIds.set(c, i) }
+  return i;
+}
+const V11_SURF_ID = { solid:0, dry:1, wet:2, tone:3, rim:4 };
+const v11ShadeCache = new Map();
+function v11HashStr(s){
+  let h = 2166136261;
+  for(let i = 0; i < s.length; i++){ h ^= s.charCodeAt(i); h = (h * 16777619) >>> 0 }
+  return h >>> 0;
+}
+function v11ShadeOf(color, amt){
+  if(!amt) return color;
+  const ck = color + '|' + Math.round(amt * 100);
+  const hit = v11ShadeCache.get(ck);
+  if(hit) return hit;
+  let out = color;
+  try{
+    const c = normColor(color);
+    const r = parseInt(c.slice(1, 3), 16), g2 = parseInt(c.slice(3, 5), 16), b = parseInt(c.slice(5, 7), 16);
+    const mix = v => {
+      const n = amt > 0 ? v + (255 - v) * amt : v * (1 + amt);
+      return Math.max(0, Math.min(255, Math.round(n)));
+    };
+    const h = n => ('0' + n.toString(16)).slice(-2);
+    out = '#' + h(mix(r)) + h(mix(g2)) + h(mix(b));
+  }catch(e){ out = color }
+  if(v11ShadeCache.size > 200) v11ShadeCache.clear();
+  v11ShadeCache.set(ck, out);
+  return out;
+}
+function v11StampSprite(color, soft, surface, px){
+  const surf = surface || 'solid';
+  const bucket = px && px <= 40 ? 0 : (px && px <= 96 ? 1 : 2);
+  const S = bucket === 0 ? 32 : (bucket === 1 ? 72 : 160);
+  const key = ((v11ColorId(color) * 101 + v11Clamp(Math.round(soft * 100), 0, 100)) * 8 +
+    (V11_SURF_ID[surf] == null ? 0 : V11_SURF_ID[surf])) * 4 + bucket;
   let c = v11StampCache.get(key);
   if(c) return c;
-  const S = 128;
+  const cx = S / 2, R = S / 2 - (S >= 72 ? 3 : 1.2);
   c = mkCanvas(S, S);
   const g = c.getContext('2d');
-  const R = S/2 - 1;
-  if(soft <= 0.02){
+  soft = v11Clamp(soft, 0, 1);
+  const ir = Math.max(0.5, R * (1 - soft));
+
+  const rngKeySeed = (key * 2654435761) >>> 0;
+  if(surf === 'tone'){
+    g.save();
+    g.beginPath(); g.arc(cx, cx, R, 0, TAU); g.clip();
     g.fillStyle = color;
-    g.beginPath(); g.arc(S/2, S/2, R, 0, TAU); g.fill();
+    const step = S * 0.14;
+    for(let y = -R; y <= R; y += step * 0.72){
+      const rowOff = (Math.round(y / (step * 0.72)) % 2) ? step / 2 : 0;
+      for(let x = -R; x <= R; x += step){
+        g.beginPath(); g.arc(cx + x + rowOff, cx + y, step * 0.33, 0, TAU); g.fill();
+      }
+    }
+    g.restore();
+    g.globalCompositeOperation = 'destination-in';
+    const gm = g.createRadialGradient(cx, cx, Math.max(0.5, R * 0.82), cx, cx, R);
+    gm.addColorStop(0, 'rgba(0,0,0,1)'); gm.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gm; g.fillRect(0, 0, S, S);
+    g.globalCompositeOperation = 'source-over';
+  }else if(surf === 'dry'){
+    const rng = v11Rng(rngKeySeed);
+    const grains = 1600;
+    for(let i = 0; i < grains; i++){
+      const ang = rng() * TAU, rad = Math.pow(rng(), 0.55) * R;
+      const x = cx + Math.cos(ang) * rad, y = cx + Math.sin(ang) * rad;
+      const rr = (S / 160) * (0.7 + rng() * (2.2 + soft * 2.0));
+      const fall = Math.pow(1 - rad / R, 0.7);
+      g.fillStyle = withAlpha(color, v11Clamp(0.10 + 0.75 * fall * (0.35 + rng() * 0.65), 0, 1));
+      g.beginPath(); g.arc(x, y, rr, 0, TAU); g.fill();
+    }
+    g.globalCompositeOperation = 'destination-in';
+    const gm2 = g.createRadialGradient(cx, cx, Math.max(0.5, R * (1 - soft * 0.35)), cx, cx, R);
+    gm2.addColorStop(0, 'rgba(0,0,0,1)'); gm2.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gm2; g.fillRect(0, 0, S, S);
+    g.globalCompositeOperation = 'source-over';
+  }else if(surf === 'rim'){
+    const gr = g.createRadialGradient(cx, cx, Math.max(0.5, R * 0.58), cx, cx, R);
+    gr.addColorStop(0, withAlpha(color, 0));
+    gr.addColorStop(0.62, withAlpha(color, 0.10));
+    gr.addColorStop(0.86, withAlpha(color, 0.85));
+    gr.addColorStop(0.97, withAlpha(color, 0.30));
+    gr.addColorStop(1, withAlpha(color, 0));
+    g.fillStyle = gr; g.fillRect(0, 0, S, S);
+  }else if(soft <= 0.02){
+    g.fillStyle = color;
+    g.beginPath(); g.arc(cx, cx, R, 0, TAU); g.fill();
   }else{
-    const ir = Math.max(0.5, R * (1 - soft));
-    const gr = g.createRadialGradient(S/2, S/2, ir, S/2, S/2, R);
+    const gr = g.createRadialGradient(cx, cx, ir, cx, cx, R);
     gr.addColorStop(0, color);
-    gr.addColorStop(0.7, withAlpha(color, 0.92));
+    gr.addColorStop(0.70, withAlpha(color, 0.92));
     gr.addColorStop(1, withAlpha(color, 0));
     g.fillStyle = gr;
     g.fillRect(0, 0, S, S);
   }
-  if(v11StampCache.size > 40){
+  if(v11StampCache.size > 90){
     const first = v11StampCache.keys().next().value;
     v11StampCache.delete(first);
   }
@@ -8781,12 +9036,16 @@ function v11StampSprite(color, soft){
 }
 
 function v11SizeFactor(pr){
-  const ps = v11Clamp(V11.dyn.pSize / 100, 0, 1);
+  const ps = v11Clamp((V11.dyn.pSize || 0) / 100, 0, 1);
   return Math.max(0.06, 1 - ps * (1 - v11Clamp(pr, 0, 1)));
 }
 function v11AlphaFactor(pr){
-  const po = v11Clamp(V11.dyn.pOpacity / 100, 0, 1);
+  const po = v11Clamp((V11.dyn.pOpacity || 0) / 100, 0, 1);
   return Math.max(0.06, 1 - po * (1 - v11Clamp(pr, 0, 1)));
+}
+function v11SmoothStep(a, b, v){
+  const t = v11Clamp((v - a) / (b - a || 1e-6), 0, 1);
+  return t * t * (3 - 2 * t);
 }
 
 function v11PathLength(pts){
@@ -8795,135 +9054,181 @@ function v11PathLength(pts){
   return d;
 }
 
-function v11MovingAvg(pts, win){
-  if(win < 2 || pts.length < 3) return pts.slice();
-  const out = new Array(pts.length);
-  for(let i = 0; i < pts.length; i++){
-    let sx = 0, sy = 0, sp = 0, n = 0;
-    for(let k = -win; k <= win; k++){
-      const j = v11Clamp(i + k, 0, pts.length - 1);
-      sx += pts[j].x; sy += pts[j].y; sp += (pts[j].pr == null ? 0.5 : pts[j].pr); n++;
+/* ---------- one dab (single source of truth for live + final) ---------- */
+function v11DabEx(g, x, y, r, st, o){
+  o = o || {};
+  const dyn = o.dyn || V11.dyn;
+  const rng = o.rng || Math.random;
+  const flow = v11Clamp((dyn.flow == null ? 100 : dyn.flow) / 100, 0.02, 1);
+  const alpha0 = (o.alpha == null ? 1 : o.alpha) * flow;
+  if(alpha0 <= 0.003) return;
+  if(r < 0.55) r = 0.55;
+
+  /* fixed rng budget per dab — live aur final me identical sequence */
+  const q1 = rng(), q2 = rng(), q3 = rng(), q4 = rng(), q5 = rng(), q6 = rng();
+
+  const surface = dyn.surface || 'solid';
+  const grain = v11Clamp((dyn.grain || 0) / 100, 0, 1);
+  const bristle = v11Clamp((dyn.bristle || 0) / 100, 0, 1);
+  const wet = v11Clamp((dyn.wet || 0) / 100, 0, 1);
+  const streak = v11Clamp((dyn.streak || 0) / 100, 0, 1);
+  const cjit = v11Clamp((dyn.cjit || 0) / 100, 0, 1);
+
+  /* paper texture gating */
+  let tex = 1;
+  if(grain > 0){
+    const sc = v11Clamp(dyn.texScale || 1, 0.12, 4);
+    const t2 = v11Clamp(v11TexAt(x, y, sc) * 0.80 + q1 * 0.20, 0, 1);
+    if(surface === 'dry'){
+      const thr = 0.16 + 0.06 * (1 - grain);
+      if(t2 < thr) return;                                   /* bare paper gap */
+      tex = 0.32 + 0.68 * v11SmoothStep(thr, 0.92, t2);
+      tex = 1 - grain * 0.28 * (1 - tex);
+    }else if(surface === 'wet'){
+      tex = 0.45 + 0.55 * v11SmoothStep(0.05, 0.95, t2);
+    }else{
+      tex = v11SmoothStep(0.08, 0.82, t2);
+      tex = 1 - grain * (1 - tex);
     }
-    out[i] = { x:sx/n, y:sy/n, pr:sp/n };
+    if(tex < 0.03) return;
   }
-  return out;
-}
 
-function v11RdpObj(pts, eps){
-  if(pts.length < 3) return pts.slice();
-  const keep = new Uint8Array(pts.length);
-  keep[0] = keep[pts.length-1] = 1;
-  const stack = [[0, pts.length-1]];
-  while(stack.length){
-    const ab = stack.pop(), a = ab[0], b = ab[1];
-    let maxD = 0, idx = -1;
-    const ax = pts[a].x, ay = pts[a].y, bx = pts[b].x, by = pts[b].y;
-    const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1e-9;
-    for(let i = a+1; i < b; i++){
-      const d = Math.abs((pts[i].x-ax)*dy - (pts[i].y-ay)*dx) / len;
-      if(d > maxD){ maxD = d; idx = i }
+  /* scatter + jitter */
+  const dirX = o.dirX == null ? 1 : o.dirX, dirY = o.dirY == null ? 0 : o.dirY;
+  const jit = r * v11Clamp((dyn.jitter || 0) / 100, 0, 1) * 1.1;
+  const scat = r * v11Clamp((dyn.scatter || 0) / 100, 0, 1) * 1.9;
+  let px = x + (q2 * 2 - 1) * jit;
+  let py = y + (q3 * 2 - 1) * jit;
+  if(scat > 0){
+    const off = (q4 * 2 - 1) * scat;
+    px += -dirY * off; py += dirX * off;
+  }
+
+  /* colour jitter (quantised → sprite cache friendly) */
+  let color = st.color;
+  if(cjit > 0.01){
+    const q = Math.round((q5 * 2 - 1) * 2) / 2;      /* -1, -.5, 0, .5, 1 */
+    color = v11ShadeOf(st.color, q * cjit * 0.22);
+  }
+
+  /* chisel tip */
+  const ang = (streak > 0.02) ? (v11Clamp(dyn.angle || 0, -90, 90) * Math.PI / 180) : 0;
+  const sqY = 1 - 0.72 * streak;
+
+  const nB = bristle > 0.02 ? 3 + Math.round(bristle * 2) : 1;
+  for(let b = 0; b < nB; b++){
+    let ox = 0, oy = 0, rr = r, aa = alpha0 * tex;
+    if(nB > 1){
+      const t = (b / (nB - 1)) * 2 - 1;
+      const spread = r * 0.92 * bristle;
+      const wob = 0.72 + 0.56 * (((q6 * 977 + b * 131) % 97) / 97);
+      ox = -dirY * t * spread + (q6 - 0.5) * r * 0.18;
+      oy = dirX * t * spread + (q6 - 0.5) * r * 0.18;
+      rr = Math.max(0.16, r * (0.86 - 0.34 * Math.abs(t)) * wob);
+      aa *= 0.92 - 0.30 * Math.abs(t);
     }
-    if(maxD > eps){ keep[idx] = 1; stack.push([a, idx], [idx, b]) }
-  }
-  const out = [];
-  for(let i = 0; i < pts.length; i++) if(keep[i]) out.push(pts[i]);
-  return out;
-}
-
-/* stroke point list banao: smoothing + simplification */
-function v11FinalPts(S){
-  const raw = S.pts;
-  if(!raw || raw.length < 2) return raw ? raw.slice() : [];
-  let pts = raw.slice();
-  const stab = v11Clamp(V11.dyn.stabilize / 100, 0, 1);
-  if(stab > 0.03){
-    const win = Math.max(1, Math.round(stab * 8));
-    pts = v11MovingAvg(pts, win);
-  }
-  pts = v11RdpObj(pts, 0.45);
-  return pts;
-}
-
-/* main stamping routine (used by live preview + final render + quick shapes) */
-function v11StampPath(g, pts, st, opt){
-  opt = opt || {};
-  if(!pts || pts.length < 1) return;
-  const rng = v11Rng(opt.seed || 12345);
-  const taper = v11Clamp(opt.taper == null ? 0 : opt.taper, 0, 1);
-  const total = v11PathLength(pts);
-  const baseR = Math.max(0.35, st.size / 2);
-  const taperLen = taper > 0 ? Math.max(6, st.size * (2 + taper * 5)) : 0;
-  const jitterAmt = baseR * v11Clamp(V11.dyn.jitter / 100, 0, 1) * 0.9;
-  const scatterAmt = baseR * v11Clamp(V11.dyn.scatter / 100, 0, 1) * 1.6;
-  const spacing = Math.max(0.7, baseR * 0.16);
-
-  let walk = 0;
-  for(let i = 0; i < pts.length; i++){
-    const p = pts[i];
-    const prev = i ? pts[i-1] : p;
-    const seg = Math.hypot(p.x - prev.x, p.y - prev.y);
-    const steps = i ? Math.max(1, Math.ceil(seg / spacing)) : 1;
-    const pr0 = prev.pr == null ? 0.5 : prev.pr;
-    const pr1 = p.pr == null ? 0.5 : p.pr;
-    for(let k = i ? 0 : 0; k <= steps; k++){
-      const t = i ? k / steps : 0;
-      const x = lerp(prev.x, p.x, t), y = lerp(prev.y, p.y, t);
-      const pr = lerp(pr0, pr1, t);
-      let sizeF = v11SizeFactor(pr);
-      if(taperLen > 0){
-        const d = walk + seg * t;
-        const inF = Math.min(1, d / taperLen);
-        const outF = Math.min(1, Math.max(0, (total - d) / taperLen));
-        sizeF *= Math.min(inF, outF);
-      }
-      let r = baseR * Math.max(0.05, sizeF);
-      let dx = 0, dy = 0;
-      if(jitterAmt > 0){ dx += (rng() - 0.5) * 2 * jitterAmt; dy += (rng() - 0.5) * 2 * jitterAmt }
-      if(scatterAmt > 0){
-        const ang = Math.atan2(p.y - prev.y, p.x - prev.x) + Math.PI / 2;
-        const off = (rng() - 0.5) * 2 * scatterAmt;
-        dx += Math.cos(ang) * off; dy += Math.sin(ang) * off;
-      }
-      const alpha = v11AlphaFactor(pr);
-      v11Dab(g, x + dx, y + dy, r, st.soft, st.color, alpha);
+    const sp = v11StampSprite(color, st.soft, surface, Math.max(rr * 2 * sqY, rr * 2));
+    g.globalAlpha = v11Clamp(aa, 0, 1);
+    if(ang !== 0 || streak > 0.02){
+      g.save();
+      g.translate(px + ox, py + oy);
+      g.rotate(ang);
+      g.drawImage(sp, -rr, -rr * sqY, rr * 2, rr * 2 * sqY);
+      g.restore();
+    }else{
+      g.drawImage(sp, px + ox - rr, py + oy - rr, rr * 2, rr * 2);
     }
-    walk += seg;
+  }
+
+  /* wet edge (watercolour bleed rim) */
+  if(wet > 0.02 && surface !== 'tone'){
+    const rim = v11StampSprite(color, 0.9, 'rim', r * 2.1);
+    g.globalAlpha = v11Clamp(alpha0 * tex * wet * 0.55, 0, 1);
+    const rr2 = r * (1.02 + 0.06 * q6);
+    g.drawImage(rim, px - rr2, py - rr2, rr2 * 2, rr2 * 2);
   }
   g.globalAlpha = 1;
 }
 
+/* legacy single dab (kept for external callers) */
 function v11Dab(g, x, y, r, soft, color, alpha){
-  if(r < 0.2) return;
-  const sp = v11StampSprite(color, soft);
-  g.globalAlpha = alpha == null ? 1 : alpha;
-  g.drawImage(sp, x - r, y - r, r * 2, r * 2);
+  v11DabEx(g, x, y, r, { soft:soft, color:color }, { alpha:alpha });
 }
 
-/* ---------- paper grain ---------- */
-let v11GrainTile = null;
-function v11GrainSprite(){
-  if(v11GrainTile) return v11GrainTile;
-  const S = 256, c = mkCanvas(S, S), g = c.getContext('2d');
-  const rng = v11Rng(20261021);
-  for(let i = 0; i < 3200; i++){
-    const x = rng() * S, y = rng() * S, r = 0.5 + rng() * 1.9, a = 0.15 + rng() * 0.85;
-    g.fillStyle = 'rgba(255,255,255,' + a.toFixed(3) + ')';
-    g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
-  }
-  v11GrainTile = c;
-  return c;
+/* ---------- stroke state: seeding / replay ---------- */
+function v11StampInit(g, S, st, dyn, opt){
+  dyn = dyn || V11.dyn;
+  opt = opt || {};
+  const taper0 = v11Clamp(opt.taper || 0, 0, 1);
+  S.rng = v11Rng(S.seed | 0);
+  S.stamped = 0;
+  S.acc = 0;
+  S.walk = 0;
+  S.dabs = 0;
+  const p0 = S.pts[0];
+  const pr = p0.pr == null ? 0.5 : p0.pr;
+  S.dabs++;
+  const tf0 = taper0 > 0 ? 0.34 : 1;
+  v11DabEx(g, p0.x, p0.y, Math.max(0.35, st.size / 2 * v11SizeFactor(pr) * tf0), st,
+    { dyn:dyn, rng:S.rng, alpha:v11AlphaFactor(pr), dirX:1, dirY:0 });
 }
-function v11ApplyGrain(canvas, amount){
-  if(amount <= 0.01) return;
-  const g = canvas.getContext('2d');
-  const pat = g.createPattern(v11GrainSprite(), 'repeat');
-  if(!pat) return;
-  g.save();
-  g.globalCompositeOperation = 'destination-out';
-  g.globalAlpha = v11Clamp(amount, 0, 1);
-  g.fillStyle = pat;
-  g.fillRect(0, 0, canvas.width, canvas.height);
-  g.restore();
+
+function v11StampRun(g, S, st, dyn, opt){
+  opt = opt || {};
+  dyn = dyn || V11.dyn;
+  const pts = S.pts || [], n = pts.length;
+  if(n < 2) return;
+  const baseR = Math.max(0.35, st.size / 2);
+  const spacing = Math.max(0.3, baseR * v11Clamp(dyn.spacing == null ? 0.16 : dyn.spacing, 0.03, 0.9));
+  const taper = v11Clamp(opt.taper || 0, 0, 1);
+  const taperLen = taper > 0 ? Math.max(9, st.size * (1.6 + taper * 4)) : 0;
+  let total = opt.total;
+  if(total == null){
+    total = 0;
+    for(let i = 1; i < n; i++) total += Math.hypot(pts[i].x - pts[i-1].x, pts[i].y - pts[i-1].y);
+  }
+  for(let i = Math.max(1, S.stamped); i < n; i++){
+    const a = pts[i-1], b = pts[i];
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const seg = Math.hypot(dx, dy);
+    if(seg < 1e-6){ S.stamped = i; continue }
+    const ux = dx / seg, uy = dy / seg;
+    let travelled = 0;
+    while(travelled < seg - 1e-6){
+      const need = spacing - S.acc;
+      const step = Math.min(need, seg - travelled);
+      travelled += step;
+      S.acc += step;
+      S.walk += step;
+      if(S.acc >= spacing - 1e-6){
+        S.acc = 0;
+        const t = travelled / seg;
+        const pr = lerp(a.pr == null ? 0.5 : a.pr, b.pr == null ? 0.5 : b.pr, t);
+        let tf = 1;
+        if(taperLen > 0){
+          const inF = Math.min(1, S.walk / taperLen);
+          const outF = opt.outTaper ? Math.min(1, Math.max(0, (total - S.walk) / taperLen)) : 1;
+          tf = 0.30 + 0.70 * Math.min(inF, outF);
+        }
+        S.dabs++;
+        v11DabEx(g, a.x + dx * t, a.y + dy * t, baseR * v11SizeFactor(pr) * tf, st,
+          { dyn:dyn, rng:S.rng, alpha:v11AlphaFactor(pr), dirX:ux, dirY:uy });
+      }
+    }
+    S.stamped = i;
+  }
+  g.globalAlpha = 1;
+}
+
+/* one-shot path stamp (quick shapes · brush studio preview · exports) */
+function v11StampPath(g, pts, st, opt){
+  opt = opt || {};
+  if(!pts || !pts.length) return;
+  const dyn = opt.dyn || V11.dyn;
+  const S = { pts:pts.slice(), seed:(opt.seed || 12345) | 0 };
+  v11StampInit(g, S, st, dyn, { taper: opt.taper == null ? 0 : opt.taper });
+  v11StampRun(g, S, st, dyn, { taper:opt.taper == null ? 0 : opt.taper, outTaper:true, total:opt.total });
+  g.globalAlpha = 1;
 }
 
 /* ---------- stroke lifecycle ---------- */
@@ -8954,12 +9259,12 @@ function v11StrokeDown(p, e, eraser){
   if(L.alphaLock && !eraser) S.alphaSnap = cloneCanvas(L.canvas);
   G.v11 = S;
   G.stroke = {
-    layer:L, tmp:tmp,
+    layer:L, tmp:tmp, cacheReady:false,
     mode: eraser ? 'destination-out' : (V11.dyn.blend && V11.dyn.blend !== 'destination-out' ? V11.dyn.blend : 'source-over'),
     opacity: st.opacity, st:st, last:{ x:p.x, y:p.y }
   };
   const g = tmp.getContext('2d');
-  v11Dab(g, p.x, p.y, st.size / 2, st.soft, st.color, 1);
+  v11StampInit(g, S, st, V11.dyn, { taper: V11.dyn.taper / 100 });
   v11ScheduleQuickShape();
   docDirty = true; needRender = true;
 }
@@ -8977,22 +9282,18 @@ function v11StrokeMove(p){
   S.moved += Math.hypot(q.x - p.x, q.y - p.y) + d;
   const pr = V11.pressure;
   if(d > 0.28){
+    /* engine ko wahi (smoothed) points do jo screen par dikh rahe hain
+       → live preview aur commit exactly same dabs par banege */
+    S.pts.push({ x:S.smooth.x, y:S.smooth.y, pr:pr });
     const g = S.tmp.getContext('2d');
-    const steps = Math.max(1, Math.ceil(d / Math.max(0.8, S.st.size * 0.075)));
-    for(let i = 1; i <= steps; i++){
-      const t = i / steps;
-      const x = lerp(prev.x, S.smooth.x, t), y = lerp(prev.y, S.smooth.y, t);
-      const prr = lerp(S.prevPr, pr, t);
-      v11Dab(g, x, y, Math.max(0.35, S.st.size/2 * v11SizeFactor(prr)), S.st.soft, S.st.color, v11AlphaFactor(prr));
-    }
-    g.globalAlpha = 1;
+    v11StampRun(g, S, S.st, V11.dyn, { taper: V11.dyn.taper / 100 });
     S.prev = { x:S.smooth.x, y:S.smooth.y };
     S.prevPr = pr;
   }
-  S.pts.push({ x:q.x, y:q.y, pr:pr });
   S.lastMove = performance.now();
   if(S.quick) v11RenderQuickShape(S);
   v11ScheduleQuickShape();
+  docDirty = true;   /* live preview: stroke ko har move par composite karo */
   needRender = true;
 }
 
@@ -9006,10 +9307,11 @@ function v11StrokeUp(){
   if(S.quick){
     v11DrawQuickShapeTo(g, S);
   }else{
-    const pts = v11FinalPts(S);
-    v11StampPath(g, pts, S.st, { taper:V11.dyn.taper/100, seed:S.seed });
+    /* replay: same seed, same rng budget, same spacing → dab positions identical,
+       sirf taper (doosra end) add hota hai. Isliye release par stroke "badal" nahi jaata. */
+    v11StampInit(g, S, S.st, V11.dyn, { taper:V11.dyn.taper/100 });
+    v11StampRun(g, S, S.st, V11.dyn, { taper:V11.dyn.taper/100, outTaper:true });
   }
-  if(V11.dyn.grain > 0) v11ApplyGrain(S.tmp, V11.dyn.grain / 100);
   let out = S.tmp;
   try{
     if(typeof opts.sym !== 'undefined' && opts.sym && opts.sym.on) out = symRasterCombine(S.tmp);
@@ -9032,7 +9334,7 @@ function v11StrokeUp(){
   lg.restore();
   layerVerBump(S.layer);
   G.stroke = null; G.v11 = null;
-  docDirty = true; needRender = true; uiLayersRefresh();
+  docDirty = true; needRender = true; thumbRefreshSoon();
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -9133,7 +9435,7 @@ function v11DrawQuickShapeTo(g, S){
 function v11RenderQuickShape(S){
   const g = S.tmp.getContext('2d');
   v11DrawQuickShapeTo(g, S);
-  needRender = true;
+  docDirty = true; needRender = true;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -9219,7 +9521,8 @@ function v11PropsExtras(){
     return;
   }
   const isEr = (tool === 'eraser');
-  let h = '<div class="pnote" style="border-top:1px solid var(--line);margin-top:8px;padding-top:10px"><b>Brush Studio</b> · ' + v11CurrentPresetName() + '</div>';
+  let h = '<div class="pnote" style="border-top:1px solid var(--line);margin-top:8px;padding-top:10px"><b>Brush Studio</b> · ' +
+    v11CurrentPresetName() + ' · <span style="opacity:.75">' + (V11.dyn.surface || 'solid') + ' surface</span></div>';
   h += '<div class="chips">';
   h += '<span class="chip" id="v11StudioChip">⚙ Brush Studio…</span>';
   if(isEr) h += '<span class="chip' + (V11.vectorErase ? ' on' : '') + '" id="v11VecChip">' + (V11.vectorErase ? '✓' : '○') + ' Vector erase</span>';
@@ -9228,6 +9531,7 @@ function v11PropsExtras(){
   h += pr('Stabilizer', rngHTML('v11Stab', 0, 100, Math.round(V11.dyn.stabilize)));
   h += pr('Pressure→Size', rngHTML('v11Psz', 0, 100, Math.round(V11.dyn.pSize)));
   if(!isEr) h += pr('Paper grain', rngHTML('v11Grain', 0, 100, Math.round(V11.dyn.grain)));
+  h += pr('Flow', rngHTML('v11Flow', 2, 100, Math.round(V11.dyn.flow == null ? 100 : V11.dyn.flow)));
   h += '<div class="pnote">' + (isEr
     ? 'Vector erase ON + vector layer = stroke intersection par cut.<br>Shift dabake seedha erase.'
     : 'Stroke ke end par <b>hold</b> karo → QuickShape (line / circle / rect).') + '</div>';
@@ -9239,6 +9543,7 @@ function v11BindProps(isEr){
   bindRng('v11Stab', n => { V11.dyn.stabilize = n; v11SaveSettings() });
   bindRng('v11Psz', n => { V11.dyn.pSize = n; v11SaveSettings() });
   if(!isEr) bindRng('v11Grain', n => { V11.dyn.grain = n; v11SaveSettings() });
+  bindRng('v11Flow', n => { V11.dyn.flow = n; v11SaveSettings() });
   const st = document.getElementById('v11StudioChip');
   if(st) st.addEventListener('click', v11BrushStudio);
   const qs = document.getElementById('v11QsChip');
@@ -9283,6 +9588,21 @@ function v11BrushStudio(){
         pr('Jitter', rngHTML('v11dJit', 0, 100, Math.round(V11.dyn.jitter))) +
         pr('Scatter', rngHTML('v11dScat', 0, 100, Math.round(V11.dyn.scatter))) +
         pr('Grain', rngHTML('v11dGrain', 0, 100, Math.round(V11.dyn.grain))) +
+        pr('Flow', rngHTML('v11dFlow', 2, 100, Math.round(V11.dyn.flow == null ? 100 : V11.dyn.flow))) +
+        pr('Spacing', rngHTML('v11dSpace', 3, 60, Math.round((V11.dyn.spacing == null ? 0.16 : V11.dyn.spacing) * 100))) +
+        '<div class="pnote" style="border-top:1px solid var(--line);margin-top:8px;padding-top:8px"><b>Texture &amp; tip</b></div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 14px;align-items:start">' +
+        '<div class="prow"><label>Surface</label><div class="pctl"><select id="v11dSurf" style="flex:1">' +
+          [['solid','Solid'],['dry','Dry media (paper gap)'],['wet','Wet / watercolour'],['tone','Screentone']]
+            .map(o => '<option value="' + o[0] + '"' + ((V11.dyn.surface || 'solid') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>').join('') +
+        '</select></div></div>' +
+        pr('Texture scale', rngHTML('v11dTex', 12, 400, Math.round((V11.dyn.texScale || 1) * 100))) +
+        pr('Bristle split', rngHTML('v11dBrist', 0, 100, Math.round(V11.dyn.bristle || 0))) +
+        pr('Wet edge', rngHTML('v11dWet', 0, 100, Math.round(V11.dyn.wet || 0))) +
+        pr('Chisel streak', rngHTML('v11dStreak', 0, 100, Math.round(V11.dyn.streak || 0))) +
+        pr('Tip angle', rngHTML('v11dAngle', -90, 90, Math.round(V11.dyn.angle || 0))) +
+        pr('Colour jitter', rngHTML('v11dCjit', 0, 100, Math.round(V11.dyn.cjit || 0))) +
+        '</div>' +
         '<div class="prow"><label>Blend</label><div class="pctl"><select id="v11dBlend" style="flex:1">' +
           blendOpts.map(b => '<option value="' + b[0] + '"' + (V11.dyn.blend === b[0] ? ' selected' : '') + '>' + b[1] + '</option>').join('') +
         '</select></div></div>' +
@@ -9309,7 +9629,8 @@ function v11BrushStudio(){
         info.innerHTML = '<b>' + (p ? escapeHtml(p.name) : 'Custom') + '</b> · ' +
           Math.round(isEr ? opts.eraserSize : opts.brushSize) + 'px · ' +
           Math.round(isEr ? opts.eraserOp : opts.brushOp) + '% opacity · ' +
-          'stab ' + Math.round(V11.dyn.stabilize) + '% · grain ' + Math.round(V11.dyn.grain) + '%';
+          'stab ' + Math.round(V11.dyn.stabilize) + '% · grain ' + Math.round(V11.dyn.grain) + '% · ' +
+          'flow ' + Math.round(V11.dyn.flow == null ? 100 : V11.dyn.flow) + '% · ' + (V11.dyn.surface || 'solid');
       };
       const syncFromUI = () => { v11SaveSettings(); preview(); v11SyncShelf() };
       const num = (id) => { const e2 = mm.querySelector('#' + id); return e2 ? +e2.value : 0 };
@@ -9323,6 +9644,16 @@ function v11BrushStudio(){
       bindRng('v11dJit', n => { V11.dyn.jitter = n; syncFromUI() });
       bindRng('v11dScat', n => { V11.dyn.scatter = n; syncFromUI() });
       bindRng('v11dGrain', n => { V11.dyn.grain = n; syncFromUI() });
+      bindRng('v11dFlow', n => { V11.dyn.flow = n; syncFromUI() });
+      bindRng('v11dSpace', n => { V11.dyn.spacing = n / 100; syncFromUI() });
+      bindRng('v11dTex', n => { V11.dyn.texScale = n / 100; syncFromUI() });
+      bindRng('v11dBrist', n => { V11.dyn.bristle = n; syncFromUI() });
+      bindRng('v11dWet', n => { V11.dyn.wet = n; syncFromUI() });
+      bindRng('v11dStreak', n => { V11.dyn.streak = n; syncFromUI() });
+      bindRng('v11dAngle', n => { V11.dyn.angle = n; syncFromUI() });
+      bindRng('v11dCjit', n => { V11.dyn.cjit = n; syncFromUI() });
+      const sf2 = mm.querySelector('#v11dSurf');
+      if(sf2) sf2.addEventListener('change', () => { V11.dyn.surface = sf2.value; syncFromUI() });
       const bl = mm.querySelector('#v11dBlend');
       if(bl) bl.addEventListener('change', () => { V11.dyn.blend = bl.value; syncFromUI() });
       const qs = mm.querySelector('#v11dQS');
@@ -9343,6 +9674,16 @@ function v11BrushStudio(){
         setv('v11dJit', Math.round(V11.dyn.jitter));
         setv('v11dScat', Math.round(V11.dyn.scatter));
         setv('v11dGrain', Math.round(V11.dyn.grain));
+        setv('v11dFlow', Math.round(V11.dyn.flow == null ? 100 : V11.dyn.flow));
+        setv('v11dSpace', Math.round((V11.dyn.spacing == null ? 0.16 : V11.dyn.spacing) * 100));
+        setv('v11dTex', Math.round((V11.dyn.texScale || 1) * 100));
+        setv('v11dBrist', Math.round(V11.dyn.bristle || 0));
+        setv('v11dWet', Math.round(V11.dyn.wet || 0));
+        setv('v11dStreak', Math.round(V11.dyn.streak || 0));
+        setv('v11dAngle', Math.round(V11.dyn.angle || 0));
+        setv('v11dCjit', Math.round(V11.dyn.cjit || 0));
+        const sf3 = mm.querySelector('#v11dSurf');
+        if(sf3) sf3.value = V11.dyn.surface || 'solid';
         preview();
       }));
       const saveB = mm.querySelector('#v11PSave');
@@ -10684,7 +11025,8 @@ function v11WhatsNewDialog(){
     title:'ArtViSiON Studio v11.0 — Clip Studio × Procreate',
     body:
       '<h4>🖌️ Brush Studio (Procreate + CSP)</h4>' +
-      '<p>13 built-in brushes · pressure→size/opacity · taper · jitter · scatter · paper grain · brush blend modes · live preview · apne presets save/delete. Chhoti brush shelf canvas ke neeche milti hai.</p>' +
+      '<p>13 built-in brushes · pressure→size/opacity · taper · jitter · scatter · paper grain · flow &amp; spacing · <b>surface</b> (solid / dry media / wet / screentone) · bristle split · wet edge · chisel tip · colour jitter · brush blend modes · live preview · apne presets save/delete. Chhoti brush shelf canvas ke neeche milti hai.</p>' +
+      '<p style="margin-top:6px"><b>Surfaces:</b> <i>dry</i> = pencil/charcoal paper gap, <i>wet</i> = watercolour bleed rim, <i>tone</i> = screentone dots, <i>solid</i> = ink/g-pen. Stroke drag karte waqt hi poora dikhta hai — release par badalta nahi.</p>' +
       '<h4>🌊 Stabilizer / StreamLine</h4>' +
       '<p>Brush strokes ki hand-shake correction — 0–100 %. CSP ka “手ブレ補正” aur Procreate StreamLine dono ka equivalent.</p>' +
       '<h4>◇ QuickShape (Procreate)</h4>' +
@@ -11166,7 +11508,7 @@ function v11PatchHome(){
       const block = document.createElement('div');
       block.innerHTML =
         '<h4>🖌️ v11.0 — Clip Studio × Procreate pack</h4>' +
-        '<p>· <b>Brush Studio (⚙)</b> — 13 built-in brushes, pressure→size/opacity, taper, jitter, scatter, paper grain, brush blend, apna preset save. Brush/eraser select karne par canvas ke neeche brush shelf bhi aati hai.<br>' +
+        '<p>· <b>Brush Studio (⚙)</b> — 13 built-in brushes (G-Pen, Mapping Pen, Ink, Textured Pen, Pencil, Charcoal, Tone, Airbrush, Marker, Watercolour + 3 erasers), pressure→size/opacity, taper, jitter, scatter, grain, flow, spacing, surface (dry / wet / screentone), bristle split, wet edge, chisel tip, colour jitter, brush blend, apna preset save. Brush/eraser select karne par canvas ke neeche brush shelf bhi aati hai.<br>' +
         '· <b>Stabilizer / StreamLine</b> — Properties me slider (hand-shake correction).<br>' +
         '· <b>QuickShape</b> — stroke ke end par ~0.4 s hold karo → line / circle / ellipse / rect.<br>' +
         '· <b>ColorDrop</b> — palette swatch ko canvas par drag karo → region fill.<br>' +
@@ -15096,6 +15438,7 @@ window.CDR = CDR;
     bar.addEventListener('click', e => {
       const b = e.target.closest('[data-a]'); if (!b) return;
       const a = b.dataset.a;
+      try {
       const L = A.active();
       switch (a) {
         case 'bg': bgRemoveV12(); break;
@@ -15113,7 +15456,16 @@ window.CDR = CDR;
         case 'fliph': if (L) flipLayer(L, 'h'); else A.toast('Pehle layer select karo', 'err', 1600); break;
         case 'dup': try { duplicateLayer(); } catch (e) { A.toast('Duplicate fail', 'err'); } break;
         case 'text': pickTool('text'); break;
-        case 'filter': openFilterDialog(); break;
+        case 'filter':
+          /* fix: is scope me openFilterDialog reachable nahi tha (silent dead
+             button). Ab global alias / AV12 API try karte hain, warna saaf
+             error toast — kabhi chup-chaap kuch na hone wala case nahi. */
+          try {
+            const fn = (typeof openFilterDialog === 'function') ? openFilterDialog
+              : (window.AV12 && AV12.filterDialog) ? AV12.filterDialog : null;
+            if (fn) fn(); else A.toast('Filters load nahi hua — reload karo', 'err', 2600);
+          } catch (e) { A.toast('Filter error: ' + e.message, 'err', 2600); }
+          break;
         case 'crop':
           try {
             if (typeof pixSel === 'undefined' || !pixSel) { A.toast('Pehle selection banao (Subject / Wand / Marquee)', 'err', 2400); break; }
@@ -15133,6 +15485,12 @@ window.CDR = CDR;
         case 'export': try { exportImage('png', 1, 95); } catch (e) { A.toast('Export fail: ' + e.message, 'err'); } break;
         case 'del': try { deleteLayer(); } catch (e) { } break;
         case 'help': openHelp(); break;
+        default: break;
+      }
+      } catch (err) {
+        /* koi bhi dock action fail ho to user ko pata chale — silent dead
+           button se worse kuch nahi */
+        try { A.toast('Action fail: ' + (err && err.message || a), 'err', 2600); } catch (e) { }
       }
       syncBarState();
     });
@@ -15415,10 +15773,11 @@ window.CDR = CDR;
     modal('Filters & enhance', body,
       `<button class="btn" data-close>Cancel</button><button class="btn primary" id="av12fapply">${svg('check', 14)} Apply</button>`,
       host => {
+        const qv = id => { const el = host.querySelector(id); return el ? +el.value : 0 };
         const get = () => ({
-          b: +host.querySelector('#av12fb').value, c: +host.querySelector('#av12fc').value,
-          s: +host.querySelector('#av12fs').value, w: +host.querySelector('#av12fw').value,
-          f: +host.querySelector('#av12ff').value, bl: +host.querySelector('#av12fbl').value,
+          b: qv('#av12fb'), c: qv('#av12fc'),
+          s: qv('#av12fs'), w: qv('#av12fw'),
+          f: qv('#av12ff'), bl: qv('#av12fbl'),
         });
         const prev = host.querySelector('#av12fprev');
         const base = (() => {
@@ -15431,6 +15790,8 @@ window.CDR = CDR;
         const renderPrev = () => {
           clearTimeout(timer);
           timer = setTimeout(() => {
+            if(!host || !host.isConnected) return;   /* dialog band ho gaya */
+            if(!prev || !prev.isConnected) return;
             const o = get();
             const out = applyFilterToImageData(base, o);
             prev.width = out.width; prev.height = out.height;
@@ -21552,11 +21913,12 @@ window.CDR = CDR;
 
   function signDefaultData() {
     return {
-      name: 'SHARMA DIGITAL', tagline: 'Printing · Branding · Signage',
-      headline: 'GRAND OPENING', offer: 'FLAT 30% OFF',
-      phone: '+91 90000 00000', web: 'sharmadigital.in', addr: 'MG Road, Indore (MP)',
-      items: [['Visiting Card 1000 pcs', '₹ 900'], ['Flex Banner 3×1 ft', '₹ 450'], ['Sticker Sheet A4', '₹ 120']],
-      qrText: 'https://sharmadigital.in'
+      name: 'ARTVISION STUDIO', tagline: 'PRODUCTION · DESIGN',
+      headline: 'WE CREATE VISION THAT DEFINE IMPACT',
+      offer: 'Call Now · 900 900 1551',
+      phone: '900 900 1551', web: 'artvision.studio', addr: 'Indore (MP)',
+      items: [['Flex Banner 3×1 ft', '₹ 450'], ['Visiting Card 1000 pcs', '₹ 900'], ['Acrylic Board sq.ft', '₹ 320']],
+      qrText: 'https://artvision.studio'
     };
   }
   const SD = signDefaultData();
@@ -21809,57 +22171,12 @@ window.CDR = CDR;
   const SS = { idx: 1, style: 'retail', theme: 'sunrise', qr: true, bleed: 10 };
 
   function signCfg(fromPanel) {
-    if (!fromPanel && window.__sg25last) return window.__sg25last;
-    const g = id => { const e = fromPanel && fromPanel.querySelector('#' + id); return e ? e.value : null; };
-    const sel = SIGN_SIZES[clamp(+(g('sg25size') == null ? SS.idx : g('sg25size')), 0, SIGN_SIZES.length - 1)] || SIGN_SIZES[1];
-    return {
-      size: sel,
-      style: g('sg25style') || SS.style,
-      theme: g('sg25theme') || SS.theme,
-      qr: g('sg25qr') ? !!fromPanel.querySelector('#sg25qr').checked : SS.qr,
-      bleed: +(g('sg25bleed') || SS.bleed),
-      data: {
-        name: g('sg25name') || SD.name,
-        tagline: g('sg25tag') || SD.tagline,
-        headline: g('sg25head') || SD.headline,
-        offer: g('sg25offer') || SD.offer,
-        phone: g('sg25phone') || SD.phone,
-        web: g('sg25web') || SD.web,
-        addr: g('sg25addr') || SD.addr,
-        items: SD.items,
-        qrText: g('sg25qrtext') || SD.qrText
-      }
-    };
+    if (!fromPanel && window.__sg25last && window.__sg25last.family) return window.__sg25last;
+    return sgReadCfg(fromPanel || currentSignPanel);
   }
 
   function buildSign(cfg) {
-    cfg = cfg || signCfg(null);
-    const sel = cfg.size, TH = theme25(cfg.theme);
-    const plan = pxPlan(sel.w, sel.h);
-    const qrData = cfg.qr ? QR.encode(cfg.data.qrText || cfg.data.web || 'https://apnabrand.in', { ec: 'M' }) : null;
-    const els = signLayout(plan.W, plan.H, TH, cfg.data, { style: cfg.style, qr: cfg.qr, qrData });
-    try { window.__sg25last = cfg; } catch (e) { }
-
-    boardCreate(cfg.data.name + ' · ' + sel.r + ' signage', plan.W, plan.H, null);
-    doc.__av23 = { size: 'sign' + sel.r + '-' + sel.w + 'x' + sel.h, dpi: plan.dpi, wmm: sel.w, hmm: sel.h, theme: TH.id, bleed: cfg.bleed, safe: Math.round(Math.min(sel.w, sel.h) * 0.06), layout: 'signage', cut: null, via: 'v25' };
-    try { window.__av23last = doc.__av23; } catch (e) { }
-
-    let bg = (doc.layers || []).find(l => l.type === 'raster' && /background/i.test(l.name || ''));
-    if (!bg) { bg = newRasterLayer('Background'); doc.layers.unshift(bg); }
-    signPaintBG(bg, TH, plan.W, plan.H);
-
-    const deco = newVectorLayer('Layout');
-    const txt = newVectorLayer('Text');
-    els.forEach(e => (e.type === 'text' ? txt : deco).shapes.push(Object.assign({ id: 's25' + Math.random().toString(36).slice(2, 9) }, e)));
-    doc.layers.push(deco, txt);
-    try { if (typeof selShapes !== 'undefined') selShapes = txt.shapes.length ? [txt.shapes[0]] : []; } catch (e) { }
-    doc.activeId = txt.id;
-    try { layerVerBump(bg); layerVerBump(deco); layerVerBump(txt); } catch (e) { }
-    docDirty = true; needRender = true;
-    try { uiLayers(); uiLayersRefresh(); uiProps(); fitView(); } catch (e) { }
-    try { if (typeof renderComposite === 'function') renderComposite(); } catch (e) { }
-    t25('Signage ready — ' + sel.r + ' · ' + sel.w + '×' + sel.h + ' mm · ' + plan.dpi + ' dpi', 'ok', 2800);
-    return { plan, sel, cfg };
+    return sgBuild(cfg && cfg.family ? cfg : sgReadCfg(currentSignPanel));
   }
 
   /* production spec sheet */
@@ -21909,124 +22226,1185 @@ window.CDR = CDR;
   function signBase(cfg) {
     return safe25((cfg.data.name || 'signage')) + '-signage-' + cfg.size.r.replace(':', 'x') + '-' + cfg.size.w + 'x' + cfg.size.h + 'mm';
   }
-  async function signPDF() {
-    const cfg = signCfg(currentSignPanel);
-    const plan = pxPlan(cfg.size.w, cfg.size.h);
-    try {
-      const bytes = await signPDFBytes(cfg, plan);
-      download(signBase(cfg) + '-CMYK.pdf', new Blob([bytes], { type: 'application/pdf' }));
-      t25('Signage PDF ready · ' + Math.round(bytes.length / 1024) + ' KB', 'ok', 2600);
-    } catch (e) { t25('PDF fail: ' + e.message, 'err', 3000); }
-  }
-  function signJPG() {
-    const cfg = signCfg(currentSignPanel);
-    const plan = pxPlan(cfg.size.w, cfg.size.h);
-    try {
-      const pr = AV23.renderPrintCanvas(signOpts(cfg, plan));
-      pr.canvas.toBlob(b => { download(signBase(cfg) + '.jpg', b); t25('JPG ready (' + pr.canvas.width + '×' + pr.canvas.height + ')', 'ok', 2400); }, 'image/jpeg', 0.94);
-    } catch (e) { t25('JPG fail: ' + e.message, 'err', 3000); }
-  }
-  async function signZIP() {
-    const cfg = signCfg(currentSignPanel);
-    const plan = pxPlan(cfg.size.w, cfg.size.h);
-    try {
-      const pdf = await signPDFBytes(cfg, plan);
-      const pr = AV23.renderPrintCanvas(signOpts(cfg, plan));
-      const blob = await new Promise(res => pr.canvas.toBlob(res, 'image/jpeg', 0.94));
-      const jpg = new Uint8Array(await blob.arrayBuffer());
-      const spec = new TextEncoder().encode(signSpecs(cfg, plan, cfg.size));
-      const qrSvg = cfg.qr ? new TextEncoder().encode(QR.toSVG(QR.encode(cfg.data.qrText || 'x', { ec: 'M' }), { quiet: 4 })) : null;
-      const files = [
-        { name: signBase(cfg) + '-CMYK.pdf', bytes: pdf },
-        { name: signBase(cfg) + '.jpg', bytes: jpg },
-        { name: signBase(cfg) + '-specs.txt', bytes: spec }
-      ];
-      if (qrSvg) files.push({ name: 'qr-' + cfg.size.r.replace(':', 'x') + '-vector.svg', bytes: qrSvg });
-      const zip = AV23.zipMake(files);
-      download(signBase(cfg) + '-pack.zip', new Blob([zip], { type: 'application/zip' }));
-      t25('Signage pack ready · ' + files.length + ' files', 'ok', 2600);
-    } catch (e) { t25('Pack fail: ' + e.message, 'err', 3000); }
-  }
+  async function signPDF() { return sgPDF(sgReadCfg(currentSignPanel)) }
+  function signJPG() { return sgJPG(sgReadCfg(currentSignPanel)) }
+  async function signZIP() { return sgPack(sgReadCfg(currentSignPanel)) }
 
   let currentSignPanel = null;
-  function openSign25() {
+
+  /* ══════════════════════════════════════════════════════════════════════
+     v26 · SIGN & BRANDING STUDIO
+     In-shop branding  ⟂  Outdoor signage   (do alag ratio set + alag design)
+     Print media → CMYK PDF / TIFF / JPG    (nonlit · backlit · fabric · vinyl · canvas)
+     Rigid board → CNC cut PDF / DXF        (ACP · acrylic · MDF · wood · metal)
+     Coming soon → 3D DWG · SVG
+     ══════════════════════════════════════════════════════════════════════ */
+
+  const sgRatioLbl = s => (s && s.rl) ? s.rl : ((() => { const W = Math.round(s.w), H = Math.round(s.h), g = sggcd(W, H) || 1; return (W / g) + ':' + (H / g) })());
+  const sggcd = (a, b) => b ? sggcd(b, a % b) : a;
+  function sgRatio(w, h) {
+    const W = Math.round(w), H = Math.round(h), d = sggcd(W, H) || 1;
+    return (W / d) + ':' + (H / d);
+  }
+
+  const SIGN_FAM = {
+    inshop: {
+      id: 'inshop', n: 'In-shop branding', emoji: '🏬',
+      sub: 'Retail interior — counter, shelf talker, standee, window, wall',
+      styles: [['brand', 'Logo wall / brand'], ['shelf', 'Shelf talker + price'], ['menu', 'Rate / menu board'],
+      ['offer', 'Offer / wobbler'], ['direction', 'Wayfinding / arrow']],
+      sizes: [
+        { w: 300, h: 300, u: 'Counter sticker / wobbler', st: 'offer' },
+        { w: 400, h: 400, u: 'Shelf cube panel', st: 'shelf' },
+        { w: 500, h: 700, u: 'A-frame standee insert', st: 'offer' },
+        { w: 600, h: 900, u: 'Poster frame (portrait)', st: 'brand' },
+        { w: 800, h: 1000, u: 'Wall frame / gallery', st: 'brand' },
+        { w: 900, h: 1200, u: 'Window poster', st: 'offer' },
+        { w: 1080, h: 1920, u: 'Digital standee / LED screen', st: 'brand' },
+        { w: 1200, h: 600, u: 'Cash counter fascia', st: 'shelf' },
+        { w: 1200, h: 1800, u: 'Wall mural / feature wall', st: 'brand' },
+        { w: 1500, h: 500, u: 'Shelf-top strip', st: 'shelf' },
+        { w: 1600, h: 900, u: 'Menu screen (16:9)', st: 'menu' },
+        { w: 2000, h: 500, u: 'Aisle panel', st: 'direction' },
+        { w: 3000, h: 500, u: 'Ceiling dangler strip', st: 'shelf' },
+        { w: 1000, h: 1000, u: 'Mirror / wall decal', st: 'brand' },
+        { w: 600, h: 1200, u: 'Pillar panel', st: 'menu' }
+      ]
+    },
+    outdoor: {
+      id: 'outdoor', n: 'Outdoor signage', emoji: '🪧',
+      sub: 'Flex board, fascia, hoarding, shutter, pylon, gate arch',
+      styles: [['brand', 'Name board / fascia'], ['hoarding', 'Hoarding / billboard'], ['backlit', 'Backlit light box'],
+      ['shutter', 'Shutter strip'], ['direction', 'Directional / wayfinding']],
+      sizes: [
+        { w: 600, h: 600, u: 'Shutter square / logo plate', st: 'brand' },
+        { w: 900, h: 900, u: 'Gantry cube', st: 'brand' },
+        { w: 600, h: 1200, u: 'Pylon / pillar panel', st: 'backlit' },
+        { w: 900, h: 1350, u: 'A-board (outdoor)', st: 'hoarding' },
+        { w: 1200, h: 600, u: 'Backlit light box', st: 'backlit' },
+        { w: 1800, h: 600, u: 'Shop name board', st: 'brand' },
+        { w: 2400, h: 600, u: 'Flex banner', st: 'hoarding' },
+        { w: 3000, h: 600, u: 'Long fascia', st: 'brand' },
+        { w: 3600, h: 1200, u: 'Main fascia (double height)', st: 'brand' },
+        { w: 4800, h: 1200, u: 'Large flex board', st: 'hoarding' },
+        { w: 6000, h: 600, u: 'Shutter / lintel strip', st: 'shutter' },
+        { w: 8000, h: 900, rl: '8:1', u: 'Hoarding strip', st: 'hoarding' },
+        { w: 3000, h: 1000, u: 'Gate arch', st: 'brand' },
+        { w: 1500, h: 2000, u: 'Vertical flex', st: 'hoarding' },
+        { w: 2400, h: 3000, u: 'Large hoarding', st: 'hoarding' }
+      ]
+    }
+  };
+
+  /* material database — print media aur rigid board ke rules alag hote hain */
+  const SIGN_MAT = {
+    nonlit: { id: 'nonlit', n: 'Nonlit Flex', g: 'flex', dpi: 150, bleed: 25, tac: 2.8, note: 'Matte · 440g · outdoor 1–2 saal', eyelet: true },
+    backlit: { id: 'backlit', n: 'Backlit Flex', g: 'flex', dpi: 150, bleed: 25, tac: 3.0, note: 'Translucent 510g · light box ke liye (double-hit white)', eyelet: true },
+    fabric: { id: 'fabric', n: 'Fabric (blockout)', g: 'flex', dpi: 150, bleed: 25, tac: 2.8, note: 'Silicone-edge / blockout · frame me stretch', eyelet: false },
+    vinyl: { id: 'vinyl', n: 'Vinyl / Sticker', g: 'flex', dpi: 300, bleed: 5, tac: 2.8, note: 'Self-adhesive · lamination ke baad', eyelet: false },
+    canvas: { id: 'canvas', n: 'Canvas print', g: 'flex', dpi: 200, bleed: 40, tac: 2.6, note: 'Gallery wrap · 40mm bleed fold ke liye', eyelet: false },
+    acp: { id: 'acp', n: 'ACP Sheet', g: 'rigid', dpi: 150, bleed: 0, tac: 2.8, thick: 3, kerf: 3, corner: 6, hole: 4, note: 'Aluminium composite · router 3mm bit' },
+    acrylic: { id: 'acrylic', n: 'Acrylic Sheet', g: 'rigid', dpi: 150, bleed: 0, tac: 2.8, thick: 3, kerf: 2, corner: 3, hole: 4, note: 'Cast acrylic · polished edge' },
+    mdf: { id: 'mdf', n: 'MDF Board', g: 'rigid', dpi: 150, bleed: 0, tac: 2.8, thick: 6, kerf: 6, corner: 4, hole: 5, note: 'Router 6mm bit · primer + paint' },
+    wood: { id: 'wood', n: 'Wood / Ply', g: 'rigid', dpi: 150, bleed: 0, tac: 2.8, thick: 12, kerf: 6.35, corner: 4, hole: 5, note: '12mm ply · sanding + sealant' },
+    metal: { id: 'metal', n: 'Metal (MS / Alu)', g: 'rigid', dpi: 150, bleed: 0, tac: 2.8, thick: 2, kerf: 1, corner: 2, hole: 5, note: '2mm MS / aluminium · laser ya plasma cut' }
+  };
+  const sgMat = id => SIGN_MAT[id] || SIGN_MAT.nonlit;
+
+  /* px plan — material dpi + memory-safe long-side cap */
+  const SG_MAXPX = 5200;
+  /* scale = print scale (1 = 1:1, .5 = 1:2 …) — bade board par file chhoti rehti hai,
+     RIP usi artwork ko page size tak stretch karta hai. Isi liye press me bhi chal jata hai. */
+  function sgPlan(wmm, hmm, mat, scale) {
+    const sc = scale || 1;
+    const longIn = Math.max(wmm, hmm) / MM;
+    const want = ((mat && mat.dpi) || 150) * sc;
+    const dpi = clamp(Math.round(Math.min(want, SG_MAXPX / longIn)), 20, 400);
+    return {
+      dpi, W: Math.round(mm2px(wmm, dpi)), H: Math.round(mm2px(hmm, dpi)),
+      scale: sc, want: Math.round(want), capped: want > dpi + 0.5
+    };
+  }
+  /* auto = 1:1 (sign industry standard). Bade board par dpi kam hota hai, scale nahi —
+     kyunki pixel count dpi se hi decide hota hai; scale sirf file ko chhota dikhata hai. */
+  function sgAutoScale(wmm, hmm, mat) { return 1 }
+
+  /* ---------- cut / drill / dieline geometry (mm) ---------- */
+  function sgRoundRect(x, y, w, h, r, seg) {
+    r = Math.max(0, Math.min(r, Math.min(w, h) / 2));
+    seg = seg || 10;
+    const pts = [];
+    if (!r) return [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
+    const corner = (cx, cy, a0) => {
+      for (let i = 0; i <= seg; i++) {
+        const a = a0 + (Math.PI / 2) * (i / seg);
+        pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]);
+      }
+    };
+    corner(x + w - r, y + r, -Math.PI / 2);
+    corner(x + w - r, y + h - r, 0);
+    corner(x + r, y + h - r, Math.PI / 2);
+    corner(x + r, y + r, Math.PI);
+    return pts;
+  }
+
+  function sgGeo(cfg) {
+    const mat = sgMat(cfg.mat);
+    const wmm = cfg.wmm, hmm = cfg.hmm;
+    const S = Math.min(wmm, hmm);
+    const safe = Math.round(S * 0.06);
+    const rigid = mat.g === 'rigid';
+    const cr = rigid ? Math.min(mat.corner || 0, S / 6) : 0;
+    const outline = sgRoundRect(0, 0, wmm, hmm, cr, cr > 0 ? 8 : 4);
+    const holes = [], folds = [], eyelets = [];
+    if (rigid) {
+      const inset = Math.max(15, Math.min(40, S * 0.06));
+      const r = (mat.hole || 4) / 2;
+      [[inset, inset], [wmm - inset, inset], [wmm - inset, hmm - inset], [inset, hmm - inset]]
+        .forEach(p => holes.push({ x: p[0], y: p[1], r: r, d: mat.hole || 4, kind: 'mount' }));
+      if (Math.max(wmm, hmm) > 2000) {
+        holes.push({ x: wmm / 2, y: inset, r: r, d: mat.hole || 4, kind: 'mount' });
+        holes.push({ x: wmm / 2, y: hmm - inset, r: r, d: mat.hole || 4, kind: 'mount' });
+      }
+    } else if (mat.eyelet) {
+      const step = Math.max(300, Math.round(Math.max(wmm, hmm) / Math.max(2, Math.round(Math.max(wmm, hmm) / 500))));
+      const inset = Math.min(30, S * 0.08);
+      const nx = Math.max(2, Math.round(wmm / step)), ny = Math.max(2, Math.round(hmm / step));
+      for (let i = 0; i < nx; i++) { const x = inset + (wmm - inset * 2) * (i / (nx - 1)); eyelets.push({ x: x, y: inset }); eyelets.push({ x: x, y: hmm - inset }); }
+      for (let i = 1; i < ny - 1; i++) { const y = inset + (hmm - inset * 2) * (i / (ny - 1)); eyelets.push({ x: inset, y: y }); eyelets.push({ x: wmm - inset, y: y }); }
+    }
+    if (!rigid && cfg.pockets) {
+      folds.push({ x1: 0, y1: 75, x2: wmm, y2: 75, label: 'POLE POCKET TOP', kind: 'fold' });
+      folds.push({ x1: 0, y1: hmm - 75, x2: wmm, y2: hmm - 75, label: 'POLE POCKET BOTTOM', kind: 'fold' });
+    }
+    return { wmm, hmm, mat, rigid, outline, holes, eyelets, folds, safe, corner: cr };
+  }
+
+  /* ---------- DXF R12 (CNC router / laser) ---------- */
+  function sgDxf(geo, cfg) {
+    const f = v => (Math.round(v * 1000) / 1000).toFixed(3);
+    const E = [];
+    const ent = (type, layer, pairs) => {
+      E.push('0', type, '8', layer);
+      pairs.forEach(p => E.push(String(p[0]), String(p[1])));
+    };
+    /* closed outline */
+    E.push('0', 'POLYLINE', '8', 'OUTLINE', '66', '1', '70', '1', '10', '0.0', '20', '0.0', '30', '0.0');
+    geo.outline.forEach(p => E.push('0', 'VERTEX', '8', 'OUTLINE', '10', f(p[0]), '20', f(p[1]), '30', '0.0'));
+    E.push('0', 'SEQEND', '8', 'OUTLINE');
+    /* drill / eyelet holes */
+    geo.holes.forEach(h => ent('CIRCLE', 'DRILL', [['10', f(h.x)], ['20', f(h.y)], ['30', '0.0'], ['40', f(h.r)]]));
+    geo.eyelets.forEach(h => ent('CIRCLE', 'EYELET', [['10', f(h.x)], ['20', f(h.y)], ['30', '0.0'], ['40', '2.0']]));
+    /* folds / pockets */
+    geo.folds.forEach(l => {
+      ent('LINE', 'FOLD', [['10', f(l.x1)], ['20', f(l.y1)], ['30', '0.0'], ['11', f(l.x2)], ['21', f(l.y2)], ['31', '0.0']]);
+      ent('TEXT', 'FOLD', [['10', f(l.x1 + 8)], ['20', f(l.y1 - 6)], ['30', '0.0'], ['40', '12.0'], ['1', l.label]]);
+    });
+    /* safe area reference (non-cut layer, dikhne ke liye) */
+    const s = geo.safe;
+    E.push('0', 'POLYLINE', '8', 'SAFE', '66', '1', '70', '1', '10', '0.0', '20', '0.0', '30', '0.0');
+    [[s, s], [geo.wmm - s, s], [geo.wmm - s, geo.hmm - s], [s, geo.hmm - s]]
+      .forEach(p => E.push('0', 'VERTEX', '8', 'SAFE', '10', f(p[0]), '20', f(p[1]), '30', '0.0'));
+    E.push('0', 'SEQEND', '8', 'SAFE');
+
+    const head = [
+      '0', 'SECTION', '2', 'HEADER',
+      '9', '$ACADVER', '1', 'AC1009',
+      '9', '$INSBASE', '10', '0.0', '20', '0.0', '30', '0.0',
+      '9', '$EXTMIN', '10', '0.0', '20', '0.0', '30', '0.0',
+      '9', '$EXTMAX', '10', f(geo.wmm), '20', f(geo.hmm), '30', '0.0',
+      '9', '$INSUNITS', '70', '4',   /* millimetres */
+      '9', '$LUNITS', '70', '2',
+      '0', 'ENDSEC',
+      '0', 'SECTION', '2', 'TABLES',
+      '0', 'TABLE', '2', 'LAYER', '70', '4',
+      '0', 'LAYER', '2', 'OUTLINE', '70', '0', '62', '1', '6', 'CONTINUOUS',
+      '0', 'LAYER', '2', 'DRILL', '70', '0', '62', '5', '6', 'CONTINUOUS',
+      '0', 'LAYER', '2', 'EYELET', '70', '0', '62', '3', '6', 'CONTINUOUS',
+      '0', 'LAYER', '2', 'FOLD', '70', '0', '62', '4', '6', 'DASHED',
+      '0', 'LAYER', '2', 'SAFE', '70', '0', '62', '8', '6', 'DASHED',
+      '0', 'ENDTAB', '0', 'ENDSEC',
+      '0', 'SECTION', '2', 'ENTITIES'
+    ];
+    const tail = ['0', 'ENDSEC', '0', 'EOF'];
+    return head.concat(E, tail).join('\r\n') + '\r\n';
+  }
+
+  /* ---------- CNC cut PDF (vector, 100% K hairlines) ---------- */
+  const sgF = v => (Math.round(v * 1000) / 1000).toFixed(3);
+  function sgCutPdf(geo, cfg) {
+    const K = 72 / MM;
+    const pad = 15 * K;                       /* 15mm margin sheet par */
+    const wPt = geo.wmm * K + pad * 2, hPt = geo.hmm * K + pad * 2;
+    const P = (x, y) => [pad + x * K, pad + (geo.hmm - y) * K];
+    let cs = '';
+    const poly = (pts, close, color, w) => {
+      cs += color + ' ' + w + ' w\n';
+      pts.forEach((p, i) => {
+        const q = P(p[0], p[1]);
+        if (typeof q[0] !== 'number' || isNaN(q[0])) return;
+        cs += (i ? '' : '') + sgF(q[0]) + ' ' + sgF(q[1]) + (i ? ' l\n' : ' m\n');
+      });
+      if (close) cs += 'h\n';
+      cs += 'S\n';
+    };
+    /* outline — CUT layer, 100% K, 0.25pt */
+    poly(geo.outline, true, '0 0 0 1 K', 0.25);
+    /* drill holes */
+    geo.holes.forEach(h => {
+      const c = P(h.x, h.y), r = h.r * K, k = 0.5523 * r;
+      cs += '0.25 w\n';
+      cs += sgF(c[0] - r) + ' ' + sgF(c[1]) + ' m\n';
+      cs += sgF(c[0] - r) + ' ' + sgF(c[1] + k) + ' ' + sgF(c[0] - k) + ' ' + sgF(c[1] + r) + ' ' + sgF(c[0]) + ' ' + sgF(c[1] + r) + ' c\n';
+      cs += sgF(c[0] + k) + ' ' + sgF(c[1] + r) + ' ' + sgF(c[0] + r) + ' ' + sgF(c[1] + k) + ' ' + sgF(c[0] + r) + ' ' + sgF(c[1]) + ' c\n';
+      cs += sgF(c[0] + r) + ' ' + sgF(c[1] - k) + ' ' + sgF(c[0] + k) + ' ' + sgF(c[1] - r) + ' ' + sgF(c[0]) + ' ' + sgF(c[1] - r) + ' c\n';
+      cs += sgF(c[0] - k) + ' ' + sgF(c[1] - r) + ' ' + sgF(c[0] - r) + ' ' + sgF(c[1] - k) + ' ' + sgF(c[0] - r) + ' ' + sgF(c[1]) + ' c\nh\nS\n';
+    });
+    /* eyelets — magenta */
+    geo.eyelets.forEach(h => {
+      const c = P(h.x, h.y), r = 2 * K, k = 0.5523 * r;
+      cs += '0 1 0 0 K 0.2 w\n';
+      cs += sgF(c[0] - r) + ' ' + sgF(c[1]) + ' m\n';
+      cs += sgF(c[0] - r) + ' ' + sgF(c[1] + k) + ' ' + sgF(c[0] - k) + ' ' + sgF(c[1] + r) + ' ' + sgF(c[0]) + ' ' + sgF(c[1] + r) + ' c\n';
+      cs += sgF(c[0] + k) + ' ' + sgF(c[1] + r) + ' ' + sgF(c[0] + r) + ' ' + sgF(c[1] + k) + ' ' + sgF(c[0] + r) + ' ' + sgF(c[1]) + ' c\n';
+      cs += sgF(c[0] + r) + ' ' + sgF(c[1] - k) + ' ' + sgF(c[0] + k) + ' ' + sgF(c[1] - r) + ' ' + sgF(c[0]) + ' ' + sgF(c[1] - r) + ' c\n';
+      cs += sgF(c[0] - k) + ' ' + sgF(c[1] - r) + ' ' + sgF(c[0] - r) + ' ' + sgF(c[1] - k) + ' ' + sgF(c[0] - r) + ' ' + sgF(c[1]) + ' c\nh\nS\n';
+    });
+    /* folds */
+    cs += '0 1 1 0 K 0.2 w\n';
+    geo.folds.forEach(l => {
+      const a = P(l.x1, l.y1), b = P(l.x2, l.y2);
+      cs += '[2 2] 0 d\n' + sgF(a[0]) + ' ' + sgF(a[1]) + ' m ' + sgF(b[0]) + ' ' + sgF(b[1]) + ' l S\n[] 0 d\n';
+    });
+    /* safe area */
+    const s = geo.safe, sp = [[s, s], [geo.wmm - s, s], [geo.wmm - s, geo.hmm - s], [s, geo.hmm - s]];
+    cs += '0 0 0 0.45 K 0.2 w\n';
+    cs += '[3 3] 0 d\n';
+    sp.forEach((p, i) => { const q = P(p[0], p[1]); cs += sgF(q[0]) + ' ' + sgF(q[1]) + (i ? ' l\n' : ' m\n') });
+    cs += 'h S\n[] 0 d\n';
+    /* labels */
+    const lbl = (t, xmm, ymm, size) => {
+      const q = P(xmm, ymm);
+      cs += '0 0 0 1 K BT /F1 ' + sgF(size || 7) + ' Tf 1 0 0 1 ' + sgF(q[0]) + ' ' + sgF(q[1]) + ' Tm (' + t.replace(/[()\\]/g, '') + ') Tj ET\n';
+    };
+    lbl('ARTVISION STUDIO · CNC CUT FILE', 4, 9, 7);
+    lbl(geo.wmm + ' x ' + geo.hmm + ' mm  ·  ' + geo.mat.n + (geo.mat.thick ? ' ' + geo.mat.thick + 'mm' : '') + '  ·  KERF ' + (geo.mat.kerf || 0) + 'mm', 4, 4, 6);
+    if (geo.holes.length) lbl('DRILL ' + (geo.holes[0].d || 4) + 'mm x ' + geo.holes.length, geo.wmm - 55, 4, 6);
+    /* build PDF */
+    const enc = new TextEncoder();
+    const parts = []; let off = 0; const offs = [];
+    const push = x => { const b = typeof x === 'string' ? enc.encode(x) : x; parts.push(b); off += b.length };
+    const obj = (n, s) => { offs[n] = off; push(n + ' 0 obj\n' + s + '\nendobj\n') };
+    push('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+    obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+    obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+    obj(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + sgF(wPt) + ' ' + sgF(hPt) + ']' +
+      ' /TrimBox [' + sgF(pad) + ' ' + sgF(pad) + ' ' + sgF(pad + geo.wmm * K) + ' ' + sgF(pad + geo.hmm * K) + ']' +
+      ' /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>');
+    obj(4, '<< /Length ' + cs.length + ' >>\nstream\n' + cs + 'endstream');
+    obj(5, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+    const xref = off;
+    push('xref\n0 6\n0000000000 65535 f \n');
+    for (let i = 1; i <= 5; i++) push(String(offs[i] || 0).padStart(10, '0') + ' 00000 n \n');
+    push('trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n' + xref + '\n%%EOF\n');
+    const total = parts.reduce((a, b) => a + b.length, 0);
+    const out = new Uint8Array(total); let pos = 0;
+    for (const b of parts) { out.set(b, pos); pos += b.length }
+    return out;
+  }
+
+  /* ---------- CMYK TIFF (print rip / sign shop) ---------- */
+  async function sgTiff(cfg, plan) {
+    const o = sgPrintOpts(cfg, plan);
+    const pr = AV23.renderPrintCanvas(o);
+    const c = pr.canvas;
+    const rgba = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    const cmyk = AV24.rgbToCmyk(rgba, c.width, c.height, sgMat(cfg.mat).tac);
+    let z = null;
+    try { z = await AV24.deflateBytes(cmyk) } catch (e) { z = null }
+    const data = z || cmyk;
+    const comp = z ? 8 : 1;                       /* 8 = Adobe Deflate */
+    const W = c.width, H = c.height;
+    const DPI = Math.max(1, Math.round(o.dpi));
+
+    /* --- classic little-endian TIFF --- */
+    const entries = [];                            /* [tag, type, count, value|bytes] */
+    const u16 = n => [n & 255, (n >> 8) & 255];
+    const u32 = n => [n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >>> 24) & 255];
+    /* layout: header(8) | IFD | extra data | image */
+    const EXTRA = [];
+    const pushExtra = arr => { const at = 0; EXTRA.push(...arr); return 0 }   /* placeholder */
+    /* hum pehle IFD size nikalte hain: entries sorted by tag */
+    const nTags = 16;
+    const ifdStart = 8;
+    const ifdBytes = 2 + nTags * 12 + 4;
+    let extraOff = ifdStart + ifdBytes;
+    const extraBuf = [];
+    const addExtra = (bytes) => { const at = extraOff + extraBuf.length; extraBuf.push(...bytes); return at };
+    const imgOff = extraOff + 0;
+    /* resolution rationals (72/1 style) */
+    const xresAt = addExtra(u32(DPI).concat(u32(1)));
+    const yresAt = addExtra(u32(DPI).concat(u32(1)));
+    const bpsAt = addExtra([8, 0, 8, 0, 8, 0, 8, 0]);   /* 4 × SHORT */
+    const imageOffset = ifdStart + ifdBytes + extraBuf.length;
+    const T = (tag, type, count, val) => entries.push([tag, type, count, val]);
+    T(256, 4, 1, W);              /* ImageWidth LONG */
+    T(257, 4, 1, H);              /* ImageLength */
+    T(258, 3, 4, bpsAt);          /* BitsPerSample SHORT×4 → offset */
+    T(259, 3, 1, comp);           /* Compression */
+    T(262, 3, 1, 5);              /* Photometric = Separated (CMYK) */
+    T(273, 4, 1, imageOffset);    /* StripOffsets */
+    T(274, 3, 1, 1);              /* Orientation */
+    T(277, 3, 1, 4);              /* SamplesPerPixel */
+    T(278, 4, 1, H);              /* RowsPerStrip */
+    T(279, 4, 1, data.length);    /* StripByteCounts */
+    T(282, 5, 1, xresAt);         /* XResolution RATIONAL */
+    T(283, 5, 1, yresAt);         /* YResolution */
+    T(284, 3, 1, 1);              /* PlanarConfiguration chunky */
+    T(296, 3, 1, 2);              /* ResolutionUnit inch */
+    T(332, 3, 1, 1);              /* InkSet = CMYK */
+    T(334, 3, 1, 4);              /* NumberOfInks */
+    entries.sort((a, b) => a[0] - b[0]);
+
+    const total = imageOffset + data.length;
+    const out = new Uint8Array(total);
+    let p = 0;
+    out[p++] = 0x49; out[p++] = 0x49;             /* II */
+    out.set(u16(42), p); p += 2;
+    out.set(u32(ifdStart), p); p += 4;
+    out.set(u16(entries.length), p); p += 2;
+    entries.forEach(([tag, type, count, val]) => {
+      out.set(u16(tag), p); p += 2;
+      out.set(u16(type), p); p += 2;
+      out.set(u32(count), p); p += 4;
+      const tsize = { 3: 2, 4: 4, 5: 8 }[type] || 4;
+      const bytes = count * tsize;
+      if (bytes <= 4) {
+        if (type === 3) { out.set(u16(val), p); out.set(u16(0), p + 2) }
+        else out.set(u32(val), p);
+      } else out.set(u32(val), p);
+      p += 4;
+    });
+    out.set(u32(0), p); p += 4;                    /* next IFD = 0 */
+    out.set(extraBuf, ifdStart + ifdBytes);        /* BPS + rationals */
+    out.set(data, imageOffset);
+    return out;
+  }
+
+  /* ---------- print options material ke hisaab se ---------- */
+  function sgPrintOpts(cfg, plan) {
+    const mat = sgMat(cfg.mat);
+    return {
+      dpi: plan.dpi, srcDpi: plan.dpi,
+      bleed: mat.bleed, safe: Math.round(Math.min(cfg.wmm, cfg.hmm) * 0.06),
+      marks: mat.g === 'flex', white: true, cutOff: 0,
+      wmm: cfg.wmm, hmm: cfg.hmm
+    };
+  }
+
+  /* ---------- file naming ---------- */
+  function sgBase(cfg) {
+    const mat = sgMat(cfg.mat);
+    return safe25((cfg.data && cfg.data.name) || 'brand') + '-' + cfg.family + '-' +
+      sgRatio(cfg.wmm, cfg.hmm).replace(':', 'x') + '-' + cfg.wmm + 'x' + cfg.hmm + 'mm-' + mat.id;
+  }
+
+  /* ---------- spec sheet ---------- */
+  function sgSpecs(cfg, plan, geo) {
+    const mat = sgMat(cfg.mat), D = cfg.data;
+    const L = [];
+    L.push('ARTVISION STUDIO v26 — SIGNAGE / BRANDING PRODUCTION SPEC');
+    L.push('Generated : ' + new Date().toISOString());
+    L.push('');
+    L.push('DESIGN TYPE : ' + SIGN_FAM[cfg.family].n + '  (' + (cfg.style || 'brand') + ')');
+    L.push('RATIO       : ' + sgRatio(cfg.wmm, cfg.hmm));
+    L.push('TRIM SIZE   : ' + cfg.wmm + ' x ' + cfg.hmm + ' mm   (' + (cfg.wmm / 10) + ' x ' + (cfg.hmm / 10) + ' cm)');
+    L.push('PIXELS      : ' + plan.W + ' x ' + plan.H + ' px @ ' + plan.dpi + ' dpi');
+    L.push('PRINT SCALE : 1:' + (plan.scale < 1 ? Math.round(1 / plan.scale) : 1) +
+      (plan.scale < 1 ? '   (page full size hai — RIP image ko ' + Math.round(1 / plan.scale) + 'x stretch karega)' : '   (full resolution)'));
+    if (plan.dpi < 60) L.push('  ! Large format: ' + plan.dpi + ' dpi — ' + Math.round(Math.max(cfg.wmm, cfg.hmm) / 1000) + ' m board, viewing distance ' + Math.max(2, Math.round(Math.max(cfg.wmm, cfg.hmm) / 1000 * 2.2)) + ' m+');
+    L.push('SAFE AREA   : ' + geo.safe + ' mm all sides');
+    L.push('');
+    L.push('MATERIAL    : ' + mat.n + (mat.thick ? ' · ' + mat.thick + ' mm' : ''));
+    L.push('GROUP       : ' + (mat.g === 'flex' ? 'PRINT MEDIA (roll to roll / flatbed)' : 'RIGID BOARD (CNC routed)'));
+    L.push('BLEED       : ' + mat.bleed + ' mm');
+    L.push('INK LIMIT   : ' + Math.round(mat.tac * 100) + '% total area coverage');
+    L.push('NOTES       : ' + mat.note);
+    if (mat.g === 'rigid') {
+      L.push('KERF        : ' + mat.kerf + ' mm tool dia');
+      L.push('CORNER RAD  : ' + geo.corner + ' mm');
+      L.push('DRILL       : ' + geo.holes.length + ' x ' + (geo.holes[0] ? geo.holes[0].d : mat.hole) + ' mm mounting holes');
+    } else {
+      L.push('EYELETS     : ' + (geo.eyelets.length ? geo.eyelets.length + ' pcs @ 2 mm (25–30 mm inset)' : 'nahi'));
+      L.push('POLE POCKET : ' + (cfg.pockets ? 'haan — 75 mm top + bottom' : 'nahi'));
+    }
+    L.push('');
+    L.push('CONTENT');
+    ['name', 'tagline', 'headline', 'offer', 'phone', 'web', 'addr'].forEach(k => {
+      if (D[k]) L.push('  ' + k.toUpperCase().padEnd(9) + ': ' + D[k]);
+    });
+    L.push('');
+    L.push('FILES IN PACK');
+    L.push('  *-CMYK.pdf    print-ready artwork, DeviceCMYK, bleed + crop marks');
+    if (mat.g === 'flex') L.push('  *-CMYK.tif    CMYK TIFF for RIP / sign shop (' + plan.dpi + ' dpi)');
+    L.push('  *.jpg         soft proof / WhatsApp approval');
+    L.push('  *-CNC.pdf     vector cut sheet (outline + drill + fold layers)');
+    L.push('  *.dxf         CNC router file — layers: OUTLINE / DRILL / EYELET / FOLD / SAFE');
+    L.push('  *-specs.txt   ye file');
+    L.push('');
+    L.push('COMING SOON : 3D DWG (3D sign body) · SVG cut (web / sticker cutter)');
+    return L.join('\n');
+  }
+
+  /* ---------- brand mark + vector helpers ---------- */
+  function sgInitials(name) {
+    const w = String(name || 'AV').replace(/[^A-Za-z0-9 ]/g, ' ').trim().split(/\s+/).filter(Boolean);
+    if (!w.length) return 'AV';
+    return (w[0][0] + (w[1] ? w[1][0] : (w[0][1] || ''))).toUpperCase();
+  }
+  function sgMark(out, x, y, size, TH, initials, invert) {
+    out.push(R25(x, y, size, size, invert ? '#FFFFFF' : TH.acc, size * 0.24));
+    const fs = size * 0.42;
+    out.push(T25(initials, x + size / 2, y + size / 2 + fs * 0.35, fs, invert ? TH.acc : '#FFFFFF',
+      { bold: true, align: 'center', ls: size * 0.012 }));
+    out.push(R25(x + size * 0.30, y + size * 0.76, size * 0.40, size * 0.05, invert ? TH.acc : '#FFFFFF', size * 0.03));
+  }
+  function sgLine(out, x1, y1, x2, y2, color, w) {
+    out.push({ type: 'line', x1: x1, y1: y1, x2: x2, y2: y2, fill: null, stroke: { color: color, width: Math.max(1, w) }, t: null, _dirty: true });
+  }
+  function sgQrShape(out, qr, x, y, side, color) {
+    if (!qr) return;
+    out.push(qrPathShape(qr, x, y, side, color));
+  }
+  function sgQrPlate(out, qr, x, y, side, paper, ink) {
+    const pad = side * 0.07;
+    out.push(R25(x - pad, y - pad, side + pad * 2, side + pad * 2, paper, side * 0.06));
+    sgQrShape(out, qr, x, y, side, ink);
+  }
+
+  /* ---------- flow layout engine: koi overlap nahi, sab measured ---------- */
+  function sgI(fn) { return fn }
+  function sgItemHeight(it, w) {
+    if (it.type === 'mark') return it.size;
+    if (it.type === 'qrBlock') return it.side * 1.16;
+    if (it.type === 'rule') return it.th;
+    if (it.type === 'chip') return it.h;
+    if (it.type === 'rows') {
+      let h = 0;
+      it.rows.forEach(r => { h += sgItemHeight(r, w) });
+      return h;
+    }
+    if (it.type === 'text') {
+      const b = fitBlock(it.text, it.want, w, it.maxH || 1e9, it.bold !== false, 'Segoe UI', it.ls || 0, it.maxLines || 3);
+      return b.lines.length * b.size * (it.lh || 1.14);
+    }
+    if (it.type === 'rowItem') {
+      const size = Math.max(4, fitTo(it.label + ' ' + it.price, it.want, w, true, 'Segoe UI'));
+      return size * 1.6;
+    }
+    return 0;
+  }
+  /* items ko (w × hAvail) me stack karo — stack vertically centre, kuch overflow nahi */
+  function sgFlow(items, x, yTop, w, hAvail, S, opt, OUT) {
+    opt = opt || {};
+    const out = OUT || [];
+    const gaps = (items.length - 1) * (opt.gap == null ? S * 0.035 : opt.gap);
+    let f = 1;
+    const avail = hAvail - gaps;
+    for (let k = 0; k < 7; k++) {
+      let tot = 0;
+      items.forEach(it => { tot += sgItemHeight(it, w) });
+      if (tot <= avail || avail <= 0) break;
+      const nf = Math.max(0.35, f * (avail / tot) * 0.995);
+      if (nf >= f - 0.002) break;
+      f = nf;
+      /* wants ko scale karo (destructive nahi — copy) */
+      items.forEach(it => { if (it.want) it.want = it.want * 0.999 * (avail / tot); if (it.size) it.size = it.size * 0.999 * (avail / tot); if (it.side) it.side = it.side * 0.999 * (avail / tot); if (it.h) it.h = it.h * 0.999 * (avail / tot) })
+    }
+    let tot = 0;
+    items.forEach(it => { tot += sgItemHeight(it, w) });
+    const gap = opt.gap == null ? S * 0.035 : opt.gap;
+    let y = yTop + Math.max(0, (hAvail - tot - (items.length - 1) * gap) / 2);
+    items.forEach(it => {
+      const h = sgItemHeight(it, w);
+      sgPaintItem(out, it, x, y, w, h, S, opt);
+      y += h + gap;
+    });
+    return { h: tot + (items.length - 1) * gap, end: y };
+  }
+  function sgPaintItem(out, it, x, y, w, h, S, opt) {
+    const TH = opt.TH, D = opt.D;
+    if (it.type === 'mark') {
+      sgMark(out, it.align === 'center' ? x + (w - it.size) / 2 : x, y, it.size, TH, it.initials, it.invert);
+      return;
+    }
+    if (it.type === 'rule') {
+      const rw = it.frac ? w * it.frac : w;
+      const rx = it.align === 'center' ? x + (w - rw) / 2 : (it.align === 'right' ? x + w - rw : x);
+      sgLine(out, rx, y, rx + rw, y, it.color || TH.acc, it.th);
+      return;
+    }
+    if (it.type === 'text') {
+      const b = fitBlock(it.text, it.want, w, it.maxH || 1e9, it.bold !== false, 'Segoe UI', it.ls || 0, it.maxLines || 3);
+      const lh = b.size * (it.lh || 1.14);
+      b.lines.forEach((ln, i) => {
+        const sz = Math.max(4, fitTo(ln, b.size, w, it.bold !== false, 'Segoe UI', it.ls || 0));
+        const tx = it.align === 'center' ? x + w / 2 : (it.align === 'right' ? x + w : x);
+        out.push(T25(ln, tx, y + i * lh + sz * 0.82, sz, it.color || TH.ink,
+          { bold: it.bold !== false, align: it.align || 'left', ls: it.ls || 0 }));
+      });
+      return;
+    }
+    if (it.type === 'rowItem') {
+      const size = Math.max(4, fitTo(it.label, it.want, w * 0.66, true, 'Segoe UI'));
+      out.push(T25(it.label, x, y + size * 0.9, size, TH.ink, { bold: true }));
+      const ps = Math.max(4, fitTo(it.price, size, w * 0.28, true, 'Segoe UI'));
+      out.push(T25(it.price, x + w, y + size * 0.9, ps, TH.acc, { bold: true, align: 'right' }));
+      return;
+    }
+    if (it.type === 'chip') {
+      const cw = Math.min(w, it.w || w), chh = it.h;
+      out.push(R25(x + (w - cw) / 2, y, cw, chh, TH.acc, chh * 0.22));
+      const cs = Math.max(4, fitTo(it.text, chh * 0.48, cw * 0.88, true, 'Segoe UI'));
+      out.push(T25(it.text, x + w / 2, y + chh * 0.64, cs, '#FFFFFF', { bold: true, align: 'center' }));
+      return;
+    }
+    if (it.type === 'qrBlock') {
+      const side = it.side;
+      const qx = x + (w - side) / 2;
+      sgQrPlate(out, it.qr, qx, y, side, '#FFFFFF', TH.ink);
+      if (it.caption) {
+        const cs = Math.max(4, fitTo(it.caption, side * 0.16, side * 1.6, true, 'Segoe UI'));
+        out.push(T25(it.caption, x + w / 2, y + side * 1.12 + cs * 0.2, cs, TH.sub, { bold: true, align: 'center' }));
+      }
+      return;
+    }
+    if (it.type === 'rows') {
+      let yy = y;
+      it.rows.forEach((r, i) => {
+        const rh = sgItemHeight(r, w);
+        sgPaintItem(out, r, x, yy, w, rh, S, opt);
+        if (it.dividers !== false && i < it.rows.length - 1) sgLine(out, x, yy + rh - S * 0.008, x + w, yy + rh - S * 0.008, TH.sub, Math.max(1, S * 0.004));
+        yy += rh;
+      });
+      return;
+    }
+  }
+
+  /* ---------- in-shop: soft card, price rows, QR flow me ---------- */
+  function sgLayoutInshop(W, H, TH, D, cfg) {
+    const out = [], S = Math.min(W, H), M = Math.min(S * 0.065, W * 0.07);
+    const wide = W / H >= 1.7;
+    const initials = sgInitials(D.name);
+    const style = cfg.style || 'brand';
+    const rowsOn = (style === 'shelf' || style === 'menu');
+    const qr = cfg.qr ? cfg.qrData : null;
+    const opt = { TH: TH, D: D, gap: S * 0.035 };
+
+    /* accent hairlines top + bottom */
+    out.push(R25(0, 0, W, Math.max(2, S * 0.014), TH.acc, 0));
+    out.push(R25(0, H - Math.max(2, S * 0.014), W, Math.max(2, S * 0.014), TH.acc, 0));
+
+    const contactLine = [D.phone, D.web].filter(Boolean).join('  ·  ');
+
+    if (wide) {
+      /* 3 columns: brand stack | message stack | QR */
+      const plateW = Math.min(H * 0.94, W * 0.19);
+      out.push(R25(0, 0, plateW, H, TH.acc, 0));
+      const mk = Math.min(plateW * 0.56, H * 0.34);
+      sgMark(out, plateW / 2 - mk / 2, H / 2 - mk / 2, mk, TH, initials, true);
+
+      const inner = H - M * 2;
+      const qrSide = qr ? Math.min(S * 0.30, inner * 0.46) : 0;
+      const gap = S * 0.05;
+      const rightW = qr ? qrSide * 1.18 : 0;
+      const restW = W - plateW - M * 1.6 - rightW - (qr ? gap : 0);
+      const ultraWide = W / H >= 1.7;
+      const leftW = restW * (rowsOn ? 0.54 : (ultraWide ? 0.46 : 0.56));
+      const midW = restW - leftW - gap;
+
+      const xl = plateW + M * 0.9;
+      const leftItems = [
+        { type: 'text', text: D.name.toUpperCase(), want: S * 0.28, bold: true, color: TH.ink, ls: S * 0.005, maxLines: 2 },
+        { type: 'rule', th: Math.max(1, S * 0.006), frac: 0.34, color: TH.acc }
+      ];
+      if (!ultraWide) leftItems.push({ type: 'text', text: (D.tagline || '').toUpperCase(), want: S * 0.070, bold: true, color: TH.sub, ls: S * 0.003, maxLines: 2 });
+      sgFlow(leftItems, xl, M, leftW, inner, S, opt, out);
+
+      const xm = xl + leftW + gap;
+      if (rowsOn) {
+        const rows = (D.items || []).slice(0, 3).map(it => ({ type: 'rowItem', label: it[0], price: it[1], want: S * 0.11 }));
+        sgFlow([{ type: 'rows', rows: rows, dividers: true }], xm, M, midW, inner, S, opt, out);
+      } else {
+        const mid = ultraWide
+          ? [{ type: 'text', text: (D.tagline || '').toUpperCase(), want: S * 0.085, bold: true, color: TH.sub, ls: S * 0.004, maxLines: 2 },
+             { type: 'chip', text: D.offer || D.headline || '', h: S * 0.12, w: Math.min(midW, S * 0.78) }]
+          : [{ type: 'text', text: D.headline || '', want: S * 0.13, bold: true, color: TH.ink, maxLines: 3 },
+             { type: 'chip', text: D.offer || '', h: S * 0.12, w: Math.min(midW, S * 0.78) }];
+        sgFlow(mid, xm, M, midW, inner, S, opt, out);
+      }
+
+      if (qr) {
+        const xq = W - M * 0.9 - rightW;
+        sgFlow([{ type: 'qrBlock', qr: qr, side: qrSide, caption: '' }], xq, M, rightW, inner, S, opt, out);
+      }
+      return out;
+    }
+
+    /* square / tall: single centred flow — kuch bhi overlap nahi hota */
+    const bandH = Math.max(S * 0.085, Math.min(S * 0.12, H * 0.09));
+    const contentH = H - bandH - M * 1.6;
+    const cw = W - M * 2;
+    const tall = H / W >= 1.7;
+    const qrSide = qr ? Math.min(S * (tall ? 0.24 : 0.27), contentH * 0.26) : 0;
+    const items = [
+      { type: 'mark', size: S * (tall ? 0.15 : 0.17), initials: initials, align: 'center' },
+      { type: 'text', text: D.name.toUpperCase(), want: S * 0.145, bold: true, color: TH.ink, ls: S * 0.004, maxLines: 2, align: 'center' },
+      { type: 'text', text: (D.tagline || '').toUpperCase(), want: S * 0.052, bold: true, color: TH.sub, ls: S * 0.003, maxLines: 1, align: 'center' }
+    ];
+    if (rowsOn) {
+      items.push({ type: 'rows', dividers: true, rows: (D.items || []).slice(0, 3).map(it => ({ type: 'rowItem', label: it[0], price: it[1], want: S * 0.085 })) });
+    } else {
+      items.push({ type: 'rule', th: Math.max(1, S * 0.007), frac: 0.22, color: TH.acc, align: 'center' });
+      const line = String(D.headline || '');
+      items.push({ type: 'text', text: line, want: S * (line.length > 26 ? 0.085 : 0.105), bold: true, color: TH.ink, maxLines: line.length > 40 ? 4 : 3, align: 'center' });
+      if (D.offer) items.push({ type: 'chip', text: D.offer, h: S * 0.105, w: Math.min(cw, S * 0.86) });
+    }
+    if (qr) items.push({ type: 'qrBlock', qr: qr, side: qrSide, caption: '' });
+    sgFlow(items, M, M * 0.8, cw, contentH, S, opt, out);
+
+    /* contact band */
+    out.push(R25(0, H - bandH, W, bandH, TH.acc, 0));
+    const bt = contactLine;
+    const bs = Math.max(4, fitTo(bt, bandH * 0.36, cw, true, 'Segoe UI'));
+    out.push(T25(bt, W / 2, H - bandH / 2 + bs * 0.34, bs, '#FFFFFF', { bold: true, align: 'center' }));
+    return out;
+  }
+
+  /* ---------- outdoor: bold name board + contact bar ---------- */
+  function sgLayoutOutdoor(W, H, TH, D, cfg) {
+    const out = [], S = Math.min(W, H), M = Math.min(S * 0.055, W * 0.06);
+    const wide = W / H >= 1.7;
+    const initials = sgInitials(D.name);
+    const style = cfg.style || 'brand';
+    const qr = cfg.qr ? cfg.qrData : null;
+    const opt = { TH: TH, D: D, gap: S * 0.03 };
+    const contactLine = [D.phone, D.web, D.addr].filter(Boolean).join('     ·     ');
+
+    if (wide) {
+      const plateW = Math.min(H * 1.0, W * 0.20);
+      const barH = Math.max(S * 0.14, Math.min(S * 0.22, H * 0.20));
+      const inner = H - barH - M * 0.6;
+      out.push(R25(0, 0, plateW, H, TH.acc, 0));
+      const mk = Math.min(plateW * 0.56, inner * 0.5);
+      sgMark(out, plateW / 2 - mk / 2, (H - barH) / 2 - mk / 2, mk, TH, initials, true);
+
+      const qrSide = qr ? Math.min(inner * 0.62, S * 0.5) : 0;
+      const gap = S * 0.05;
+      const xb = plateW + M * 0.85;
+      const rightW = qr ? qrSide * 1.2 : 0;
+      const bW = W - xb - M * 0.85 - rightW - (qr ? gap : 0);
+      const ultra = W / H >= 2.0;
+      const items = [
+        { type: 'text', text: D.name.toUpperCase(), want: S * (ultra ? 0.30 : 0.33), bold: true, color: TH.ink, ls: S * 0.006, maxLines: 2 },
+        { type: 'text', text: (D.tagline || '').toUpperCase(), want: S * 0.088, bold: true, color: TH.acc, ls: S * 0.005, maxLines: 2 }
+      ];
+      if (!ultra || style === 'hoarding') items.push({ type: 'text', text: style === 'hoarding' ? (D.headline || '') : [D.headline, D.offer].filter(Boolean).join('  ·  '), want: S * 0.095, bold: true, color: TH.sub, maxLines: 2 });
+      sgFlow(items, xb, M * 0.5, bW, inner, S, opt, out);
+      if (qr) sgFlow([{ type: 'qrBlock', qr: qr, side: qrSide, caption: '' }], W - M * 0.85 - rightW, M * 0.5, rightW, inner, S, opt, out);
+
+      out.push(R25(0, H - barH, W, barH, TH.acc, 0));
+      const bs = Math.max(4, fitTo(contactLine, barH * 0.40, W - M * 2, true, 'Segoe UI', S * 0.003));
+      out.push(T25(contactLine, W / 2, H - barH / 2 + bs * 0.34, bs, '#FFFFFF', { bold: true, align: 'center' }));
+      return out;
+    }
+
+    /* square / tall: header plate + body + foot */
+    const headH = Math.min(H * 0.28, S * 0.74);
+    const footH = Math.min(S * 0.30, H * 0.24);
+    out.push(R25(0, 0, W, headH, TH.acc, 0));
+    const mk = Math.min(headH * 0.44, W * 0.20);
+    const nx = M + mk + M * 0.55;
+    const nW = W - nx - M;
+    const nb = fitBlock(D.name.toUpperCase(), Math.min(headH * 0.36, S * 0.15), nW, headH * 0.52, true, 'Segoe UI', S * 0.004, 2);
+    const tagSz = Math.max(4, fitTo((D.tagline || '').toUpperCase(), Math.min(headH * 0.13, S * 0.05), nW, true, 'Segoe UI', S * 0.003));
+    const nh = nb.lines.length * nb.size * 1.1 + tagSz * 1.7;
+    let ny = headH / 2 - nh / 2 + nb.size * 0.82;
+    sgMark(out, M, headH / 2 - mk / 2, mk, TH, initials, true);
+    nb.lines.forEach((ln, i) => out.push(T25(ln, nx, ny + i * nb.size * 1.1, nb.size, '#FFFFFF', { bold: true, ls: S * 0.004 })));
+    ny += nb.lines.length * nb.size * 1.1;
+    if (D.tagline) out.push(T25((D.tagline || '').toUpperCase(), nx, ny + tagSz * 1.12, tagSz, 'rgba(255,255,255,0.94)', { bold: true, ls: S * 0.003 }));
+
+    const bodyY = headH + M * 0.55;
+    const bodyH = H - bodyY - footH - M * 0.55;
+    const qrSide = qr ? Math.min(S * 0.26, bodyH * 0.40) : 0;
+    const tallish = H / W >= 1.6;
+    const items = [{ type: 'text', text: D.headline || '', want: S * (tallish ? 0.115 : 0.145), bold: true, color: TH.ink, maxLines: tallish ? 5 : 3 }];
+    if (style !== 'brand' && D.offer) items.push({ type: 'chip', text: D.offer, h: Math.min(S * 0.10, bodyH * 0.2), w: Math.min(W - M * 2, S * 0.78) });
+    if (qr) items.push({ type: 'qrBlock', qr: qr, side: qrSide, caption: '' });
+    sgFlow(items, M, bodyY, W - M * 2, bodyH, S, opt, out);
+
+    out.push(R25(0, H - footH, W, footH, TH.ink, 0));
+    const lines = [D.phone, D.web, D.addr].filter(Boolean);
+    const ls = Math.max(4, Math.min((footH * 0.72) / Math.max(1, lines.length) / 1.5, S * 0.070));
+    const totH = lines.length * ls * 1.5;
+    lines.forEach((t, i) => {
+      out.push(T25(t, W / 2, H - footH + (footH - totH) / 2 + i * ls * 1.5 + ls * 0.9, ls, '#FFFFFF', { bold: true, align: 'center' }));
+    });
+    return out;
+  }
+
+  function sgLayoutAll(W, H, TH, D, cfg) {
+    return cfg.family === 'inshop' ? sgLayoutInshop(W, H, TH, D, cfg) : sgLayoutOutdoor(W, H, TH, D, cfg);
+  }
+
+  /* ══════════════ builder ══════════════ */
+  function sgBuild(cfg) {
+    cfg = cfg || sgReadCfg(null);
+    const mat = sgMat(cfg.mat);
+    const fam = SIGN_FAM[cfg.family] || SIGN_FAM.inshop;
+    const wmm = cfg.wmm, hmm = cfg.hmm;
+    const plan = sgPlan(wmm, hmm, mat, cfg.scale);
+    const TH = theme25(cfg.theme);
+    const qrData = cfg.qr ? QR.encode(cfg.data.qrText || cfg.data.web || 'https://artvision.studio', { ec: 'M' }) : null;
+    const els = sgLayoutAll(plan.W, plan.H, TH, cfg.data, { family: cfg.family, style: cfg.style, qr: cfg.qr, qrData: qrData });
+    try { window.__sg25last = cfg } catch (e) { }
+
+    boardCreate(cfg.data.name + ' · ' + sgRatio(wmm, hmm) + ' ' + (cfg.family === 'inshop' ? 'in-shop' : 'signage'), plan.W, plan.H, null);
+    try {
+      doc.__av23 = {
+        size: 'sg26-' + cfg.family + '-' + wmm + 'x' + hmm, dpi: plan.dpi, wmm: wmm, hmm: hmm,
+        theme: TH.id, bleed: mat.bleed, safe: Math.round(Math.min(wmm, hmm) * 0.06),
+        layout: 'signage', material: mat.id, family: cfg.family, cut: null, via: 'v26'
+      };
+      window.__av23last = doc.__av23;
+    } catch (e) { }
+
+    let bg = (doc.layers || []).find(l => l.type === 'raster' && /background/i.test(l.name || ''));
+    if (!bg) { bg = newRasterLayer('Background'); doc.layers.unshift(bg); }
+    signPaintBG(bg, TH, plan.W, plan.H);
+    if (mat.id === 'backlit') {
+      /* backlit flex: halka lift taaki light box me wash out na ho */
+      const g = bg.canvas.getContext('2d');
+      g.fillStyle = 'rgba(255,255,255,0.10)'; g.fillRect(0, 0, plan.W, plan.H);
+    }
+
+    const deco = newVectorLayer('Layout');
+    const txt = newVectorLayer('Text');
+    els.forEach(e => (e.type === 'text' ? txt : deco).shapes.push(Object.assign({ id: 'sg6' + Math.random().toString(36).slice(2, 9) }, e)));
+
+    /* ---- production guides: ye layer print export me apne aap chhup jati hai ---- */
+    const geo = sgGeo(cfg);
+    const mmp = plan.W / wmm;
+    const gl = newVectorLayer('CUT & GUIDES (print me hide)');
+    const outlinePts = geo.outline.map(p => ({ x: p[0] * mmp, y: p[1] * mmp }));
+    gl.shapes.push(Object.assign({
+      id: 'cut' + Math.random().toString(36).slice(2, 8), type: 'rect', x: 0, y: 0, w: plan.W, h: plan.H,
+      r: 0, fill: null, stroke: { color: '#FF2D2D', width: Math.max(1, plan.W * 0.0016) }, t: null, _dirty: true, cut: true
+    }, {}));
+    gl.shapes.push(Object.assign({
+      id: 'safe' + Math.random().toString(36).slice(2, 8), type: 'rect',
+      x: geo.safe * mmp, y: geo.safe * mmp, w: plan.W - geo.safe * 2 * mmp, h: plan.H - geo.safe * 2 * mmp,
+      r: 0, fill: null, stroke: { color: '#2D7DFF', width: Math.max(1, plan.W * 0.0012), dash: [8, 6] }, t: null, _dirty: true, guide: true
+    }));
+    geo.holes.forEach(h => gl.shapes.push(Object.assign({
+      id: 'h' + Math.random().toString(36).slice(2, 8), type: 'ellipse', cx: h.x * mmp, cy: h.y * mmp,
+      rx: h.r * mmp, ry: h.r * mmp, fill: null, stroke: { color: '#FF2D2D', width: Math.max(1, plan.W * 0.0012) }, t: null, _dirty: true, guide: true
+    })));
+    geo.eyelets.forEach(h => gl.shapes.push(Object.assign({
+      id: 'e' + Math.random().toString(36).slice(2, 8), type: 'ellipse', cx: h.x * mmp, cy: h.y * mmp,
+      rx: 2 * mmp, ry: 2 * mmp, fill: null, stroke: { color: '#C026D3', width: Math.max(1, plan.W * 0.001) }, t: null, _dirty: true, guide: true
+    })));
+    geo.folds.forEach(f => gl.shapes.push(Object.assign({
+      id: 'f' + Math.random().toString(36).slice(2, 8), type: 'line', x1: f.x1 * mmp, y1: f.y1 * mmp, x2: f.x2 * mmp, y2: f.y2 * mmp,
+      fill: null, stroke: { color: '#12B76A', width: Math.max(1, plan.W * 0.0012), dash: [10, 8] }, t: null, _dirty: true, guide: true
+    })));
+
+    doc.layers.push(deco, gl, txt);
+    try { if (typeof selShapes !== 'undefined') selShapes = [] } catch (e) { }
+    doc.activeId = txt.id;
+    [bg, deco, gl, txt].forEach(l => { try { layerVerBump(l) } catch (e) { } });
+    docDirty = true; needRender = true;
+    try { uiLayers(); uiLayersRefresh(); uiProps(); fitView() } catch (e) { }
+    try { if (typeof renderComposite === 'function') renderComposite() } catch (e) { }
+    t25(fam.emoji + ' ' + wmm + '×' + hmm + ' mm · ' + sgRatio(wmm, hmm) + ' · ' + mat.n + ' · ' + plan.dpi + ' dpi', 'ok', 3000);
+    return { plan: plan, geo: geo, mat: mat, cfg: cfg };
+  }
+
+  /* ══════════════ config read/write ══════════════ */
+  const SS2 = { fam: 'inshop', idx: 0, style: 'brand', theme: 'sunrise', mat: 'nonlit', qr: true, pockets: false, custom: null };
+
+  function sgSizes(famId) {
+    const f = SIGN_FAM[famId] || SIGN_FAM.inshop;
+    if (SS2.custom && SS2.custom.fam === famId) {
+      return [{ w: SS2.custom.w, h: SS2.custom.h, u: 'Custom size', st: SS2.style, custom: true }].concat(f.sizes);
+    }
+    return f.sizes;
+  }
+
+  function sgReadCfg(panel) {
+    const q = id => (panel && panel.querySelector('#' + id)) ? panel.querySelector('#' + id) : null;
+    const fam = (q('sg25fam') && q('sg25fam').dataset.v) || SS2.fam;
+    const sizes = sgSizes(fam);
+    const idx = clamp(panel ? +(q('sg25size') ? q('sg25size').value : SS2.idx) : SS2.idx, 0, sizes.length - 1);
+    const sel = sizes[idx] || sizes[0];
+    /* material ek button-grid hai (select nahi) — state SS2 me rehti hai */
+    const matId = SS2.mat || 'nonlit';
+    const mat = sgMat(matId);
+    const scaleSel = q('sg25scale') ? q('sg25scale').value : 'auto';
+    const scale = scaleSel === 'auto' ? sgAutoScale(sel.w, sel.h, mat) : +scaleSel;
+    const bleedSel = q('sg25bleed') ? q('sg25bleed').value : 'auto';
+    const bleed = bleedSel === 'auto' ? mat.bleed : +bleedSel;
+    const style = (q('sg25style') ? q('sg25style').value : SS2.style) || 'brand';
+    const qrEl = q('sg25qr');
+    const pocketEl = q('sg25pock');
+    return {
+      family: fam,
+      size: sel,
+      wmm: sel.w, hmm: sel.h,
+      mat: matId,
+      scale: scale,
+      scaleSel: scaleSel,
+      style: style,
+      theme: (q('sg25theme') ? q('sg25theme').value : SS2.theme) || SS2.theme,
+      qr: qrEl ? !!qrEl.checked : SS2.qr,
+      pockets: pocketEl ? !!pocketEl.checked : SS2.pockets,
+      bleed: bleed,
+      data: {
+        name: (q('sg25name') ? q('sg25name').value : SD.name) || SD.name,
+        tagline: (q('sg25tag') ? q('sg25tag').value : SD.tagline) || '',
+        headline: (q('sg25head') ? q('sg25head').value : SD.headline) || '',
+        offer: (q('sg25offer') ? q('sg25offer').value : SD.offer) || '',
+        phone: (q('sg25phone') ? q('sg25phone').value : SD.phone) || '',
+        web: (q('sg25web') ? q('sg25web').value : SD.web) || '',
+        addr: (q('sg25addr') ? q('sg25addr').value : SD.addr) || '',
+        items: SD.items,
+        qrText: (q('sg25qrtext') ? q('sg25qrtext').value : SD.qrText) || SD.qrText
+      }
+    };
+  }
+
+  /* ══════════════ downloads ══════════════ */
+  function sgFetch(panel) { return sgReadCfg(panel || currentSignPanel); }
+
+  async function sgPDF(cfg) {
+    cfg = cfg || sgFetch();
+    const plan = sgPlan(cfg.wmm, cfg.hmm, sgMat(cfg.mat), cfg.scale);
+    try {
+      const o = Object.assign(sgPrintOpts(cfg, plan), { bleed: cfg.bleed, marks: sgMat(cfg.mat).g === 'flex' });
+      const bytes = await AV24.cmykPdf(o);
+      download(sgBase(cfg) + '-CMYK.pdf', new Blob([bytes], { type: 'application/pdf' }));
+      t25('CMYK PDF ready · ' + Math.round(bytes.length / 1024) + ' KB · bleed ' + cfg.bleed + 'mm', 'ok', 2800);
+      return bytes;
+    } catch (e) { t25('PDF fail: ' + e.message, 'err', 3200); throw e }
+  }
+  async function sgTIF(cfg) {
+    cfg = cfg || sgFetch();
+    const plan = sgPlan(cfg.wmm, cfg.hmm, sgMat(cfg.mat), cfg.scale);
+    try {
+      const bytes = await sgTiff(cfg, plan);
+      download(sgBase(cfg) + '-CMYK.tif', new Blob([bytes], { type: 'image/tiff' }));
+      t25('CMYK TIFF ready · ' + Math.round(bytes.length / 1024) + ' KB', 'ok', 2800);
+      return bytes;
+    } catch (e) { t25('TIFF fail: ' + e.message, 'err', 3200); throw e }
+  }
+  function sgJPG(cfg) {
+    cfg = cfg || sgFetch();
+    const plan = sgPlan(cfg.wmm, cfg.hmm, sgMat(cfg.mat), cfg.scale);
+    try {
+      const pr = AV23.renderPrintCanvas(sgPrintOpts(cfg, plan));
+      return new Promise(res => pr.canvas.toBlob(b => {
+        download(sgBase(cfg) + '.jpg', b);
+        t25('JPG ready (' + pr.canvas.width + '×' + pr.canvas.height + ')', 'ok', 2400);
+        res(b);
+      }, 'image/jpeg', 0.94));
+    } catch (e) { t25('JPG fail: ' + e.message, 'err', 3000); throw e }
+  }
+  function sgCNC(cfg) {
+    cfg = cfg || sgFetch();
+    const geo = sgGeo(cfg);
+    const bytes = sgCutPdf(geo, cfg);
+    download(sgBase(cfg) + '-CNC.pdf', new Blob([bytes], { type: 'application/pdf' }));
+    t25('CNC cut PDF · ' + geo.holes.length + ' drill · outline ' + geo.wmm + '×' + geo.hmm + 'mm', 'ok', 2800);
+    return bytes;
+  }
+  function sgDXF(cfg) {
+    cfg = cfg || sgFetch();
+    const geo = sgGeo(cfg);
+    const txt = sgDxf(geo, cfg);
+    download(sgBase(cfg) + '.dxf', new Blob([txt], { type: 'application/dxf' }));
+    t25('DXF ready · layers OUTLINE / DRILL / EYELET / FOLD / SAFE', 'ok', 3000);
+    return txt;
+  }
+  async function sgPack(cfg) {
+    cfg = cfg || sgFetch();
+    const plan = sgPlan(cfg.wmm, cfg.hmm, sgMat(cfg.mat), cfg.scale);
+    const geo = sgGeo(cfg);
+    try {
+      const files = [];
+      const pdf = await AV24.cmykPdf(Object.assign(sgPrintOpts(cfg, plan), { bleed: cfg.bleed }));
+      files.push({ name: sgBase(cfg) + '-CMYK.pdf', bytes: pdf });
+      if (sgMat(cfg.mat).g === 'flex') {
+        try { files.push({ name: sgBase(cfg) + '-CMYK.tif', bytes: await sgTiff(cfg, plan) }) } catch (e) { }
+      }
+      const jb = await new Promise(res => AV23.renderPrintCanvas(sgPrintOpts(cfg, plan)).canvas.toBlob(res, 'image/jpeg', 0.92));
+      files.push({ name: sgBase(cfg) + '.jpg', bytes: new Uint8Array(await jb.arrayBuffer()) });
+      files.push({ name: sgBase(cfg) + '-CNC.pdf', bytes: sgCutPdf(geo, cfg) });
+      files.push({ name: sgBase(cfg) + '.dxf', bytes: new TextEncoder().encode(sgDxf(geo, cfg)) });
+      files.push({ name: sgBase(cfg) + '-specs.txt', bytes: new TextEncoder().encode(sgSpecs(cfg, plan, geo)) });
+      if (cfg.qr) files.push({ name: 'qr-vector.svg', bytes: new TextEncoder().encode(QR.toSVG(QR.encode(cfg.data.qrText || cfg.data.web, { ec: 'M' }), { quiet: 4 })) });
+      const zip = AV23.zipMake(files);
+      download(sgBase(cfg) + '-pack.zip', new Blob([zip], { type: 'application/zip' }));
+      t25('Production pack ready · ' + files.length + ' files', 'ok', 2800);
+    } catch (e) { t25('Pack fail: ' + e.message, 'err', 3400) }
+  }
+
+  const CSS26 = `
+  .sg26fam{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px}
+  .sg26fam button{border:1.5px solid #DCE0E8;background:#fff;border-radius:12px;padding:10px 8px;text-align:left;cursor:pointer;transition:.15s}
+  .sg26fam button b{display:block;font:800 12.5px/1.3 inherit;color:#101828}
+  .sg26fam button small{display:block;font:600 10.5px/1.35 inherit;color:#667085;margin-top:2px}
+  .sg26fam button.on{border-color:#F54927;background:#FFF6F3;box-shadow:0 0 0 3px rgba(245,73,39,.10)}
+  .sg26fam button.on b{color:#B42318}
+  #av25sign .sg26mat{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px}
+  #av25sign #sg25mat>button,#av25sign #sg25mat2>button{border:1px solid #DCE0E8 !important;background:#fff !important;border-radius:10px !important;padding:8px 9px !important;
+    text-align:left;cursor:pointer;font:800 11.5px/1.3 inherit;color:#344054 !important;display:block;width:100%;box-shadow:none !important;min-height:0;height:auto}
+  #av25sign #sg25mat>button small,#av25sign #sg25mat2>button small{display:block;font:600 10px/1.3 inherit;color:#98A2B3 !important;margin-top:2px}
+  #av25sign #sg25mat>button:hover,#av25sign #sg25mat2>button:hover{border-color:#98A2B3 !important}
+  #av25sign #sg25mat>button.on,#av25sign #sg25mat2>button.on{border-color:#101828 !important;background:#101828 !important;color:#fff !important}
+  #av25sign #sg25mat>button.on small,#av25sign #sg25mat2>button.on small{color:#C7CDD8 !important}
+  #av25sign #sg25fam>button{border:1.5px solid #DCE0E8 !important;background:#fff !important;border-radius:12px !important;padding:10px 8px !important;text-align:left;cursor:pointer;width:100%;box-shadow:none !important;height:auto}
+  #av25sign #sg25fam>button b{display:block;font:800 12.5px/1.3 inherit;color:#101828 !important}
+  #av25sign #sg25fam>button small{display:block;font:600 10.5px/1.35 inherit;color:#667085 !important;margin-top:2px}
+  #av25sign #sg25fam>button.on{border-color:#F54927 !important;background:#FFF6F3 !important;box-shadow:0 0 0 3px rgba(245,73,39,.10) !important}
+  #av25sign #sg25mat,#av25sign #sg25mat2{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px}
+  #av25sign #sg25fam{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px}
+  .sg26grp{font:800 10px/1.4 inherit;letter-spacing:.06em;text-transform:uppercase;color:#98A2B3;margin:8px 0 2px}
+  .sg26soon{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .sg26soon span{font:800 10.5px/1 inherit;color:#98A2B3;border:1px dashed #D0D5DD;border-radius:999px;padding:6px 10px;background:#FCFCFD}
+  .sg26cut{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+  .sg26cut span{font:800 10.5px/1.3 inherit;color:#1D6B3A;background:#EAF7EE;border:1px solid #C7EBD3;border-radius:999px;padding:5px 9px}
+  .sg26cut span.warn{color:#B54708;background:#FFF4E5;border-color:#FBD9A8}
+  #av25sign .sg26size{display:grid;grid-template-columns:1fr 1fr auto;gap:6px;margin-top:6px}
+  #av25sign .sg26size input{width:100%}
+  @media(max-width:640px){.sg26fam{grid-template-columns:1fr}.sg26mat{grid-template-columns:1fr}}
+  `;
+  function injectCSS26() {
+    if (document.getElementById('av26-style')) return;
+    const st = document.createElement('style'); st.id = 'av26-style'; st.textContent = CSS26;
+    document.head.appendChild(st);
+  }
+
+  function openSign26() {
+    injectCSS25(); injectCSS26();
     const themes = THEMES25().length ? THEMES25() : [theme25('sunrise')];
-    const sizes = SIGN_SIZES.map((s, i) => '<option value="' + i + '"' + (i === SS.idx ? ' selected' : '') + '>' + s.r + ' · ' + s.w + '×' + s.h + ' mm — ' + s.u + '</option>').join('');
+    const famIds = ['inshop', 'outdoor'];
+    const famIcon = f => f === 'inshop'
+      ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M4 10V7.5A1.5 1.5 0 0 1 5.5 6h13A1.5 1.5 0 0 1 20 7.5V10"/><path d="M5 10h14l-1 4H6z"/><path d="M6 14v5h12v-5"/><path d="M9.5 19v-3h5v3"/></svg>'
+      : '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M12 3v4"/><rect x="3.5" y="7" width="17" height="9" rx="1.5"/><path d="M12 16v5M8 21h8"/></svg>';
+    const famBtns = famIds.map(f => {
+      const F = SIGN_FAM[f];
+      return '<button type="button" data-fam="' + f + '" class="' + (SS2.fam === f ? 'on' : '') + '"><b>' + famIcon(f) + F.n + '</b><small>' + F.sub + '</small></button>';
+    }).join('');
+    const matBtn = id => {
+      const m = SIGN_MAT[id];
+      return '<button type="button" data-mat="' + id + '" class="' + (SS2.mat === id ? 'on' : '') + '">' + m.n +
+        '<small>' + (m.g === 'flex' ? 'print media' : 'CNC board · ' + m.thick + 'mm') + '</small></button>';
+    };
     const body =
       '<div class="av24cols">' +
-        '<div>' +
-          '<label class="q25lbl">Artboard ratio</label>' +
-          '<div class="sg25ratios">' + ['1:1', '1:2', '2:1', '3:1', '4:1', '5:1', '10:1'].map(r => '<button type="button" data-r="' + r + '" class="' + (SIGN_SIZES[SS.idx].r === r ? 'on' : '') + '">' + r + '</button>').join('') + '</div>' +
-          '<label class="q25lbl">Production size</label>' +
-          '<select id="sg25size">' + sizes + '</select>' +
-          '<div class="av24row" style="margin-top:10px">' +
-            '<div><label class="q25lbl">Layout style</label><select id="sg25style">' + SIGN_STYLES.map(s => '<option value="' + s.id + '"' + (SS.style === s.id ? ' selected' : '') + '>' + s.n + '</option>').join('') + '</select></div>' +
-            '<div><label class="q25lbl">Theme</label><select id="sg25theme">' + themes.map(t => '<option value="' + t.id + '"' + (SS.theme === t.id ? ' selected' : '') + '>' + t.name + '</option>').join('') + '</select></div>' +
-          '</div>' +
-          '<div class="av24row" style="margin-top:8px">' +
-            '<div><label class="q25lbl">Bleed (mm)</label><select id="sg25bleed">' + [0, 3, 5, 10, 25].map(n => '<option value="' + n + '"' + (SS.bleed === n ? ' selected' : '') + '>' + n + ' mm</option>').join('') + '</select></div>' +
-            '<div><label class="q25lbl">QR code</label><label class="sg25chk"><input type="checkbox" id="sg25qr"' + (SS.qr ? ' checked' : '') + '> QR design me daalo</label></div>' +
-          '</div>' +
-          '<label class="q25lbl" style="margin-top:10px">Brand name</label><input id="sg25name" class="q25in" value="' + SD.name + '">' +
-          '<div class="av24row"><div><label class="q25lbl">Tagline</label><input id="sg25tag" class="q25in" value="' + SD.tagline + '"></div>' +
-          '<div><label class="q25lbl">Headline</label><input id="sg25head" class="q25in" value="' + SD.headline + '"></div></div>' +
-          '<div class="av24row"><div><label class="q25lbl">Offer line</label><input id="sg25offer" class="q25in" value="' + SD.offer + '"></div>' +
-          '<div><label class="q25lbl">Phone</label><input id="sg25phone" class="q25in" value="' + SD.phone + '"></div></div>' +
-          '<div class="av24row"><div><label class="q25lbl">Website</label><input id="sg25web" class="q25in" value="' + SD.web + '"></div>' +
-          '<div><label class="q25lbl">Address</label><input id="sg25addr" class="q25in" value="' + SD.addr + '"></div></div>' +
-          '<label class="q25lbl">QR link</label><input id="sg25qrtext" class="q25in" value="' + SD.qrText + '">' +
-        '</div>' +
-        '<div>' +
-          '<div class="sg25info" id="sg25info"></div>' +
-          '<div class="q25hint" style="margin-top:10px"><b>Production rules jo app khud lagata hai:</b><br>' +
-            '· Safe margin = short side ka 6%<br>· Text size ratio se scale (door se padhne layak)<br>· 3-zone grid: brand · message · contact + QR<br>· Bleed + crop marks PDF me<br>· Colour contrast theme se lock</div>' +
-        '</div>' +
+      '<div>' +
+      '<label class="q25lbl">Design type — ratio set alag hota hai</label>' +
+      '<div class="sg26fam" id="sg25fam">' + famBtns + '</div>' +
+
+      '<label class="q25lbl">Ratio</label>' +
+      '<div class="sg25ratios" id="sg25ratios"></div>' +
+      '<label class="q25lbl">Production size</label>' +
+      '<select id="sg25size"></select>' +
+      '<div class="sg26size"><input class="q25in" id="sg25cw" type="number" min="50" max="15000" placeholder="W mm" value="' + (SS2.custom ? SS2.custom.w : '') + '">' +
+      '<input class="q25in" id="sg25ch" type="number" min="50" max="15000" placeholder="H mm" value="' + (SS2.custom ? SS2.custom.h : '') + '">' +
+      '<button class="av23btn" id="sg25cset" style="padding:9px 12px">Custom</button></div>' +
+
+      '<div class="av24row" style="margin-top:10px">' +
+      '<div><label class="q25lbl">Layout style</label><select id="sg25style"></select></div>' +
+      '<div><label class="q25lbl">Theme</label><select id="sg25theme">' + themes.map(t => '<option value="' + t.id + '"' + (SS2.theme === t.id ? ' selected' : '') + '>' + t.name + '</option>').join('') + '</select></div>' +
+      '</div>' +
+
+      '<label class="q25lbl">Material — isi se output decide hota hai</label>' +
+      '<div class="sg26grp">Print media → CMYK PDF · TIF · JPG (bleed + crop marks)</div>' +
+      '<div class="sg26mat" id="sg25mat">' +
+      ['nonlit', 'backlit', 'fabric', 'vinyl', 'canvas'].map(matBtn).join('') +
+      '</div>' +
+      '<div class="sg26grp">CNC board → cut PDF · DXF (router / laser)</div>' +
+      '<div class="sg26mat" id="sg25mat2">' +
+      ['acp', 'acrylic', 'mdf', 'wood', 'metal'].map(matBtn).join('') +
+      '</div>' +
+
+      '<div class="av24row" style="margin-top:8px">' +
+      '<div><label class="q25lbl">Print scale</label><select id="sg25scale">' +
+      '<option value="auto">Auto (best fit)</option>' +
+      [['1', '1:1 — full size'], ['0.5', '1:2 — half size'], ['0.25', '1:4 — quarter'], ['0.125', '1:8']].map(o => '<option value="' + o[0] + '">' + o[1] + '</option>').join('') +
+      '</select></div>' +
+      '<div><label class="q25lbl">Bleed</label><select id="sg25bleed">' +
+      '<option value="auto">Auto (material)</option>' +
+      [0, 3, 5, 10, 25, 40].map(n => '<option value="' + n + '">' + n + ' mm</option>').join('') +
+      '</select></div>' +
+      '<div><label class="q25lbl">Extras</label><label class="sg25chk"><input type="checkbox" id="sg25pock"> Pole pocket 75mm</label>' +
+      '<label class="sg25chk"><input type="checkbox" id="sg25qr"' + (SS2.qr ? ' checked' : '') + '> QR code</label></div>' +
+      '</div>' +
+
+      '<label class="q25lbl" style="margin-top:10px">Brand name</label><input id="sg25name" class="q25in" value="' + SD.name + '">' +
+      '<div class="av24row"><div><label class="q25lbl">Tagline</label><input id="sg25tag" class="q25in" value="' + SD.tagline + '"></div>' +
+      '<div><label class="q25lbl">Headline</label><input id="sg25head" class="q25in" value="' + SD.headline + '"></div></div>' +
+      '<div class="av24row"><div><label class="q25lbl">Offer line</label><input id="sg25offer" class="q25in" value="' + SD.offer + '"></div>' +
+      '<div><label class="q25lbl">Phone</label><input id="sg25phone" class="q25in" value="' + SD.phone + '"></div></div>' +
+      '<div class="av24row"><div><label class="q25lbl">Website</label><input id="sg25web" class="q25in" value="' + SD.web + '"></div>' +
+      '<div><label class="q25lbl">Address</label><input id="sg25addr" class="q25in" value="' + SD.addr + '"></div></div>' +
+      '<label class="q25lbl">QR link</label><input id="sg25qrtext" class="q25in" value="' + SD.qrText + '">' +
+      '</div>' +
+
+      '<div>' +
+      '<div class="sg25info" id="sg25info"></div>' +
+      '<div class="q25hint" id="sg25rules" style="margin-top:10px"></div>' +
+      '<div class="q25hint" style="margin-top:10px"><b>Ratio set alag kyun?</b><br>' +
+      'In-shop (interior) artboard counter/shelf/window ke hisaab se — 1:1, 4:5, 3:4, 9:16, 16:9, 3:1.<br>' +
+      'Outdoor signage hoarding/fascia ke hisaab se — 3:1 se 10:1 tak chhote height, door se padhne layak type.<br>' +
+      'Design bhi alag hai: in-shop me price rows + soft card + QR, outdoor me bold name board + contact bar.</div>' +
+      '<div class="sg26soon"><span>Coming soon · 3D DWG</span><span>Coming soon · SVG cut</span></div>' +
+      '</div>' +
       '</div>';
+
     const foot = '<button class="av23btn pri" id="sg25build">Signage banao</button>' +
       '<button class="av23btn" id="sg25pdf">CMYK PDF</button>' +
+      '<button class="av23btn" id="sg25tif">CMYK TIF</button>' +
       '<button class="av23btn" id="sg25jpg">JPG</button>' +
-      '<div class="sp"></div><button class="av23btn" id="sg25zip">Production pack (.zip)</button>';
-    const ov = AV23.__shell('av25sign', 'Signage & Retail board', '1:1 · 1:2 · 2:1 · 3:1 · 4:1 · 5:1 · 10:1 — production file ke hisaab se', body, foot);
+      '<button class="av23btn" id="sg25cnc">CNC PDF</button>' +
+      '<button class="av23btn" id="sg25dxf">DXF</button>' +
+      '<div class="sp"></div><button class="av23btn" id="sg25zip">Production pack</button>';
+
+    const ov = AV23.__shell('av25sign', 'Signage & Branding — in-shop + outdoor',
+      'Alag ratio set · alag design · print (CMYK PDF/TIF/JPG) + CNC (PDF/DXF)', body, foot);
     currentSignPanel = ov;
 
-    const readCfg = () => {
-      SS.idx = +(ov.querySelector('#sg25size').value || 0);
-      SS.style = ov.querySelector('#sg25style').value;
-      SS.theme = ov.querySelector('#sg25theme').value;
-      SS.qr = !!ov.querySelector('#sg25qr').checked;
-      SS.bleed = +(ov.querySelector('#sg25bleed').value || 0);
-      return signCfg(ov);
+    const $ = id => ov.querySelector('#' + id);
+    const fillSizes = () => {
+      const fam = SS2.fam, famObj = SIGN_FAM[fam], sizes = sgSizes(fam);
+      $('sg25size').innerHTML = sizes.map((s, i) =>
+        '<option value="' + i + '"' + (i === SS2.idx ? ' selected' : '') + '>' + sgRatioLbl(s) + ' · ' + s.w + '×' + s.h + ' mm — ' + s.u + '</option>').join('');
+      const ratios = [];
+      sizes.forEach(s => { const r = sgRatioLbl(s); if (ratios.indexOf(r) < 0) ratios.push(r) });
+      $('sg25ratios').innerHTML = ratios.map(r => '<button type="button" data-r="' + r + '">' + r + '</button>').join('');
+      $('sg25ratios').querySelectorAll('[data-r]').forEach(b => b.onclick = () => {
+        const i = sizes.findIndex(s => sgRatioLbl(s) === b.dataset.r);
+        if (i >= 0) { $('sg25size').value = i; SS2.idx = i; syncRatio(); upd() }
+      });
+      $('sg25style').innerHTML = famObj.styles.map(s => '<option value="' + s[0] + '">' + s[1] + '</option>').join('');
+      $('sg25style').value = SS2.style;
+      syncRatio();
     };
-    const updInfo = () => {
-      const cfg = readCfg(), plan = pxPlan(cfg.size.w, cfg.size.h);
-      const vd = Math.max(1, Math.round(Math.max(cfg.size.w, cfg.size.h) / 1000 * 2.2));
-      const minText = Math.round(Math.min(cfg.size.w, cfg.size.h) * 0.05);
-      const el = ov.querySelector('#sg25info');
-      if (!el) return;
-      el.innerHTML = '<div class="sg25big">' + cfg.size.r + '</div>' +
-        '<div class="sg25kv"><span>Size</span><b>' + cfg.size.w + ' × ' + cfg.size.h + ' mm</b></div>' +
+    const syncRatio = () => {
+      const cfg = sgReadCfg(ov);
+      const r = sgRatioLbl(cfg.size);
+      $('sg25ratios').querySelectorAll('[data-r]').forEach(b => b.classList.toggle('on', b.dataset.r === r));
+    };
+    const upd = () => {
+      const cfg = sgReadCfg(ov);
+      const mat = sgMat(cfg.mat), plan = sgPlan(cfg.wmm, cfg.hmm, mat), geo = sgGeo(cfg);
+      const S = Math.min(cfg.wmm, cfg.hmm);
+      const vd = Math.max(1, Math.round(Math.max(cfg.wmm, cfg.hmm) / 1000 * 2.2));
+      const minText = Math.round(S * 0.05);
+      const el = $('sg25info');
+      if (el) el.innerHTML = '<div class="sg25big">' + sgRatioLbl(cfg.size) + '</div>' +
+        '<div class="sg25kv"><span>Trim size</span><b>' + cfg.wmm + ' × ' + cfg.hmm + ' mm</b></div>' +
         '<div class="sg25kv"><span>Pixels</span><b>' + plan.W + ' × ' + plan.H + ' px</b></div>' +
-        '<div class="sg25kv"><span>Effective dpi</span><b>' + plan.dpi + ' dpi</b></div>' +
+        '<div class="sg25kv"><span>File dpi</span><b>' + plan.dpi + ' dpi' + (plan.scale < 1 ? ' · 1:' + Math.round(1 / plan.scale) : '') + '</b></div>' +
+        '<div class="sg25kv"><span>Material</span><b>' + mat.n + (mat.thick ? ' · ' + mat.thick + 'mm' : '') + '</b></div>' +
+        '<div class="sg25kv"><span>Bleed</span><b>' + cfg.bleed + ' mm</b></div>' +
+        '<div class="sg25kv"><span>Ink limit</span><b>' + Math.round(mat.tac * 100) + '% TAC</b></div>' +
+        '<div class="sg25kv"><span>Safe area</span><b>' + geo.safe + ' mm</b></div>' +
         '<div class="sg25kv"><span>Viewing distance</span><b>~' + vd + ' m</b></div>' +
         '<div class="sg25kv"><span>Min text height</span><b>' + minText + ' mm</b></div>' +
-        '<div class="sg25kv"><span>Bleed</span><b>' + cfg.bleed + ' mm</b></div>' +
-        '<div class="sg25kv"><span>Use</span><b>' + cfg.size.u + '</b></div>';
+        '<div class="sg25kv"><span>Use</span><b>' + cfg.size.u + '</b></div>' +
+        (plan.dpi < 60 ? '<div class="sg25kv" style="border-bottom:none"><span style="color:#B54708">Large format</span><b style="color:#B54708">' +
+          Math.round(1 / plan.scale) + ':1 scale · ' + Math.max(1, Math.round(Math.max(cfg.wmm, cfg.hmm) / 1000)) + ' m board — door se dekha jata hai</b></div>' : '');
+      const rules = $('sg25rules');
+      if (rules) {
+        rules.innerHTML = '<b>Production rules — ' + mat.n + '</b><br>' +
+          (mat.g === 'flex'
+            ? '· Output: <b>CMYK PDF</b> + <b>CMYK TIF</b> + JPG proof<br>' +
+            '· Bleed ' + mat.bleed + ' mm, crop marks ON<br>' +
+            '· Ink limit ' + Math.round(mat.tac * 100) + '% · ' + plan.dpi + ' dpi<br>' +
+            (geo.eyelets.length ? '· ' + geo.eyelets.length + ' eyelets @ 25–30 mm inset (DXF/CNC PDF me)<br>' : '') +
+            (cfg.pockets ? '· Pole pocket 75 mm top + bottom (fold lines DXF me)<br>' : '') +
+            '· ' + mat.note
+            : '· Output: <b>CNC cut PDF</b> + <b>DXF</b> + CMYK print file<br>' +
+            '· Router/laser kerf ' + mat.kerf + ' mm · corner R' + geo.corner + ' mm<br>' +
+            '· ' + geo.holes.length + ' × ' + (mat.hole) + ' mm mounting holes<br>' +
+            '· Layers: OUTLINE / DRILL / EYELET / FOLD / SAFE<br>' +
+            '· ' + mat.note);
+      }
+      $('sg25cw').value = cfg.wmm; $('sg25ch').value = cfg.hmm;
+      syncRatio();
     };
-    ov.querySelectorAll('[data-r]').forEach(b => b.onclick = () => {
-      const r = b.dataset.r;
-      const idx = SIGN_SIZES.findIndex(x => x.r === r);
-      if (idx >= 0) ov.querySelector('#sg25size').value = idx;
-      ov.querySelectorAll('[data-r]').forEach(x => x.classList.toggle('on', x === b));
-      updInfo();
+
+    /* family switch */
+    $('sg25fam').querySelectorAll('[data-fam]').forEach(b => b.onclick = () => {
+      SS2.fam = b.dataset.fam; SS2.idx = 0; SS2.custom = null;
+      SS2.style = (SIGN_FAM[SS2.fam].sizes[0].st || 'brand');
+      $('sg25fam').querySelectorAll('[data-fam]').forEach(x => x.classList.toggle('on', x === b));
+      fillSizes(); upd();
     });
-    ov.querySelectorAll('#sg25size,#sg25style,#sg25theme,#sg25bleed,#sg25qr').forEach(el => { el.addEventListener('change', updInfo); el.addEventListener('input', updInfo); });
-    ov.querySelector('#sg25build').onclick = () => { const cfg = readCfg(); buildSign(cfg); };
-    ov.querySelector('#sg25pdf').onclick = () => signPDF();
-    ov.querySelector('#sg25jpg').onclick = () => signJPG();
-    ov.querySelector('#sg25zip').onclick = () => signZIP();
-    updInfo();
+    /* material switch */
+    const matAll = () => ov.querySelectorAll('[data-mat]');
+    matAll().forEach(b => b.onclick = () => {
+      SS2.mat = b.dataset.mat;
+      matAll().forEach(x => x.classList.toggle('on', x.dataset.mat === b.dataset.mat));
+      upd();
+    });
+    $('sg25cset').onclick = () => {
+      const w = Math.max(50, Math.min(15000, +$('sg25cw').value || 0));
+      const h = Math.max(50, Math.min(15000, +$('sg25ch').value || 0));
+      if (!w || !h) { t25('W aur H mm me daalo', 'err', 2200); return }
+      SS2.custom = { fam: SS2.fam, w: w, h: h };
+      SS2.idx = 0;
+      fillSizes(); upd();
+      t25('Custom size set — ' + w + '×' + h + ' mm (' + sgRatio(w, h) + ')', 'ok', 2400);
+    };
+    ['sg25size', 'sg25style', 'sg25theme', 'sg25bleed', 'sg25qr', 'sg25pock', 'sg25scale'].forEach(id => {
+      const e = $(id); if (!e) return;
+      e.addEventListener('change', () => {
+        if (id === 'sg25size') SS2.idx = +e.value;
+        if (id === 'sg25style') SS2.style = e.value;
+        if (id === 'sg25theme') SS2.theme = e.value;
+        if (id === 'sg25qr') SS2.qr = e.checked;
+        if (id === 'sg25pock') SS2.pockets = e.checked;
+        upd();
+      });
+    });
+    $('sg25build').onclick = () => { const cfg = sgReadCfg(ov); sgBuild(cfg) };
+    $('sg25pdf').onclick = () => sgPDF(sgReadCfg(ov));
+    $('sg25tif').onclick = () => sgTIF(sgReadCfg(ov));
+    $('sg25jpg').onclick = () => sgJPG(sgReadCfg(ov));
+    $('sg25cnc').onclick = () => sgCNC(sgReadCfg(ov));
+    $('sg25dxf').onclick = () => sgDXF(sgReadCfg(ov));
+    $('sg25zip').onclick = () => sgPack(sgReadCfg(ov));
+    fillSizes(); upd();
     return ov;
   }
+
+
+  /* v26 public API — tests + dusre modules isi se signage build/export karte hain */
+  try {
+    window.AV26 = {
+      open: openSign26, state: SS2, fam: SIGN_FAM, mat: SIGN_MAT,
+      sizes: sgSizes, geo: sgGeo, plan: sgPlan, read: sgReadCfg,
+      build: sgBuild, pdf: sgPDF, tif: sgTIF, jpg: sgJPG,
+      cnc: sgCNC, dxf: sgDXF, pack: sgPack, tiffBytes: sgTiff, dxfText: sgDxf, cutPdfBytes: sgCutPdf,
+      ratio: sgRatio, specs: sgSpecs, base: sgBase
+    };
+  } catch (e) { }
+
+  function openSign25() { return openSign26() }
 
   /* ============================================================
      C. CSS + UI wiring
@@ -22110,7 +23488,7 @@ window.CDR = CDR;
             return b;
           };
           const pb = bar.querySelector('[data-a="pro24"]');
-          const sb = mk('sign25', 'sign', 'Signage', 'Retail signage board — 1:1 se 10:1 tak, production file', openSign25);
+          const sb = mk('sign25', 'sign', 'Signage', 'In-shop + outdoor signage — material-wise CMYK PDF/TIF/JPG + CNC PDF/DXF', openSign25);
           if (pb && pb.nextSibling) bar.insertBefore(sb, pb.nextSibling); else bar.appendChild(sb);
         }
       }
@@ -22146,7 +23524,7 @@ window.CDR = CDR;
           if (it && typeof it === 'object' && /QR Code generator/i.test(it.l || '')) { it.l = 'QR Pro (icon + minimal)…'; it.a = openQR25; }
         });
         if (!MENUS.File.some(it => it && /Signage/i.test(it.l || ''))) {
-          MENUS.File.unshift({ l: 'Signage board (1:1 … 10:1)…', a: openSign25 }, '-');
+          MENUS.File.unshift({ l: 'Signage & branding — in-shop / outdoor (print + CNC)…', a: openSign25 }, '-');
         }
       }
     } catch (e) { }
@@ -22166,7 +23544,7 @@ window.CDR = CDR;
           const b = document.createElement('button');
           b.className = 'hubcard'; b.dataset.h = 'sign25';
           b.innerHTML = '<span class="ic" style="background:linear-gradient(135deg,#6D28D9,#8B5CF6)">' + ic25('sign', 20) + '</span>' +
-            '<span><b>Signage &amp; retail board</b><small>7 ratios — 1:1, 1:2, 2:1, 3:1, 4:1, 5:1, 10:1 · production PDF + JPG + specs.</small></span>';
+            '<span><b>Signage &amp; branding studio</b><small>In-shop + outdoor ratio sets · flex / backlit / fabric / vinyl / canvas (CMYK PDF·TIF·JPG) · ACP / acrylic / MDF / wood / metal (CNC PDF·DXF).</small></span>';
           b.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); close25(); setTimeout(openSign25, 150); }, true);
           grid.appendChild(b);
         }

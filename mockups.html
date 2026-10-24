@@ -435,6 +435,9 @@ html.av-embed .controls{top:0}
   const items=Array.isArray(window.MOCKUPS)?window.MOCKUPS:[];
   const $=id=>document.getElementById(id);
   const src=item=>'assets/mockups/'+encodeURIComponent(item.f);
+  /* grid loads a 10 KB WebP thumbnail; the full SVG (up to ~1 MB) is only
+     fetched for the preview, the download and the Studio import */
+  const thumb=item=>'assets/mockups/thumbs/'+encodeURIComponent(item.f.replace(/\.svg$/i,''))+'.webp';
   const search=$('search'),category=$('category'),sort=$('sort'),grid=$('mockupGrid'),count=$('resultCount'),chips=$('categoryChips');
   const viewer=$('viewer'),viewImg=$('viewImg'),viewStatus=$('viewStatus');
   let current=null,lastFocus=null;
@@ -449,7 +452,12 @@ html.av-embed .controls{top:0}
   function card(item){
     const article=document.createElement('article');article.className='card';
     const button=document.createElement('button');button.type='button';button.className='thumb';button.dataset.open=String(item.i);button.setAttribute('aria-label','Preview '+item.n);
-    const img=document.createElement('img');img.src=src(item);img.alt=item.n;img.loading='lazy';img.decoding='async';button.appendChild(img);
+    const img=document.createElement('img');img.src=thumb(item);img.alt=item.n;img.loading='lazy';
+    img.decoding='async';img.width=500;img.height=333;
+    /* graceful chain: thumb -> original SVG -> neutral placeholder (never a broken image) */
+    img.addEventListener('error',function(){ if(img.dataset.fb){img.style.visibility='hidden';return}
+      img.dataset.fb='1'; img.src=src(item); });
+    button.appendChild(img);
     const body=document.createElement('div');body.className='cardbody';
     const title=document.createElement('div');title.className='cardtitle';title.textContent=item.n;
     const foot=document.createElement('div');foot.className='cardfoot';
